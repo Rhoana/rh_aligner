@@ -129,7 +129,7 @@ public class ComputeSiftFeatures
 		TileSpec ts = tileSpecs[params.index];
 		
 		/* load image TODO use Bioformats for strange formats */
-		final ImagePlus imp = Utils.openImagePlus( ts.imageUrl.replaceFirst("file:///", "").replaceFirst("file://", "").replaceFirst("file:/", "") );
+		final ImagePlus imp = Utils.openImagePlus( ts.imageUrl.replaceFirst("file://", "").replaceFirst("file:/", "") );
 		if ( imp == null )
 			System.err.println( "Failed to load image '" + ts.imageUrl + "'." );
 		else
