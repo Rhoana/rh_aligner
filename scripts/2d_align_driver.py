@@ -10,13 +10,10 @@
 import sys
 import os
 import argparse
-from subprocess import call
-import urllib
-import urlparse
-import json
 
 from filter_tiles import filter_tiles
 from create_sift_features import create_sift_features
+from match_sift_features import match_sift_features
 
 # Command line parser
 parser = argparse.ArgumentParser(description='A driver that does a 2D alignment of images.')
@@ -56,4 +53,6 @@ sift_dir = os.path.join(args.workspace_dir, "sifts")
 create_sift_features(filter_dir, sift_dir, args.jar_file)
 
 # match the features of overlapping tiles
+match_dir = os.path.join(args.workspace_dir, "sift_matches")
+match_sift_features(filter_dir, sift_dir, match_dir, args.jar_file)
 
