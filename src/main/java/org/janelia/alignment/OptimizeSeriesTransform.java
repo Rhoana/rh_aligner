@@ -25,6 +25,7 @@ import ij.process.FloatProcessor;
 import ij.process.ImageProcessor;
 
 import java.awt.Graphics2D;
+import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
 import java.awt.image.WritableRaster;
 import java.io.File;
@@ -40,11 +41,11 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 
 import javax.imageio.ImageIO;
 
-import org.janelia.alignment.OptimizeMontageTransform.Params;
-
+import mpicbg.models.AbstractAffineModel2D;
 import mpicbg.models.AbstractModel;
 import mpicbg.models.AffineModel2D;
 import mpicbg.models.CoordinateTransform;
@@ -52,15 +53,21 @@ import mpicbg.models.CoordinateTransformList;
 import mpicbg.models.CoordinateTransformMesh;
 import mpicbg.models.ErrorStatistic;
 import mpicbg.models.HomographyModel2D;
+import mpicbg.models.IllDefinedDataPointsException;
 import mpicbg.models.InvertibleCoordinateTransform;
+import mpicbg.models.NotEnoughDataPointsException;
 import mpicbg.models.Point;
 import mpicbg.models.PointMatch;
 import mpicbg.models.RigidModel2D;
 import mpicbg.models.SimilarityModel2D;
 import mpicbg.models.SpringMesh;
+import mpicbg.models.Tile;
+import mpicbg.models.TileConfiguration;
 import mpicbg.models.TransformMesh;
+import mpicbg.models.Transforms;
 import mpicbg.models.TranslationModel2D;
 import mpicbg.models.Vertex;
+import mpicbg.models.InterpolatedAffineModel2D;
 import mpicbg.trakem2.transform.TransformMeshMappingWithMasks;
 import mpicbg.trakem2.transform.TransformMeshMappingWithMasks.ImageProcessorWithMasks;
 import mpicbg.imagefeatures.Feature;
@@ -91,23 +98,47 @@ public class OptimizeSeriesTransform
         private String inputfile;
                         
         @Parameter( names = "--modelIndex", description = "Model Index: 0=Translation, 1=Rigid, 2=Similarity, 3=Affine, 4=Homography", required = false )
-        private int modelIndex = 1;
+        private int modelIndex = 3;
+        
+        @Parameter( names = "--regularizerIndex", description = "Regularizer Index: 0=Translation, 1=Rigid, 2=Similarity, 3=Affine, 4=Homography", required = false )
+        private int regularizerIndex = 1;
+        
+        @Parameter( names = "--regularize", description = "Use regularizer", required = false )
+        private boolean regularize = false;        
                         
-        @Parameter( names = "--filterOutliers", description = "Filter outliers during optimization", required = false )
-        private boolean filterOutliers = false;
+        @Parameter( names = "--lambda", description = "Regularizer lambda", required = false )
+        private float lambda = 0.1f;        
                         
         @Parameter( names = "--maxEpsilon", description = "Max epsilon", required = false )
         private float maxEpsilon = 100.0f;
                         
-        @Parameter( names = "--maxIterations", description = "Max iterations", required = false )
-        private int maxIterations = 2000;
-        
-        @Parameter( names = "--maxPlateauwidth", description = "Max plateau width", required = false )
-        private int maxPlateauwidth = 200;
-                                
-        @Parameter( names = "--meanFactor", description = "Mean factor", required = false )
-        private float meanFactor = 3.0f;
+        @Parameter( names = "--minInlierRatio", description = "Min inlier ratio", required = false )
+        private float minInlierRatio = 0.0f;
                         
+        @Parameter( names = "--minNumInliers", description = "Min number of inliers", required = false )
+        private int minNumInliers = 12;
+                                
+        @Parameter( names = "--pointMatchScale", description = "Point match scale factor", required = false )
+        private double pointMatchScale = 1.0;
+        
+        @Parameter( names = "--rejectIdentity", description = "Reject identity transform solutions (ignore constant background)", required = false )
+        private boolean rejectIdentity = false;
+        
+        @Parameter( names = "--identityTolerance", description = "Identity transform rejection tolerance", required = false )
+        private float identityTolerance = 0.5f;
+        
+        @Parameter( names = "--multipleHypotheses", description = "Return multiple hypotheses", required = false )
+        private boolean multipleHypotheses = false;
+        
+        @Parameter( names = "--maxNumFailures", description = "Max number of consecutive layer-to-layer match failures", required = false )
+        private int maxNumFailures = 3;
+        
+        @Parameter( names = "--maxIterationsOptimize", description = "Max iterations for optimization", required = false )
+        private int maxIterationsOptimize = 1000;
+        
+        @Parameter( names = "--maxPlateauwidthOptimize", description = "Max plateau width for optimization", required = false )
+        private int maxPlateauwidthOptimize = 200;
+
         @Parameter( names = "--targetPath", description = "Path for the output correspondences", required = true )
         public String targetPath;
         
@@ -166,124 +197,305 @@ public class OptimizeSeriesTransform
 			return;
 		}
 
-		System.out.printl( "matching " + layerNameB + " -> " + layerNameA + "..." );
-
-		ArrayList< PointMatch > candidates = null;
-		if ( !param.ppm.clearCache )
-			candidates = mpicbg.trakem2.align.Util.deserializePointMatches(
-					layerB.getProject(), param.ppm, "layer", layerB.getId(), layerA.getId() );
-
-		if ( null == candidates )
+		/* create tiles and models for all layers */
+		final HashMap< String, Tile< ? > > tiles = new HashMap< String, Tile< ? > >();
+		final AbstractAffineModel2D< ? > m = ( AbstractAffineModel2D< ? > )Utils.createModel( params.modelIndex );
+		final AbstractAffineModel2D< ? > r = ( AbstractAffineModel2D< ? > )Utils.createModel( params.regularizerIndex );
+		
+		for ( int i = 0; i < corr_data.length; ++i )
 		{
-			final ArrayList< Feature > fs1 = mpicbg.trakem2.align.Util.deserializeFeatures(
-					layerA.getProject(), param.ppm.sift, "layer", layerA.getId() );
-			final ArrayList< Feature > fs2 = mpicbg.trakem2.align.Util.deserializeFeatures(
-					layerB.getProject(), param.ppm.sift, "layer", layerB.getId() );
-			candidates = new ArrayList< PointMatch >( FloatArray2DSIFT.createMatches( fs2, fs1, param.ppm.rod ) );
-
-			/* scale the candidates */
-			for ( final PointMatch pm : candidates )
+			if (!tiles.containsKey(corr_data[i].imageUrl1))
 			{
-				final Point p1 = pm.getP1();
-				final Point p2 = pm.getP2();
-				final float[] l1 = p1.getL();
-				final float[] w1 = p1.getW();
-				final float[] l2 = p2.getL();
-				final float[] w2 = p2.getW();
-
-				l1[ 0 ] *= pointMatchScale;
-				l1[ 1 ] *= pointMatchScale;
-				w1[ 0 ] *= pointMatchScale;
-				w1[ 1 ] *= pointMatchScale;
-				l2[ 0 ] *= pointMatchScale;
-				l2[ 1 ] *= pointMatchScale;
-				w2[ 0 ] *= pointMatchScale;
-				w2[ 1 ] *= pointMatchScale;
-
+				if ( params.regularize )
+					tiles.put(corr_data[i].imageUrl1, new Tile( new InterpolatedAffineModel2D( m.copy(), r.copy(), params.lambda ) ) );
+				else
+					tiles.put(corr_data[i].imageUrl1, new Tile( m.copy() ) );
 			}
-
-			if ( !mpicbg.trakem2.align.Util.serializePointMatches(
-					layerB.getProject(), param.ppm, "layer", layerB.getId(), layerA.getId(), candidates ) )
-			Utils.log( "Could not store point match candidates for layers " + layerNameB + " and " + layerNameA + "." );
-		}
-
-
-		final ArrayList< PointMatch > inliers = new ArrayList< PointMatch >();
-
-		boolean again = false;
-		int nHypotheses = 0;
-		try
-		{
-			do
+			if (!tiles.containsKey(corr_data[i].imageUrl2))
 			{
-				again = false;
-				final ArrayList< PointMatch > inliers2 = new ArrayList< PointMatch >();
-				final boolean modelFound = model.filterRansac(
-							candidates,
-							inliers2,
-							1000,
-							param.maxEpsilon,
-							param.minInlierRatio,
-							param.minNumInliers,
-							3 );
-				if ( modelFound )
-				{
-					candidates.removeAll( inliers2 );
+				if ( params.regularize )
+					tiles.put(corr_data[i].imageUrl2, new Tile( new InterpolatedAffineModel2D( m.copy(), r.copy(), params.lambda ) ) );
+				else
+					tiles.put(corr_data[i].imageUrl2, new Tile( m.copy() ) );
+			}
+		}
+		
+		/* collect all pairs of slices for which a model could be found */
+		final ArrayList< Triple< String, String, Collection< PointMatch> > > pairs = new ArrayList< Triple< String, String, Collection< PointMatch > > >();
+		
+		/* match and filter feature correspondences */
+		int numFailures = 0;
+		
+J:		for ( int i = 0; i < corr_data.length; )
+		{
+			final ArrayList< Thread > threads = new ArrayList< Thread >( params.numThreads );
+			
+			final int numThreads = Math.min( params.numThreads, corr_data.length - i );
+			
+			final ArrayList< Triple< String, String, Collection< PointMatch > > > models =
+				new ArrayList< Triple< String, String, Collection< PointMatch > > >( numThreads );
 
-					if ( param.rejectIdentity )
+			for ( int k = 0; k < numThreads; ++k )
+				models.add( null );
+
+			for ( int t = 0;  t < numThreads && i < corr_data.length; ++t, ++i )
+			{
+				final int ti = t;
+				final CorrespondenceSpec corr = corr_data[i];
+				final String layerNameA = corr.imageUrl1;
+				final String layerNameB = corr.imageUrl2;
+
+				final Thread thread = new Thread()
+				{
+					@Override
+					public void run()
 					{
-						final ArrayList< Point > points = new ArrayList< Point >();
-						PointMatch.sourcePoints( inliers2, points );
-						if ( Transforms.isIdentity( model, points, param.identityTolerance ) )
+						ArrayList< PointMatch > candidates = new ArrayList< PointMatch >();
+						
+						candidates.addAll(corr.correspondencePointPairs);
+
+						/* scale the candidates */
+						for ( final PointMatch pm : candidates )
 						{
-							IJ.log( "Identity transform for " + inliers2.size() + " matches rejected." );
-							again = true;
+							final Point p1 = pm.getP1();
+							final Point p2 = pm.getP2();
+							final float[] l1 = p1.getL();
+							final float[] w1 = p1.getW();
+							final float[] l2 = p2.getL();
+							final float[] w2 = p2.getW();
+				
+							l1[ 0 ] *= params.pointMatchScale;
+							l1[ 1 ] *= params.pointMatchScale;
+							w1[ 0 ] *= params.pointMatchScale;
+							w1[ 1 ] *= params.pointMatchScale;
+							l2[ 0 ] *= params.pointMatchScale;
+							l2[ 1 ] *= params.pointMatchScale;
+							w2[ 0 ] *= params.pointMatchScale;
+							w2[ 1 ] *= params.pointMatchScale;
+				
+						}
+						
+						AbstractModel< ? > model = Utils.createModel( params.modelIndex );
+				
+						final ArrayList< PointMatch > inliers = new ArrayList< PointMatch >();
+				
+						boolean again = false;
+						int nHypotheses = 0;
+						try
+						{
+							do
+							{
+								again = false;
+								final ArrayList< PointMatch > inliers2 = new ArrayList< PointMatch >();
+								final boolean modelFound = model.filterRansac(
+											candidates,
+											inliers2,
+											1000,
+											params.maxEpsilon,
+											params.minInlierRatio,
+											params.minNumInliers,
+											3 );
+								if ( modelFound )
+								{
+									candidates.removeAll( inliers2 );
+				
+									if ( params.rejectIdentity )
+									{
+										final ArrayList< Point > points = new ArrayList< Point >();
+										PointMatch.sourcePoints( inliers2, points );
+										if ( Transforms.isIdentity( model, points, params.identityTolerance ) )
+										{
+											System.out.println( "Identity transform for " + inliers2.size() + " matches rejected." );
+											again = true;
+										}
+										else
+										{
+											++nHypotheses;
+											inliers.addAll( inliers2 );
+											again = params.multipleHypotheses;
+										}
+									}
+									else
+									{
+										++nHypotheses;
+										inliers.addAll( inliers2 );
+										again = params.multipleHypotheses;
+									}
+								}
+							}
+							while ( again );
+						}
+						catch ( final NotEnoughDataPointsException e ) {}
+				
+						if ( nHypotheses > 0 && params.multipleHypotheses )
+						{
+							try
+							{
+									model.fit( inliers );
+									PointMatch.apply( inliers, model );
+							}
+							catch ( final NotEnoughDataPointsException e ) {}
+							catch ( final IllDefinedDataPointsException e )
+							{
+								nHypotheses = 0;
+							}
+						}
+				
+						if ( nHypotheses > 0 )
+						{								
+							System.out.println( layerNameA + " -> " + layerNameB + ": " + inliers.size() + " corresponding features with an average displacement of " + ( PointMatch.meanDistance( inliers ) ) + "px identified." );
+							System.out.println( "Estimated transformation model: " + model + ( params.multipleHypotheses ? ( " from " + nHypotheses + " hypotheses" ) : "" ) );
+							models.set( ti, new Triple< String, String, Collection< PointMatch > >( layerNameA, layerNameB, inliers ) );
 						}
 						else
 						{
-							++nHypotheses;
-							inliers.addAll( inliers2 );
-							again = param.multipleHypotheses;
+							System.out.println( layerNameA + " -> " + layerNameB + ": no correspondences found." );
+							return;
 						}
 					}
-					else
-					{
-						++nHypotheses;
-						inliers.addAll( inliers2 );
-						again = param.multipleHypotheses;
-					}
-				}
-			}
-			while ( again );
-		}
-		catch ( final NotEnoughDataPointsException e ) {}
 
-		if ( nHypotheses > 0 && param.multipleHypotheses )
-		{
+				};
+				threads.add( thread );
+				thread.start();
+			}
+
 			try
 			{
-					model.fit( inliers );
-					PointMatch.apply( inliers, model );
+				for ( final Thread thread : threads )
+					thread.join();
 			}
-			catch ( final NotEnoughDataPointsException e ) {}
-			catch ( final IllDefinedDataPointsException e )
+			catch ( final InterruptedException e )
 			{
-				nHypotheses = 0;
+				System.out.println( "Establishing feature correspondences interrupted." );
+				for ( final Thread thread : threads )
+					thread.interrupt();
+				try
+				{
+					for ( final Thread thread : threads )
+						thread.join();
+				}
+				catch ( final InterruptedException f ) {}
+				return;
 			}
+
+			threads.clear();
+
+			/* collect successfully matches pairs and break the search on gaps */
+			for ( int t = 0; t < models.size(); ++t )
+			{
+				final Triple< String, String, Collection< PointMatch > > pair = models.get( t );
+				if ( pair == null )
+				{
+					if ( ++numFailures > params.maxNumFailures )
+						break J;
+				}
+				else
+				{
+					numFailures = 0;
+					pairs.add( pair );
+				}
+			}
+		}
+			
+		/* Optimization */
+		final TileConfiguration tileConfiguration = new TileConfiguration();
+
+		for ( final Triple< String, String, Collection< PointMatch > > pair : pairs )
+		{
+			final Tile< ? > t1 = tiles.get( pair.a );
+			final Tile< ? > t2 = tiles.get( pair.b );
+
+			tileConfiguration.addTile( t1 );
+			tileConfiguration.addTile( t2 );
+			t2.connect( t1, pair.c );
 		}
 
-		if ( nHypotheses > 0 )
-		{								
-			Utils.log( layerNameB + " -> " + layerNameA + ": " + inliers.size() + " corresponding features with an average displacement of " + ( PointMatch.meanDistance( inliers ) ) + "px identified." );
-			Utils.log( "Estimated transformation model: " + model + ( param.multipleHypotheses ? ( " from " + nHypotheses + " hypotheses" ) : "" ) );
-			models.set( ti, new Triple< Integer, Integer, Collection< PointMatch > >( sliceA, sliceB, inliers ) );
-		}
-		else
+//		for ( int i = 0; i < layerRange.size(); ++i )
+//		{
+//			final Layer layer = layerRange.get( i );
+//			if ( fixedLayers.contains( layer ) )
+//				tileConfiguration.fixTile( tiles.get( i ) );
+//		}
+
+		try
 		{
-			Utils.log( layerNameB + " -> " + layerNameA + ": no correspondences found." );
-			return;
+			final List< Tile< ? >  > nonPreAlignedTiles = tileConfiguration.preAlign();
+	
+			System.out.println( "pre-aligned all but " + nonPreAlignedTiles.size() + " tiles" );
+	
+			tileConfiguration.optimize(
+					params.maxEpsilon,
+					params.maxIterationsOptimize,
+					params.maxPlateauwidthOptimize );
+	
+			System.out.println( new StringBuffer( "Successfully optimized configuration of " ).append( tiles.size() ).append( " tiles:" ).toString() );
+			System.out.println( "  average displacement: " + String.format( "%.3f", tileConfiguration.getError() ) + "px" );
+			System.out.println( "  minimal displacement: " + String.format( "%.3f", tileConfiguration.getMinError() ) + "px" );
+			System.out.println( "  maximal displacement: " + String.format( "%.3f", tileConfiguration.getMaxError() ) + "px" );
+		}
+		catch ( final Exception e )
+		{
+			System.err.println( "Error optimizing:" );
+			e.printStackTrace( System.err );
+		}
+
+
+//		if ( propagateTransformBefore || propagateTransformAfter )
+//		{
+//			final Layer first = layerRange.get( 0 );
+//			final List< Layer > layers = first.getParent().getLayers();
+//			if ( propagateTransformBefore )
+//			{
+//				final AffineTransform b = translateAffine( box, ( ( Affine2D< ? > )tiles.get( 0 ).getModel() ).createAffine() );
+//				final int firstLayerIndex = first.getParent().getLayerIndex( first.getId() );
+//				for ( int i = 0; i < firstLayerIndex; ++i )
+//					applyTransformToLayer( layers.get( i ), b, filter );
+//			}
+//			if ( propagateTransformAfter )
+//			{
+//				final Layer last = layerRange.get( layerRange.size() - 1 );
+//				final AffineTransform b = translateAffine( box, ( ( Affine2D< ? > )tiles.get( tiles.size() - 1 ).getModel() ).createAffine() );
+//				final int lastLayerIndex = last.getParent().getLayerIndex( last.getId() );
+//				for ( int i = lastLayerIndex + 1; i < layers.size(); ++i )
+//					applyTransformToLayer( layers.get( i ), b, filter );
+//			}
+//		}
+			
+		ArrayList< TileSpec > out_tiles = new ArrayList< TileSpec >();
+		
+		// Export new transforms, TODO: append to existing tilespec files
+		for(Entry<String, Tile< ? > > entry : tiles.entrySet()) {
+		    String tile_url = entry.getKey();
+		    Tile< ? > tile_value = entry.getValue();
+		    
+		    TileSpec ts = new TileSpec();
+		    ts.imageUrl = tile_url;
+		    
+		    AffineTransform at = ((AbstractAffineModel2D< ? >) tile_value.getModel()).createAffine();
+		    Transform addedTransform = new Transform();
+		    
+		    addedTransform.className = at.getClass().toString();
+		    addedTransform.dataString = at.toString();
+		    
+		    ts.transforms = new Transform[]{addedTransform};
+		    
+		    out_tiles.add(ts);
 		}
 		
+		try {
+			Writer writer = new FileWriter(params.targetPath);
+	        //Gson gson = new GsonBuilder().create();
+	        Gson gson = new GsonBuilder().setPrettyPrinting().create();
+	        gson.toJson(out_tiles, writer);
+	        writer.close();
+	    }
+		catch ( final IOException e )
+		{
+			System.err.println( "Error writing JSON file: " + params.targetPath );
+			e.printStackTrace( System.err );
+		}
+
+		System.out.println( "Done." );
 	}
 	
 }

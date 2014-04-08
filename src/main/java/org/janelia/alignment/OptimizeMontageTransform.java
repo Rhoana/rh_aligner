@@ -24,6 +24,7 @@ import java.io.FileWriter;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -134,7 +135,7 @@ public class OptimizeMontageTransform
 //		final boolean tilesAreInPlace = true;
 		
 		final Map< String, Tile< ? > > tilesMap = new HashMap< String, Tile< ? > >();
-		final List< Tile< ? > > tiles = new ArrayList< Tile< ? > >();
+//		final List< Tile< ? > > tiles = new ArrayList< Tile< ? > >();
 		final List< Tile< ? > > fixedTiles = new ArrayList< Tile< ? > >();
 //		final List< Tile< ? >[] > tilePairs = new ArrayList< Tile< ? >[] >();
 		
@@ -151,7 +152,7 @@ public class OptimizeMontageTransform
 			{
 				tile1 = Utils.createTile( params.modelIndex );
 				tilesMap.put(corr.imageUrl1, tile1);
-				tiles.add(tile1);
+				//tiles.add(tile1);
 			}
 			
 			if (tilesMap.containsKey(corr.imageUrl2))
@@ -162,9 +163,8 @@ public class OptimizeMontageTransform
 			{
 				tile2 = Utils.createTile( params.modelIndex );
 				tilesMap.put(corr.imageUrl2, tile2);
-				tiles.add(tile2);
+				//tiles.add(tile2);
 			}
-			
 			tile1.addConnectedTile(tile2);
 			tile2.addConnectedTile(tile1);
 
@@ -208,6 +208,7 @@ public class OptimizeMontageTransform
 //		else
 //			interestingTiles = tiles;
 		
+		final Collection< Tile< ? > > tiles = tilesMap.values();
 		final TileConfiguration tc = new TileConfiguration();
 		for ( final Tile< ? > t : tiles )
 			if ( t.getConnectedTiles().size() > 0 )
