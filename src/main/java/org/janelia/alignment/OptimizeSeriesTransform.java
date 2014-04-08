@@ -43,6 +43,8 @@ import java.util.Map;
 
 import javax.imageio.ImageIO;
 
+import org.janelia.alignment.OptimizeMontageTransform.Params;
+
 import mpicbg.models.AbstractModel;
 import mpicbg.models.AffineModel2D;
 import mpicbg.models.CoordinateTransform;
@@ -85,37 +87,33 @@ public class OptimizeSeriesTransform
 		@Parameter( names = "--help", description = "Display this note", help = true )
         private final boolean help = false;
 
-        @Parameter( names = "--inputfile1", description = "First image or tilespec file", required = true )
-        private String inputfile1;
+        @Parameter( names = "--inputfile", description = "Correspondence list file", required = true )
+        private String inputfile;
+                        
+        @Parameter( names = "--modelIndex", description = "Model Index: 0=Translation, 1=Rigid, 2=Similarity, 3=Affine, 4=Homography", required = false )
+        private int modelIndex = 1;
+                        
+        @Parameter( names = "--filterOutliers", description = "Filter outliers during optimization", required = false )
+        private boolean filterOutliers = false;
+                        
+        @Parameter( names = "--maxEpsilon", description = "Max epsilon", required = false )
+        private float maxEpsilon = 100.0f;
+                        
+        @Parameter( names = "--maxIterations", description = "Max iterations", required = false )
+        private int maxIterations = 2000;
         
-        @Parameter( names = "--inputfile2", description = "Second image or tilespec file", required = true )
-        private String inputfile2;
-        
+        @Parameter( names = "--maxPlateauwidth", description = "Max plateau width", required = false )
+        private int maxPlateauwidth = 200;
+                                
+        @Parameter( names = "--meanFactor", description = "Mean factor", required = false )
+        private float meanFactor = 3.0f;
+                        
         @Parameter( names = "--targetPath", description = "Path for the output correspondences", required = true )
         public String targetPath;
-                
+        
         @Parameter( names = "--threads", description = "Number of threads to be used", required = false )
         public int numThreads = Runtime.getRuntime().availableProcessors();
         
-	}
-	
-	final static public AbstractModel< ? > createModel( final int modelIndex )
-	{
-		switch ( modelIndex )
-		{
-		case 0:
-			return new TranslationModel2D();
-		case 1:
-			return new RigidModel2D();
-		case 2:
-			return new SimilarityModel2D();
-		case 3:
-			return new AffineModel2D();
-		case 4:
-			return new HomographyModel2D();
-		default:
-			return null;
-		}
 	}
 	
 	private OptimizeSeriesTransform() {}
@@ -123,152 +121,168 @@ public class OptimizeSeriesTransform
 	public static void main( final String[] args )
 	{
 		
-		/* collect all pairs of slices for which a model could be found */
-
-		counter.set( 0 );
-		int numFailures = 0;
-
-		for ( int i = 0; i < stack.getSize(); ++i )
+		final Params params = new Params();
+		
+		try
+        {
+			final JCommander jc = new JCommander( params, args );
+        	if ( params.help )
+            {
+        		jc.usage();
+                return;
+            }
+        }
+        catch ( final Exception e )
+        {
+        	e.printStackTrace();
+            final JCommander jc = new JCommander( params );
+        	jc.setProgramName( "java [-options] -cp render.jar org.janelia.alignment.RenderTile" );
+        	jc.usage(); 
+        	return;
+        }
+		
+		final CorrespondenceSpec[] corr_data;
+		try
 		{
-			final ArrayList< Thread > threads = new ArrayList< Thread >( p.maxNumThreads );
+			final Gson gson = new Gson();
+			URL url = new URL( params.inputfile );
+			corr_data = gson.fromJson( new InputStreamReader( url.openStream() ), CorrespondenceSpec[].class );
+		}
+		catch ( final MalformedURLException e )
+		{
+			System.err.println( "URL malformed." );
+			e.printStackTrace( System.err );
+			return;
+		}
+		catch ( final JsonSyntaxException e )
+		{
+			System.err.println( "JSON syntax malformed." );
+			e.printStackTrace( System.err );
+			return;
+		}
+		catch ( final Exception e )
+		{
+			e.printStackTrace( System.err );
+			return;
+		}
 
-			final int sliceA = i;
-			final int range = Math.min( stack.getSize(), i + p.maxNumNeighbors + 1 );
+		System.out.printl( "matching " + layerNameB + " -> " + layerNameA + "..." );
 
-J:				for ( int j = i + 1; j < range; )
+		ArrayList< PointMatch > candidates = null;
+		if ( !param.ppm.clearCache )
+			candidates = mpicbg.trakem2.align.Util.deserializePointMatches(
+					layerB.getProject(), param.ppm, "layer", layerB.getId(), layerA.getId() );
+
+		if ( null == candidates )
+		{
+			final ArrayList< Feature > fs1 = mpicbg.trakem2.align.Util.deserializeFeatures(
+					layerA.getProject(), param.ppm.sift, "layer", layerA.getId() );
+			final ArrayList< Feature > fs2 = mpicbg.trakem2.align.Util.deserializeFeatures(
+					layerB.getProject(), param.ppm.sift, "layer", layerB.getId() );
+			candidates = new ArrayList< PointMatch >( FloatArray2DSIFT.createMatches( fs2, fs1, param.ppm.rod ) );
+
+			/* scale the candidates */
+			for ( final PointMatch pm : candidates )
 			{
-				final int numThreads = Math.min( p.maxNumThreads, range - j );
-				final ArrayList< Triple< Integer, Integer, AbstractModel< ? > > > models =
-					new ArrayList< Triple< Integer, Integer, AbstractModel< ? > > >( numThreads );
+				final Point p1 = pm.getP1();
+				final Point p2 = pm.getP2();
+				final float[] l1 = p1.getL();
+				final float[] w1 = p1.getW();
+				final float[] l2 = p2.getL();
+				final float[] w2 = p2.getW();
 
-				for ( int k = 0; k < numThreads; ++k )
-					models.add( null );
+				l1[ 0 ] *= pointMatchScale;
+				l1[ 1 ] *= pointMatchScale;
+				w1[ 0 ] *= pointMatchScale;
+				w1[ 1 ] *= pointMatchScale;
+				l2[ 0 ] *= pointMatchScale;
+				l2[ 1 ] *= pointMatchScale;
+				w2[ 0 ] *= pointMatchScale;
+				w2[ 1 ] *= pointMatchScale;
 
-				for ( int t = 0;  t < numThreads && j < range; ++t, ++j )
+			}
+
+			if ( !mpicbg.trakem2.align.Util.serializePointMatches(
+					layerB.getProject(), param.ppm, "layer", layerB.getId(), layerA.getId(), candidates ) )
+			Utils.log( "Could not store point match candidates for layers " + layerNameB + " and " + layerNameA + "." );
+		}
+
+
+		final ArrayList< PointMatch > inliers = new ArrayList< PointMatch >();
+
+		boolean again = false;
+		int nHypotheses = 0;
+		try
+		{
+			do
+			{
+				again = false;
+				final ArrayList< PointMatch > inliers2 = new ArrayList< PointMatch >();
+				final boolean modelFound = model.filterRansac(
+							candidates,
+							inliers2,
+							1000,
+							param.maxEpsilon,
+							param.minInlierRatio,
+							param.minNumInliers,
+							3 );
+				if ( modelFound )
 				{
-					final int ti = t;
-					final int sliceB = j;
+					candidates.removeAll( inliers2 );
 
-					final Thread thread = new Thread()
+					if ( param.rejectIdentity )
 					{
-						@Override
-						public void run()
+						final ArrayList< Point > points = new ArrayList< Point >();
+						PointMatch.sourcePoints( inliers2, points );
+						if ( Transforms.isIdentity( model, points, param.identityTolerance ) )
 						{
-							IJ.showProgress( sliceA, stack.getSize() - 1 );
-
-							IJ.log( "matching " + sliceB + " -> " + sliceA + "..." );
-
-							ArrayList< PointMatch > candidates = null;
-							final String path = p.outputPath + String.format( "%05d", sliceB ) + "-" + String.format( "%05d", sliceA ) + ".pointmatches";
-							if ( !p.clearCache )
-								candidates = deserializePointMatches( p, path );
-
-							if ( null == candidates )
-							{
-								final ArrayList< Feature > fs1 = deserializeFeatures( p.sift, p.outputPath + String.format( "%05d", sliceA ) + ".features" );
-								final ArrayList< Feature > fs2 = deserializeFeatures( p.sift, p.outputPath + String.format( "%05d", sliceB ) + ".features" );
-								candidates = new ArrayList< PointMatch >( FloatArray2DSIFT.createMatches( fs2, fs1, p.rod ) );
-
-								if ( !serializePointMatches( p, candidates, path ) )
-									IJ.log( "Could not store point matches!" );
-							}
-
-							final AbstractModel< ? > model = createModel( p.modelIndex );
-							if ( model == null ) return;
-
-							final ArrayList< PointMatch > inliers = new ArrayList< PointMatch >();
-
-							boolean modelFound;
-							boolean again = false;
-							try
-							{
-								do
-								{
-									modelFound = model.filterRansac(
-											candidates,
-											inliers,
-											1000,
-											p.maxEpsilon,
-											p.minInlierRatio,
-											p.minNumInliers,
-											3 );
-									if ( modelFound && p.rejectIdentity )
-									{
-										final ArrayList< Point > points = new ArrayList< Point >();
-										PointMatch.sourcePoints( inliers, points );
-										if ( Transforms.isIdentity( model, points, p.identityTolerance ) )
-										{
-											IJ.log( "Identity transform for " + inliers.size() + " matches rejected." );
-											candidates.removeAll( inliers );
-											inliers.clear();
-											again = true;
-										}
-									}
-								}
-								while ( again );
-							}
-							catch ( final Exception e )
-							{
-								modelFound = false;
-								System.err.println( e.getMessage() );
-							}
-
-							if ( modelFound )
-							{
-								IJ.log( sliceB + " -> " + sliceA + ": " + inliers.size() + " corresponding features with an average displacement of " + PointMatch.meanDistance( inliers ) + "px identified." );
-								IJ.log( "Estimated transformation model: " + model );
-								models.set( ti, new Triple< Integer, Integer, AbstractModel< ? > >( sliceA, sliceB, model ) );
-							}
-							else
-							{
-								IJ.log( sliceB + " -> " + sliceA + ": no correspondences found." );
-								return;
-							}
+							IJ.log( "Identity transform for " + inliers2.size() + " matches rejected." );
+							again = true;
 						}
-					};
-					threads.add( thread );
-					thread.start();
-				}
-
-				try
-				{
-					for ( final Thread thread : threads )
-						thread.join();
-				}
-				catch ( final InterruptedException e )
-				{
-					IJ.log( "Establishing feature correspondences interrupted." );
-					for ( final Thread thread : threads )
-						thread.interrupt();
-					try
-					{
-						for ( final Thread thread : threads )
-							thread.join();
-					}
-					catch ( final InterruptedException f ) {}
-					return;
-				}
-
-				threads.clear();
-
-				/* collect successfully matches pairs and break the search on gaps */
-				for ( int t = 0; t < models.size(); ++t )
-				{
-					final Triple< Integer, Integer, AbstractModel< ? > > pair = models.get( t );
-					if ( pair == null )
-					{
-						if ( ++numFailures > p.maxNumFailures )
-							break J;
+						else
+						{
+							++nHypotheses;
+							inliers.addAll( inliers2 );
+							again = param.multipleHypotheses;
+						}
 					}
 					else
 					{
-						numFailures = 0;
-						pairs.add( pair );
+						++nHypotheses;
+						inliers.addAll( inliers2 );
+						again = param.multipleHypotheses;
 					}
 				}
 			}
+			while ( again );
 		}
-		
+		catch ( final NotEnoughDataPointsException e ) {}
+
+		if ( nHypotheses > 0 && param.multipleHypotheses )
+		{
+			try
+			{
+					model.fit( inliers );
+					PointMatch.apply( inliers, model );
+			}
+			catch ( final NotEnoughDataPointsException e ) {}
+			catch ( final IllDefinedDataPointsException e )
+			{
+				nHypotheses = 0;
+			}
+		}
+
+		if ( nHypotheses > 0 )
+		{								
+			Utils.log( layerNameB + " -> " + layerNameA + ": " + inliers.size() + " corresponding features with an average displacement of " + ( PointMatch.meanDistance( inliers ) ) + "px identified." );
+			Utils.log( "Estimated transformation model: " + model + ( param.multipleHypotheses ? ( " from " + nHypotheses + " hypotheses" ) : "" ) );
+			models.set( ti, new Triple< Integer, Integer, Collection< PointMatch > >( sliceA, sliceB, inliers ) );
+		}
+		else
+		{
+			Utils.log( layerNameB + " -> " + layerNameA + ": no correspondences found." );
+			return;
+		}
 		
 	}
 	

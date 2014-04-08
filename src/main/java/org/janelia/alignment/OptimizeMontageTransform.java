@@ -16,19 +16,7 @@
  */
 package org.janelia.alignment;
 
-import ij.IJ;
-import ij.ImagePlus;
-import ij.io.Opener;
-import ij.process.ByteProcessor;
-import ij.process.ColorProcessor;
-import ij.process.FloatProcessor;
-import ij.process.ImageProcessor;
-
-import java.awt.Graphics2D;
-import java.awt.image.BufferedImage;
-import java.awt.image.WritableRaster;
-import java.io.File;
-import java.io.FileReader;
+import java.awt.geom.AffineTransform;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Writer;
@@ -36,36 +24,15 @@ import java.io.FileWriter;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 
-import javax.imageio.ImageIO;
-
-import mpicbg.models.AbstractModel;
-import mpicbg.models.AffineModel2D;
-import mpicbg.models.CoordinateTransform;
-import mpicbg.models.CoordinateTransformList;
-import mpicbg.models.CoordinateTransformMesh;
-import mpicbg.models.ErrorStatistic;
-import mpicbg.models.HomographyModel2D;
-import mpicbg.models.InvertibleCoordinateTransform;
-import mpicbg.models.Point;
+import mpicbg.models.AbstractAffineModel2D;
 import mpicbg.models.PointMatch;
-import mpicbg.models.RigidModel2D;
-import mpicbg.models.SimilarityModel2D;
-import mpicbg.models.SpringMesh;
-import mpicbg.models.TransformMesh;
-import mpicbg.models.TranslationModel2D;
-import mpicbg.models.Vertex;
-import mpicbg.trakem2.transform.TransformMeshMappingWithMasks;
-import mpicbg.trakem2.transform.TransformMeshMappingWithMasks.ImageProcessorWithMasks;
-import mpicbg.imagefeatures.Feature;
-import mpicbg.imagefeatures.FloatArray2DSIFT;
-import mpicbg.ij.FeatureTransform;
-import mpicbg.ij.SIFT;
-import mpicbg.ij.blockmatching.BlockMatching;
+import mpicbg.models.Tile;
+import mpicbg.models.TileConfiguration;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
@@ -88,6 +55,24 @@ public class OptimizeMontageTransform
         @Parameter( names = "--inputfile", description = "Correspondence list file", required = true )
         private String inputfile;
                         
+        @Parameter( names = "--modelIndex", description = "Model Index: 0=Translation, 1=Rigid, 2=Similarity, 3=Affine, 4=Homography", required = false )
+        private int modelIndex = 1;
+                        
+        @Parameter( names = "--filterOutliers", description = "Filter outliers during optimization", required = false )
+        private boolean filterOutliers = false;
+                        
+        @Parameter( names = "--maxEpsilon", description = "Max epsilon", required = false )
+        private float maxEpsilon = 100.0f;
+                        
+        @Parameter( names = "--maxIterations", description = "Max iterations", required = false )
+        private int maxIterations = 2000;
+        
+        @Parameter( names = "--maxPlateauwidth", description = "Max plateau width", required = false )
+        private int maxPlateauwidth = 200;
+                                
+        @Parameter( names = "--meanFactor", description = "Mean factor", required = false )
+        private float meanFactor = 3.0f;
+                        
         @Parameter( names = "--targetPath", description = "Path for the output correspondences", required = true )
         public String targetPath;
         
@@ -96,30 +81,10 @@ public class OptimizeMontageTransform
         
 	}
 	
-	final static public AbstractModel< ? > createModel( final int modelIndex )
-	{
-		switch ( modelIndex )
-		{
-		case 0:
-			return new TranslationModel2D();
-		case 1:
-			return new RigidModel2D();
-		case 2:
-			return new SimilarityModel2D();
-		case 3:
-			return new AffineModel2D();
-		case 4:
-			return new HomographyModel2D();
-		default:
-			return null;
-		}
-	}
-	
 	private OptimizeMontageTransform() {}
 	
 	public static void main( final String[] args )
 	{
-		//TODO: Read in point matches
 		
 		final Params params = new Params();
 		
@@ -141,16 +106,12 @@ public class OptimizeMontageTransform
         	return;
         }
 		
-		/* open tilespec1 */
-		final TileSpec[] tileSpecs1;
-		final TileSpec[] tileSpecs2;
+		final CorrespondenceSpec[] corr_data;
 		try
 		{
 			final Gson gson = new Gson();
-			URL url = new URL( params.inputfile1 );
-			tileSpecs1 = gson.fromJson( new InputStreamReader( url.openStream() ), TileSpec[].class );
-			url = new URL( params.inputfile2 );
-			tileSpecs2 = gson.fromJson( new InputStreamReader( url.openStream() ), TileSpec[].class );
+			URL url = new URL( params.inputfile );
+			corr_data = gson.fromJson( new InputStreamReader( url.openStream() ), CorrespondenceSpec[].class );
 		}
 		catch ( final MalformedURLException e )
 		{
@@ -170,167 +131,130 @@ public class OptimizeMontageTransform
 			return;
 		}
 		
-		/* collect all pairs of tiles for which a model could be found */
-		final ArrayList< Triple< Integer, Integer, AbstractModel< ? > > > pairs = new ArrayList< Triple< Integer, Integer, AbstractModel< ? > > >();
-
-		counter.set( 0 );
-
-		for ( int i = 0; i < stack.getSize(); ++i )
+//		final boolean tilesAreInPlace = true;
+		
+		final Map< String, Tile< ? > > tilesMap = new HashMap< String, Tile< ? > >();
+		final List< Tile< ? > > tiles = new ArrayList< Tile< ? > >();
+		final List< Tile< ? > > fixedTiles = new ArrayList< Tile< ? > >();
+//		final List< Tile< ? >[] > tilePairs = new ArrayList< Tile< ? >[] >();
+		
+		for (CorrespondenceSpec corr : corr_data)
 		{
-			final ArrayList< Thread > threads = new ArrayList< Thread >( p.maxNumThreads );
-
-			final int sliceA = i;
-
-			for ( int j = i + 1; j < stack.getSize(); )
+			final Tile< ? > tile1;
+			final Tile< ? > tile2;
+			
+			if (tilesMap.containsKey(corr.imageUrl1))
 			{
-				final int numThreads = Math.min( p.maxNumThreads, stack.getSize() - j );
-				final ArrayList< Triple< Integer, Integer, AbstractModel< ? > > > models =
-					new ArrayList< Triple< Integer, Integer, AbstractModel< ? > > >( numThreads );
-
-				for ( int k = 0; k < numThreads; ++k )
-					models.add( null );
-
-				for ( int t = 0;  t < p.maxNumThreads && j < stack.getSize(); ++t, ++j )
-				{
-					final int sliceB = j;
-					final int ti = t;
-
-					final Thread thread = new Thread()
-					{
-						@Override
-						public void run()
-						{
-							IJ.showProgress( counter.getAndIncrement(), stack.getSize() - 1 );
-
-							IJ.log( "matching " + sliceB + " -> " + sliceA + "..." );
-
-							//String path = p.outputPath + stack.getSliceLabel( slice ) + ".pointmatches";
-							final String path = p.outputPath + String.format( "%05d", sliceB ) + "-" + String.format( "%05d", sliceA ) + ".pointmatches";
-							ArrayList< PointMatch > candidates = deserializePointMatches( p, path );
-
-							if ( null == candidates )
-							{
-								//ArrayList< Feature > fs1 = deserializeFeatures( p.sift, p.outputPath + stack.getSliceLabel( slice - 1 ) + ".features" );
-								final ArrayList< Feature > fs1 = deserializeFeatures( p.sift, p.outputPath + String.format( "%05d", sliceA ) + ".features" );
-								//ArrayList< Feature > fs2 = deserializeFeatures( p.sift, p.outputPath + stack.getSliceLabel( slice ) + ".features" );
-								final ArrayList< Feature > fs2 = deserializeFeatures( p.sift, p.outputPath + String.format( "%05d", sliceB ) + ".features" );
-								candidates = new ArrayList< PointMatch >( FloatArray2DSIFT.createMatches( fs2, fs1, p.rod ) );
-
-								if ( !serializePointMatches( p, candidates, path ) )
-									IJ.log( "Could not store point matches!" );
-							}
-
-							AbstractModel< ? > model;
-							switch ( p.modelIndex )
-							{
-							case 0:
-								model = new TranslationModel2D();
-								break;
-							case 1:
-								model = new RigidModel2D();
-								break;
-							case 2:
-								model = new SimilarityModel2D();
-								break;
-							case 3:
-								model = new AffineModel2D();
-								break;
-							case 4:
-								model = new HomographyModel2D();
-								break;
-							default:
-								return;
-							}
-
-							final ArrayList< PointMatch > inliers = new ArrayList< PointMatch >();
-
-							boolean modelFound;
-							try
-							{
-								modelFound = model.filterRansac(
-										candidates,
-										inliers,
-										1000,
-										p.maxEpsilon,
-										p.minInlierRatio,
-										p.minNumInliers );
-							}
-							catch ( final Exception e )
-							{
-								modelFound = false;
-								System.err.println( e.getMessage() );
-							}
-
-							if ( modelFound )
-							{
-								IJ.log( sliceB + " -> " + sliceA + ": " + inliers.size() + " corresponding features with an average displacement of " + PointMatch.meanDistance( inliers ) + "px identified." );
-								IJ.log( "Estimated transformation model: " + model );
-								models.set( ti, new Triple< Integer, Integer, AbstractModel< ? > >( sliceA, sliceB, model ) );
-							}
-							else
-							{
-								IJ.log( sliceB + " -> " + sliceA + ": no correspondences found." );
-								return;
-							}
-						}
-					};
-					threads.add( thread );
-					thread.start();
-				}
-
-				for ( final Thread thread : threads )
-				{
-					thread.join();
-				}
-
-				/* collect successfully matches pairs */
-				for ( int t = 0; t < models.size(); ++t )
-				{
-					final Triple< Integer, Integer, AbstractModel< ? > > pair = models.get( t );
-					if ( pair != null )
-						pairs.add( pair );
-				}
+				tile1 = tilesMap.get(corr.imageUrl1);
 			}
+			else
+			{
+				tile1 = Utils.createTile( params.modelIndex );
+				tilesMap.put(corr.imageUrl1, tile1);
+				tiles.add(tile1);
+			}
+			
+			if (tilesMap.containsKey(corr.imageUrl2))
+			{
+				tile2 = tilesMap.get(corr.imageUrl2);
+			}
+			else
+			{
+				tile2 = Utils.createTile( params.modelIndex );
+				tilesMap.put(corr.imageUrl2, tile2);
+				tiles.add(tile2);
+			}
+			
+			tile1.addConnectedTile(tile2);
+			tile2.addConnectedTile(tile1);
 
-			IJ.showProgress( i, stack.getSize() - 1 );
+			// Forward Point Matches
+			tile1.addMatches( corr.correspondencePointPairs );
+			
+			// Backward Point Matches
+			for ( PointMatch pm : corr.correspondencePointPairs )
+			{
+				tile2.addMatch(new PointMatch(pm.getP2(), pm.getP1()));
+				System.out.println("p1 " + pm.getP1().getW()[0] + ", " + pm.getP1().getW()[1]);
+				System.out.println("p2 " + pm.getP2().getW()[0] + ", " + pm.getP2().getW()[1]);
+			}
 		}
-						
+		
+//		final List< Set< Tile< ? > > > graphs = AbstractAffineTile2D.identifyConnectedGraphs( tiles );
+//
+//		final List< AbstractAffineTile2D< ? > > interestingTiles;
+//		if ( largestGraphOnlyIn )
+//		{
+//			/* find largest graph. */
+//
+//			Set< Tile< ? > > largestGraph = null;
+//			for ( final Set< Tile< ? > > graph : graphs )
+//				if ( largestGraph == null || largestGraph.size() < graph.size() )
+//					largestGraph = graph;
+//
+//			interestingTiles = new ArrayList< AbstractAffineTile2D< ? > >();
+//			for ( final Tile< ? > t : largestGraph )
+//				interestingTiles.add( ( AbstractAffineTile2D< ? > )t );
+//
+//			if ( hideDisconnectedTilesIn )
+//				for ( final AbstractAffineTile2D< ? > t : tiles )
+//					if ( !interestingTiles.contains( t ) )
+//						t.getPatch().setVisible( false );
+//			if ( deleteDisconnectedTilesIn )
+//				for ( final AbstractAffineTile2D< ? > t : tiles )
+//					if ( !interestingTiles.contains( t ) )
+//						t.getPatch().remove( false );
+//		}
+//		else
+//			interestingTiles = tiles;
+		
+		final TileConfiguration tc = new TileConfiguration();
+		for ( final Tile< ? > t : tiles )
+			if ( t.getConnectedTiles().size() > 0 )
+				tc.addTile( t );
 
-		// Export results
-		List< CorrespondenceSpec > corr_data = new ArrayList< CorrespondenceSpec >();
-		
-		// Remove Vertex (spring mesh) details from points
-		final ArrayList< PointMatch > pm12_strip = new ArrayList< PointMatch >();
-		final ArrayList< PointMatch > pm21_strip = new ArrayList< PointMatch >();
-		for (PointMatch pm: pm12)
+		for ( final Tile< ? > t : fixedTiles )
+			tc.fixTile( t );
+
+		try
 		{
-			pm12_strip.add(new PointMatch(
-					new Point(pm.getP1().getL(), pm.getP1().getW()),
-					new Point(pm.getP2().getL(), pm.getP2().getW())));
+			if ( params.filterOutliers )
+				tc.optimizeAndFilter( params.maxEpsilon, params.maxIterations, params.maxPlateauwidth, params.meanFactor );
+			else
+				tc.optimize( params.maxEpsilon, params.maxIterations, params.maxPlateauwidth );
 		}
-		for (PointMatch pm: pm21)
+		catch ( final Exception e )
 		{
-			pm21_strip.add(new PointMatch(
-					new Point(pm.getP1().getL(), pm.getP1().getW()),
-					new Point(pm.getP2().getL(), pm.getP2().getW())));
+			System.err.println( "Error optimizing:" );
+			e.printStackTrace( System.err );
 		}
 		
-		// TODO: Export / Import master sprint mesh vertices no calculated  individually per tile (v1, v2).
-		corr_data.add(new CorrespondenceSpec(
-				tileSpecs1[ params.index1 ].imageUrl,
-				tileSpecs2[ params.index2 ].imageUrl,
-				pm12_strip));
+		ArrayList< TileSpec > out_tiles = new ArrayList< TileSpec >();
+				
+		// Export new transforms, TODO: append to existing tilespec files
+		for(Entry<String, Tile< ? > > entry : tilesMap.entrySet()) {
+		    String tile_url = entry.getKey();
+		    Tile< ? > tile_value = entry.getValue();
+		    
+		    TileSpec ts = new TileSpec();
+		    ts.imageUrl = tile_url;
+		    
+		    AffineTransform at = ((AbstractAffineModel2D< ? >) tile_value.getModel()).createAffine();
+		    Transform addedTransform = new Transform();
+		    
+		    addedTransform.className = at.getClass().toString();
+		    addedTransform.dataString = at.toString();
+		    
+		    ts.transforms = new Transform[]{addedTransform};
+		    
+		    out_tiles.add(ts);
+		}
 		
-		corr_data.add(new CorrespondenceSpec(
-				tileSpecs2[ params.index2 ].imageUrl,
-				tileSpecs1[ params.index1 ].imageUrl,
-				pm21_strip));
-					
 		try {
 			Writer writer = new FileWriter(params.targetPath);
 	        //Gson gson = new GsonBuilder().create();
 	        Gson gson = new GsonBuilder().setPrettyPrinting().create();
-	        gson.toJson(corr_data, writer);
+	        gson.toJson(out_tiles, writer);
 	        writer.close();
 	    }
 		catch ( final IOException e )

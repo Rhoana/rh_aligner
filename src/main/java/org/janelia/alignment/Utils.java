@@ -18,6 +18,7 @@ package org.janelia.alignment;
 
 import ij.ImagePlus;
 import ij.io.Opener;
+import ini.trakem2.display.Patch;
 
 import java.awt.image.BufferedImage;
 import java.awt.image.RenderedImage;
@@ -28,21 +29,106 @@ import java.util.ArrayList;
 
 import javax.imageio.ImageIO;
 
+import mpicbg.models.AbstractModel;
 import mpicbg.models.AffineModel2D;
 import mpicbg.models.CoordinateTransform;
+import mpicbg.models.HomographyModel2D;
 import mpicbg.models.NotEnoughDataPointsException;
 import mpicbg.models.Point;
 import mpicbg.models.PointMatch;
+import mpicbg.models.RigidModel2D;
 import mpicbg.models.SimilarityModel2D;
+import mpicbg.models.SpringMesh;
+import mpicbg.models.Tile;
+import mpicbg.models.TranslationModel2D;
+import mpicbg.trakem2.align.AbstractAffineTile2D;
 
 /**
  * 
  *
- * @author Stephan Saalfeld <saalfeld@janelia.hhmi.org>
+ * @author Stephan Saalfeld <saalfeld@janelia.hhmi.org>, Seymour Knowles-Barley
  */
 public class Utils
 {
 	private Utils() {}
+	
+	final static public class Triple< A, B, C >
+	{
+		final public A a;
+		final public B b;
+		final public C c;
+
+		Triple( final A a, final B b, final C c )
+		{
+			this.a = a;
+			this.b = b;
+			this.c = c;
+		}
+	}
+	
+	/**
+	 * Get a model from an integer specifier
+	 */
+	final static public AbstractModel< ? > createModel( final int modelIndex )
+	{
+		switch ( modelIndex )
+		{
+		case 0:
+			return new TranslationModel2D();
+		case 1:
+			return new RigidModel2D();
+		case 2:
+			return new SimilarityModel2D();
+		case 3:
+			return new AffineModel2D();
+		case 4:
+			return new HomographyModel2D();
+		default:
+			return null;
+		}
+	}
+	
+	/**
+	 * Get a tile from an integer specifier
+	 */
+	final static public Tile< ? > createTile( final int modelIndex )
+	{
+		switch ( modelIndex )
+		{
+		case 0:
+			return (Tile< ? >) new Tile< TranslationModel2D >( new TranslationModel2D() );
+		case 1:
+			return (Tile< ? >) new Tile< RigidModel2D >( new RigidModel2D() );
+		case 2:
+			return (Tile< ? >) new Tile< SimilarityModel2D >( new SimilarityModel2D() );
+		case 3:
+			return (Tile< ? >) new Tile< AffineModel2D >( new AffineModel2D() );
+		case 4:
+			return (Tile< ? >) new Tile< HomographyModel2D >( new HomographyModel2D() );
+		default:
+			return null;
+		}
+	}
+	
+	/**
+	 * Generate a spring mesh from image dimensions and spring mesh parameters.
+	 */
+	public static SpringMesh getMesh( int imWidth, int imHeight, float layerScale,
+			int resolutionSpringMesh, float stiffnessSpringMesh, float dampSpringMesh, float maxStretchSpringMesh )
+	{
+		final int meshWidth = ( int )Math.ceil( imWidth * layerScale );
+		final int meshHeight = ( int )Math.ceil( imHeight * layerScale );
+		
+		final SpringMesh mesh = new SpringMesh(
+						resolutionSpringMesh,
+						meshWidth,
+						meshHeight,
+						stiffnessSpringMesh,
+						maxStretchSpringMesh * layerScale,
+						dampSpringMesh );
+		
+		return mesh;
+	}
 	
 	/**
 	 * Save an image using ImageIO.
