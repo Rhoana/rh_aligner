@@ -10,6 +10,34 @@
     <defaultGoal>install</defaultGoal>
     <pluginManagement>
       <plugins>
+		<plugin>
+			<groupId>org.eclipse.m2e</groupId>
+			<artifactId>lifecycle-mapping</artifactId>
+			<version>1.0.0</version>
+			<configuration>
+				<lifecycleMappingMetadata>
+					<pluginExecutions>
+						<pluginExecution>
+							<pluginExecutionFilter>
+								<groupId>org.apache.maven.plugins</groupId>
+								<artifactId>maven-dependency-plugin</artifactId>
+								<versionRange>[0.0,)</versionRange>
+								<goals>
+									<goal>copy-dependencies</goal>
+								</goals>
+							</pluginExecutionFilter>
+							<action>
+								<execute />
+							</action>
+						</pluginExecution>
+					</pluginExecutions>
+				</lifecycleMappingMetadata>
+			</configuration>
+		</plugin>
+      </plugins>
+    </pluginManagement>
+    
+      <plugins>
         <plugin>
           <artifactId>maven-compiler-plugin</artifactId>
           <version>2.5</version>
@@ -18,9 +46,44 @@
             <target>1.6</target>
             <compilerArgument></compilerArgument>
           </configuration>
-        </plugin>
+	    </plugin>
+	
+
+		<plugin>
+			<artifactId>maven-jar-plugin</artifactId>
+			<configuration>
+				<archive>
+					<manifest>
+						<addClasspath>true</addClasspath>
+						<classpathPrefix>lib/</classpathPrefix>
+					</manifest>
+				</archive>
+			</configuration>
+		</plugin>
+
+		<plugin>
+			<!--groupId>org.apache.maven.plugins</groupId-->
+			<artifactId>maven-dependency-plugin</artifactId>
+			<version>2.5</version>
+			<executions>
+				<execution>
+					<id>copy-dependencies</id>
+					<phase>install</phase>
+					<goals>
+						<goal>copy-dependencies</goal>
+					</goals>
+					<configuration>
+						<outputDirectory>${project.build.directory}/lib</outputDirectory>
+						<overWriteReleases>false</overWriteReleases>
+						<overWriteSnapshots>false</overWriteSnapshots> 
+						<overWriteIfNewer>true</overWriteIfNewer>
+					</configuration>
+				</execution>
+			</executions>
+		</plugin>
+    		
       </plugins>
-    </pluginManagement>
+      
   </build>
   
   <!-- NB: for project parent, in case of partial checkout -->
