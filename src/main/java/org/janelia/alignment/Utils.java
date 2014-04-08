@@ -18,7 +18,6 @@ package org.janelia.alignment;
 
 import ij.ImagePlus;
 import ij.io.Opener;
-import ini.trakem2.display.Patch;
 
 import java.awt.image.BufferedImage;
 import java.awt.image.RenderedImage;
@@ -41,7 +40,6 @@ import mpicbg.models.SimilarityModel2D;
 import mpicbg.models.SpringMesh;
 import mpicbg.models.Tile;
 import mpicbg.models.TranslationModel2D;
-import mpicbg.trakem2.align.AbstractAffineTile2D;
 
 /**
  * 
