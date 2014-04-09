@@ -8,6 +8,9 @@ import tifffile # fast peeking at tiff sizes
 from decimal import *
 
 
+def path2url(path):
+    return urlparse.urljoin('file:', urllib.pathname2url(path))
+
 def extract_coords(filename, image_size, overlap=0.06):
     m = re.match('Tile_r([0-9]+)-c([0-9]+)_.*[.]tif+', os.path.basename(filename))
     offset_y = (int(m.group(1)) - 1) * image_size[0] * (1.0 - overlap)
@@ -35,7 +38,7 @@ def write_tilespec(subdir, output_json_fname):
                 image_size = tiffinfo.pages[0].shape
         coords = extract_coords(image_file, image_size)
         tilespec = {
-            "imageUrl" : "file://{0}".format(os.path.abspath(image_file).replace(os.path.sep, '/')),
+            "imageUrl" : path2url(os.path.abspath(image_file)),
             "minIntensity" : 0.0,
             "maxIntensity" : 255.0,
             "transforms" : [{
