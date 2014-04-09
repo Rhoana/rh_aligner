@@ -1,5 +1,5 @@
 /**
- * License: GPL
+e * License: GPL
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License 2
@@ -16,7 +16,20 @@
  */
 package org.janelia.alignment;
 
+import ij.IJ;
+import ij.ImagePlus;
+import ij.io.Opener;
+import ij.process.ByteProcessor;
+import ij.process.ColorProcessor;
+import ij.process.FloatProcessor;
+import ij.process.ImageProcessor;
+
+import java.awt.Graphics2D;
 import java.awt.geom.AffineTransform;
+import java.awt.image.BufferedImage;
+import java.awt.image.WritableRaster;
+import java.io.File;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Writer;
@@ -30,10 +43,38 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
+import javax.imageio.ImageIO;
+
 import mpicbg.models.AbstractAffineModel2D;
+import mpicbg.models.AbstractModel;
+import mpicbg.models.AffineModel2D;
+import mpicbg.models.CoordinateTransform;
+import mpicbg.models.CoordinateTransformList;
+import mpicbg.models.CoordinateTransformMesh;
+import mpicbg.models.ErrorStatistic;
+import mpicbg.models.HomographyModel2D;
+import mpicbg.models.IllDefinedDataPointsException;
+import mpicbg.models.InvertibleCoordinateTransform;
+import mpicbg.models.NotEnoughDataPointsException;
+import mpicbg.models.Point;
 import mpicbg.models.PointMatch;
+import mpicbg.models.RigidModel2D;
+import mpicbg.models.SimilarityModel2D;
+import mpicbg.models.SpringMesh;
 import mpicbg.models.Tile;
 import mpicbg.models.TileConfiguration;
+import mpicbg.models.TransformMesh;
+import mpicbg.models.Transforms;
+import mpicbg.models.TranslationModel2D;
+import mpicbg.models.Vertex;
+import mpicbg.models.InterpolatedAffineModel2D;
+import mpicbg.trakem2.transform.TransformMeshMappingWithMasks;
+import mpicbg.trakem2.transform.TransformMeshMappingWithMasks.ImageProcessorWithMasks;
+import mpicbg.imagefeatures.Feature;
+import mpicbg.imagefeatures.FloatArray2DSIFT;
+import mpicbg.ij.FeatureTransform;
+import mpicbg.ij.SIFT;
+import mpicbg.ij.blockmatching.BlockMatching;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
@@ -42,10 +83,10 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
 
-/**
+/** 
  * @author Seymour Knowles-Barley
  */
-public class OptimizeMontageTransform
+public class OptimizeSeriesElastic
 {
 	@Parameters
 	static private class Params
@@ -55,25 +96,7 @@ public class OptimizeMontageTransform
 
         @Parameter( names = "--inputfile", description = "Correspondence list file", required = true )
         private String inputfile;
-                        
-        @Parameter( names = "--modelIndex", description = "Model Index: 0=Translation, 1=Rigid, 2=Similarity, 3=Affine, 4=Homography", required = false )
-        private int modelIndex = 1;
-                        
-        @Parameter( names = "--filterOutliers", description = "Filter outliers during optimization", required = false )
-        private boolean filterOutliers = false;
-                        
-        @Parameter( names = "--maxEpsilon", description = "Max epsilon", required = false )
-        private float maxEpsilon = 100.0f;
-                        
-        @Parameter( names = "--maxIterations", description = "Max iterations", required = false )
-        private int maxIterations = 2000;
-        
-        @Parameter( names = "--maxPlateauwidth", description = "Max plateau width", required = false )
-        private int maxPlateauwidth = 200;
-                                
-        @Parameter( names = "--meanFactor", description = "Mean factor", required = false )
-        private float meanFactor = 3.0f;
-                        
+
         @Parameter( names = "--targetPath", description = "Path for the output correspondences", required = true )
         public String targetPath;
         
@@ -82,7 +105,7 @@ public class OptimizeMontageTransform
         
 	}
 	
-	private OptimizeMontageTransform() {}
+	private OptimizeSeriesElastic() {}
 	
 	public static void main( final String[] args )
 	{
@@ -131,109 +154,20 @@ public class OptimizeMontageTransform
 			e.printStackTrace( System.err );
 			return;
 		}
-		
-//		final boolean tilesAreInPlace = true;
-		
-		final Map< String, Tile< ? > > tilesMap = new HashMap< String, Tile< ? > >();
-//		final List< Tile< ? > > tiles = new ArrayList< Tile< ? > >();
-		final List< Tile< ? > > fixedTiles = new ArrayList< Tile< ? > >();
-//		final List< Tile< ? >[] > tilePairs = new ArrayList< Tile< ? >[] >();
-		
-		for (CorrespondenceSpec corr : corr_data)
-		{
-			final Tile< ? > tile1;
-			final Tile< ? > tile2;
-			
-			if (tilesMap.containsKey(corr.url1))
-			{
-				tile1 = tilesMap.get(corr.url1);
-			}
-			else
-			{
-				tile1 = Utils.createTile( params.modelIndex );
-				tilesMap.put(corr.url1, tile1);
-				//tiles.add(tile1);
-			}
-			
-			if (tilesMap.containsKey(corr.url2))
-			{
-				tile2 = tilesMap.get(corr.url2);
-			}
-			else
-			{
-				tile2 = Utils.createTile( params.modelIndex );
-				tilesMap.put(corr.url2, tile2);
-				//tiles.add(tile2);
-			}
-			tile1.addConnectedTile(tile2);
-			tile2.addConnectedTile(tile1);
 
-			// Forward Point Matches
-			tile1.addMatches( corr.correspondencePointPairs );
+		
+		
+		
+
+
+		
+		
+		
 			
-			// Backward Point Matches
-			for ( PointMatch pm : corr.correspondencePointPairs )
-			{
-				tile2.addMatch(new PointMatch(pm.getP2(), pm.getP1()));
-				System.out.println("p1 " + pm.getP1().getW()[0] + ", " + pm.getP1().getW()[1]);
-				System.out.println("p2 " + pm.getP2().getW()[0] + ", " + pm.getP2().getW()[1]);
-			}
-		}
-		
-//		final List< Set< Tile< ? > > > graphs = AbstractAffineTile2D.identifyConnectedGraphs( tiles );
-//
-//		final List< AbstractAffineTile2D< ? > > interestingTiles;
-//		if ( largestGraphOnlyIn )
-//		{
-//			/* find largest graph. */
-//
-//			Set< Tile< ? > > largestGraph = null;
-//			for ( final Set< Tile< ? > > graph : graphs )
-//				if ( largestGraph == null || largestGraph.size() < graph.size() )
-//					largestGraph = graph;
-//
-//			interestingTiles = new ArrayList< AbstractAffineTile2D< ? > >();
-//			for ( final Tile< ? > t : largestGraph )
-//				interestingTiles.add( ( AbstractAffineTile2D< ? > )t );
-//
-//			if ( hideDisconnectedTilesIn )
-//				for ( final AbstractAffineTile2D< ? > t : tiles )
-//					if ( !interestingTiles.contains( t ) )
-//						t.getPatch().setVisible( false );
-//			if ( deleteDisconnectedTilesIn )
-//				for ( final AbstractAffineTile2D< ? > t : tiles )
-//					if ( !interestingTiles.contains( t ) )
-//						t.getPatch().remove( false );
-//		}
-//		else
-//			interestingTiles = tiles;
-		
-		final Collection< Tile< ? > > tiles = tilesMap.values();
-		final TileConfiguration tc = new TileConfiguration();
-		for ( final Tile< ? > t : tiles )
-			if ( t.getConnectedTiles().size() > 0 )
-				tc.addTile( t );
-
-		for ( final Tile< ? > t : fixedTiles )
-			tc.fixTile( t );
-
-		try
-		{
-			if ( params.filterOutliers )
-				tc.optimizeAndFilter( params.maxEpsilon, params.maxIterations, params.maxPlateauwidth, params.meanFactor );
-			else
-				tc.optimize( params.maxEpsilon, params.maxIterations, params.maxPlateauwidth );
-		}
-		catch ( final Exception e )
-		{
-			System.err.println( "Error optimizing:" );
-			e.printStackTrace( System.err );
-		}
-		
 		ArrayList< TileSpec > out_tiles = new ArrayList< TileSpec >();
-				
+		
 		// Export new transforms, TODO: append to existing tilespec files
-		for(Entry<String, Tile< ? > > entry : tilesMap.entrySet()) {
+		for(Entry<String, Tile< ? > > entry : tiles.entrySet()) {
 		    String tile_url = entry.getKey();
 		    Tile< ? > tile_value = entry.getValue();
 		    
@@ -263,6 +197,8 @@ public class OptimizeMontageTransform
 			System.err.println( "Error writing JSON file: " + params.targetPath );
 			e.printStackTrace( System.err );
 		}
+
+		System.out.println( "Done." );
 	}
 	
 }

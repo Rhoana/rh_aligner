@@ -198,25 +198,25 @@ public class OptimizeSeriesTransform
 		}
 
 		/* create tiles and models for all layers */
-		final HashMap< String, Tile< ? > > tiles = new HashMap< String, Tile< ? > >();
+		final HashMap< String, Tile< ? > > tileMap = new HashMap< String, Tile< ? > >();
 		final AbstractAffineModel2D< ? > m = ( AbstractAffineModel2D< ? > )Utils.createModel( params.modelIndex );
 		final AbstractAffineModel2D< ? > r = ( AbstractAffineModel2D< ? > )Utils.createModel( params.regularizerIndex );
 		
 		for ( int i = 0; i < corr_data.length; ++i )
 		{
-			if (!tiles.containsKey(corr_data[i].imageUrl1))
+			if (!tileMap.containsKey(corr_data[i].url1))
 			{
 				if ( params.regularize )
-					tiles.put(corr_data[i].imageUrl1, new Tile( new InterpolatedAffineModel2D( m.copy(), r.copy(), params.lambda ) ) );
+					tileMap.put(corr_data[i].url1, new Tile( new InterpolatedAffineModel2D( m.copy(), r.copy(), params.lambda ) ) );
 				else
-					tiles.put(corr_data[i].imageUrl1, new Tile( m.copy() ) );
+					tileMap.put(corr_data[i].url1, new Tile( m.copy() ) );
 			}
-			if (!tiles.containsKey(corr_data[i].imageUrl2))
+			if (!tileMap.containsKey(corr_data[i].url2))
 			{
 				if ( params.regularize )
-					tiles.put(corr_data[i].imageUrl2, new Tile( new InterpolatedAffineModel2D( m.copy(), r.copy(), params.lambda ) ) );
+					tileMap.put(corr_data[i].url2, new Tile( new InterpolatedAffineModel2D( m.copy(), r.copy(), params.lambda ) ) );
 				else
-					tiles.put(corr_data[i].imageUrl2, new Tile( m.copy() ) );
+					tileMap.put(corr_data[i].url2, new Tile( m.copy() ) );
 			}
 		}
 		
@@ -242,8 +242,8 @@ J:		for ( int i = 0; i < corr_data.length; )
 			{
 				final int ti = t;
 				final CorrespondenceSpec corr = corr_data[i];
-				final String layerNameA = corr.imageUrl1;
-				final String layerNameB = corr.imageUrl2;
+				final String layerNameA = corr.url1;
+				final String layerNameB = corr.url2;
 
 				final Thread thread = new Thread()
 				{
@@ -402,8 +402,8 @@ J:		for ( int i = 0; i < corr_data.length; )
 
 		for ( final Triple< String, String, Collection< PointMatch > > pair : pairs )
 		{
-			final Tile< ? > t1 = tiles.get( pair.a );
-			final Tile< ? > t2 = tiles.get( pair.b );
+			final Tile< ? > t1 = tileMap.get( pair.a );
+			final Tile< ? > t2 = tileMap.get( pair.b );
 
 			tileConfiguration.addTile( t1 );
 			tileConfiguration.addTile( t2 );
@@ -414,7 +414,7 @@ J:		for ( int i = 0; i < corr_data.length; )
 //		{
 //			final Layer layer = layerRange.get( i );
 //			if ( fixedLayers.contains( layer ) )
-//				tileConfiguration.fixTile( tiles.get( i ) );
+//				tileConfiguration.fixTile( tileMap.get( i ) );
 //		}
 
 		try
@@ -428,7 +428,7 @@ J:		for ( int i = 0; i < corr_data.length; )
 					params.maxIterationsOptimize,
 					params.maxPlateauwidthOptimize );
 	
-			System.out.println( new StringBuffer( "Successfully optimized configuration of " ).append( tiles.size() ).append( " tiles:" ).toString() );
+			System.out.println( new StringBuffer( "Successfully optimized configuration of " ).append( tileMap.size() ).append( " tiles:" ).toString() );
 			System.out.println( "  average displacement: " + String.format( "%.3f", tileConfiguration.getError() ) + "px" );
 			System.out.println( "  minimal displacement: " + String.format( "%.3f", tileConfiguration.getMinError() ) + "px" );
 			System.out.println( "  maximal displacement: " + String.format( "%.3f", tileConfiguration.getMaxError() ) + "px" );
@@ -446,7 +446,7 @@ J:		for ( int i = 0; i < corr_data.length; )
 //			final List< Layer > layers = first.getParent().getLayers();
 //			if ( propagateTransformBefore )
 //			{
-//				final AffineTransform b = translateAffine( box, ( ( Affine2D< ? > )tiles.get( 0 ).getModel() ).createAffine() );
+//				final AffineTransform b = translateAffine( box, ( ( Affine2D< ? > )tileMap.get( 0 ).getModel() ).createAffine() );
 //				final int firstLayerIndex = first.getParent().getLayerIndex( first.getId() );
 //				for ( int i = 0; i < firstLayerIndex; ++i )
 //					applyTransformToLayer( layers.get( i ), b, filter );
@@ -454,7 +454,7 @@ J:		for ( int i = 0; i < corr_data.length; )
 //			if ( propagateTransformAfter )
 //			{
 //				final Layer last = layerRange.get( layerRange.size() - 1 );
-//				final AffineTransform b = translateAffine( box, ( ( Affine2D< ? > )tiles.get( tiles.size() - 1 ).getModel() ).createAffine() );
+//				final AffineTransform b = translateAffine( box, ( ( Affine2D< ? > )tileMap.get( tileMap.size() - 1 ).getModel() ).createAffine() );
 //				final int lastLayerIndex = last.getParent().getLayerIndex( last.getId() );
 //				for ( int i = lastLayerIndex + 1; i < layers.size(); ++i )
 //					applyTransformToLayer( layers.get( i ), b, filter );
@@ -464,7 +464,7 @@ J:		for ( int i = 0; i < corr_data.length; )
 		ArrayList< TileSpec > out_tiles = new ArrayList< TileSpec >();
 		
 		// Export new transforms, TODO: append to existing tilespec files
-		for(Entry<String, Tile< ? > > entry : tiles.entrySet()) {
+		for(Entry<String, Tile< ? > > entry : tileMap.entrySet()) {
 		    String tile_url = entry.getKey();
 		    Tile< ? > tile_value = entry.getValue();
 		    

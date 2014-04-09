@@ -22,7 +22,7 @@ import mpicbg.models.CoordinateTransformList;
 /**
  * 
  *
- * @author Stephan Saalfeld <saalfelds@janelia.hhmi.org>
+ * @author Stephan Saalfeld <saalfelds@janelia.hhmi.org>, Seymour Knowles-Barley
  */
 public class TileSpec
 {
@@ -30,6 +30,11 @@ public class TileSpec
 	public String maskUrl;
 	public double minIntensity = 0;
 	public double maxIntensity = 255;
+	// width and height of base tile image
+	public int width = 0;
+	public int height = 0;
+	// bounding box after transformations are applied [left, right, top, bottom] possibly with extra entries for [front, back, etc.]
+	public int[] bbox = null;
 	public Transform[] transforms = null;
 	
 	final public CoordinateTransformList< CoordinateTransform > createTransformList()

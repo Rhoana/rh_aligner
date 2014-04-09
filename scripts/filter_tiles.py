@@ -85,33 +85,40 @@ def create_single_tile_specs(relevant_tiles, working_dir):
 
 
 
-# Command line parser
-parser = argparse.ArgumentParser(description='Takes a json file that contains many tiles with their bounding boxes (Tile-Spec format)\
-	and a bounding box, and outputs a json file for each tile that is overlapping with the bounding box')
-parser.add_argument('tiles_fname', metavar='tiles_json', type=str, 
-                	help='a tile_spec file that contains all the images to be aligned in json format')
-parser.add_argument('-w', '--workspace_dir', type=str, 
-                	help='a directory where the output files will be kept (default: ./temp)',
-                	default='./temp')
-# the default bounding box is as big as the image can be
-parser.add_argument('-b', '--bounding_box', type=str, 
-                	help='the bounding box of the part of image that needs to be aligned format: "from_x to_x from_y to_y" (default: all tiles)',
-                	default='{0} {1} {2} {3}'.format((-sys.maxint - 1), sys.maxint, (-sys.maxint - 1), sys.maxint))
+def filter_tiles(tiles_fname, working_dir, bbox):
+	# parse the bounding box arguments
+	bbox = BoundingBox(bbox)
 
-args = parser.parse_args()
+	# create a workspace directory if not found
+	if not os.path.exists(working_dir):
+		os.makedirs(working_dir)
 
-#print args
+	# load all tiles from the tile-spec json file that are relevant to our bounding box
+	relevant_tiles = load_tiles(tiles_fname, bbox)
 
-# parse the bounding box arguments
-bbox = BoundingBox(args.bounding_box)
+	# Create a tile-spec file for each relevant tile
+	create_single_tile_specs(relevant_tiles, working_dir)
 
-# create a workspace directory if not found
-if not os.path.exists(args.workspace_dir):
-	os.makedirs(args.workspace_dir)
+def main():
+	# Command line parser
+	parser = argparse.ArgumentParser(description='Takes a json file that contains many tiles with their bounding boxes (Tile-Spec format)\
+		and a bounding box, and outputs a json file for each tile that is overlapping with the bounding box')
+	parser.add_argument('tiles_fname', metavar='tiles_json', type=str, 
+	                	help='a tile_spec file that contains all the images to be aligned in json format')
+	parser.add_argument('-w', '--workspace_dir', type=str, 
+	                	help='a directory where the output files will be kept (default: ./temp)',
+	                	default='./temp')
+	# the default bounding box is as big as the image can be
+	parser.add_argument('-b', '--bounding_box', type=str, 
+	                	help='the bounding box of the part of image that needs to be aligned format: "from_x to_x from_y to_y" (default: all tiles)',
+	                	default='{0} {1} {2} {3}'.format((-sys.maxint - 1), sys.maxint, (-sys.maxint - 1), sys.maxint))
 
-# load all tiles from the tile-spec json file that are relevant to our bounding box
-relevant_tiles = load_tiles(args.tiles_fname, bbox)
+	args = parser.parse_args()
 
-# Create a tile-spec file for each relevant tile
-create_single_tile_specs(relevant_tiles, args.workspace_dir)
+	#print args
+
+	filter_tiles(args.tiles_fname, args.workspace_dir, args.bounding_box)
+
+if __name__ == '__main__':
+	main()
 
