@@ -30,6 +30,11 @@ public class TileSpec
 	public String maskUrl;
 	public double minIntensity = 0;
 	public double maxIntensity = 255;
+	// width and height of base tile image
+	public double width = 0;
+	public double height = 0;
+	// bounding box after transformations are applied [left, right, top, bottom] possibly with extra entries for [front, back, etc.]
+	public double[] bbox = null;
 	public Transform[] transforms = null;
 	
 	final public CoordinateTransformList< CoordinateTransform > createTransformList()

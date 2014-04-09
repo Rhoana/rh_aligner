@@ -124,7 +124,7 @@ public class Utils
 						stiffnessSpringMesh,
 						maxStretchSpringMesh * layerScale,
 						dampSpringMesh );
-		
+		System.out.println( "Generated mesh with " + mesh.numVertices() + " vertices.");
 		return mesh;
 	}
 	
