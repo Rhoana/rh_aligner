@@ -9,10 +9,10 @@ from decimal import *
 
 
 def extract_coords(filename, image_size, overlap=0.06):
-    m = re.match('.*/Tile_r([0-9]+)-c([0-9]+)_.*[.]tif+', filename)
+    m = re.match('Tile_r([0-9]+)-c([0-9]+)_.*[.]tif+', os.path.basename(filename))
     offset_y = (int(m.group(1)) - 1) * image_size[0] * (1.0 - overlap)
     offset_x = (int(m.group(2)) - 1) * image_size[1] * (1.0 - overlap)
-    return offset_x, offset_y
+    return int(offset_x), int(offset_y)
 
 def filename_decimal_key(path):
     return Decimal(''.join([c for c in path if c.isdigit()]))
@@ -20,12 +20,11 @@ def filename_decimal_key(path):
 def find_image_files(subdir):
     return glob.glob(os.path.join(subdir, 'Tile_r*-c*.tif'))
 
-def write_tilespec(subdir):
+def write_tilespec(subdir, output_json_fname):
     '''Writes the tilespec for a single directory (aka, section)'''
     tilespecs = []
     image_size = None
 
-    output_json_fname = os.path.join(subdir, 'tilespec.json')
     if os.path.exists(output_json_fname):
         print("Will not overwrite {}".format(output_json_fname))
         return
@@ -42,11 +41,11 @@ def write_tilespec(subdir):
             "transforms" : [{
                     "className" : "mpicbg.trakem2.transform.TranslationModel2D",
                     # x, y offset of upper right corner
-                    "dataString" : "{0} {1}".format(coords[0], coords[1])
+                    "data" : "{0} {1}".format(coords[0], coords[1])
                     }],
             # BoundingBox in the format "from_x to_x from_y to_y" (left right top bottom)
-            "boundingBox" : "{0} {1} {2} {3}".format(coords[0], coords[0] + image_size[1],
-                                                     coords[1], coords[1] + image_size[0])
+            "bbox" : [coords[0], coords[0] + image_size[1],
+                      coords[1], coords[1] + image_size[0]]
             }
         tilespecs.append(tilespec)
 
@@ -64,4 +63,5 @@ if __name__ == '__main__':
 
     for sub_folder in glob.glob(os.path.join(input_folder, 'Sec*')):
         if os.path.isdir(sub_folder):
-            write_tilespec(sub_folder)
+            output_path = os.path.join(input_folder, os.path.basename(sub_folder) + '.json')
+            write_tilespec(sub_folder, output_path)
