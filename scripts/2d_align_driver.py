@@ -10,13 +10,12 @@
 import sys
 import os
 import argparse
-from subprocess import call
-import urllib
-import urlparse
-import json
 
 from filter_tiles import filter_tiles
 from create_sift_features import create_sift_features
+from match_sift_features import match_sift_features
+from json_concat import json_concat
+from optimize_montage_transform import optimize_montage_transform
 
 # Command line parser
 parser = argparse.ArgumentParser(description='A driver that does a 2D alignment of images.')
@@ -56,4 +55,15 @@ sift_dir = os.path.join(args.workspace_dir, "sifts")
 create_sift_features(filter_dir, sift_dir, args.jar_file)
 
 # match the features of overlapping tiles
+match_dir = os.path.join(args.workspace_dir, "sift_matches")
+match_sift_features(filter_dir, sift_dir, match_dir, args.jar_file)
+
+# concatenate all corresponding points to a single file
+correspondent_fname = os.path.join(args.workspace_dir, "all_correspondent.json")
+json_concat(match_dir, correspondent_fname)
+
+# optimize the 2d layer montage
+optmon_fname = os.path.join(args.workspace_dir, "optimized_montage.json")
+optimize_montage_transform(correspondent_fname, optmon_fname, args.jar_file)
+
 
