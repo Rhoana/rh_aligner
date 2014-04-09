@@ -24,7 +24,6 @@ def path2url(path):
 
 
 def compute_all_tiles_sift_features(tile_files, jar, working_dir):
-	sift_files = []
 	for tile_file in tile_files:
 		tile_url = path2url(tile_file)
 		fname, ext = os.path.splitext(tile_file.split(os.path.sep)[-1])
