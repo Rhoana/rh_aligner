@@ -16,20 +16,7 @@
  */
 package org.janelia.alignment;
 
-import ij.IJ;
-import ij.ImagePlus;
-import ij.io.Opener;
-import ij.process.ByteProcessor;
-import ij.process.ColorProcessor;
-import ij.process.FloatProcessor;
-import ij.process.ImageProcessor;
-
-import java.awt.Graphics2D;
 import java.awt.geom.AffineTransform;
-import java.awt.image.BufferedImage;
-import java.awt.image.WritableRaster;
-import java.io.File;
-import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Writer;
@@ -40,41 +27,18 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Map.Entry;
-
-import javax.imageio.ImageIO;
 
 import mpicbg.models.AbstractAffineModel2D;
 import mpicbg.models.AbstractModel;
-import mpicbg.models.AffineModel2D;
-import mpicbg.models.CoordinateTransform;
-import mpicbg.models.CoordinateTransformList;
-import mpicbg.models.CoordinateTransformMesh;
-import mpicbg.models.ErrorStatistic;
-import mpicbg.models.HomographyModel2D;
 import mpicbg.models.IllDefinedDataPointsException;
-import mpicbg.models.InvertibleCoordinateTransform;
 import mpicbg.models.NotEnoughDataPointsException;
 import mpicbg.models.Point;
 import mpicbg.models.PointMatch;
-import mpicbg.models.RigidModel2D;
-import mpicbg.models.SimilarityModel2D;
-import mpicbg.models.SpringMesh;
 import mpicbg.models.Tile;
 import mpicbg.models.TileConfiguration;
-import mpicbg.models.TransformMesh;
 import mpicbg.models.Transforms;
-import mpicbg.models.TranslationModel2D;
-import mpicbg.models.Vertex;
 import mpicbg.models.InterpolatedAffineModel2D;
-import mpicbg.trakem2.transform.TransformMeshMappingWithMasks;
-import mpicbg.trakem2.transform.TransformMeshMappingWithMasks.ImageProcessorWithMasks;
-import mpicbg.imagefeatures.Feature;
-import mpicbg.imagefeatures.FloatArray2DSIFT;
-import mpicbg.ij.FeatureTransform;
-import mpicbg.ij.SIFT;
-import mpicbg.ij.blockmatching.BlockMatching;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;

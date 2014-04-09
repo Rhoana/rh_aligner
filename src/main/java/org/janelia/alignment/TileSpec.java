@@ -34,7 +34,7 @@ public class TileSpec
 	public int width = 0;
 	public int height = 0;
 	// bounding box after transformations are applied [left, right, top, bottom] possibly with extra entries for [front, back, etc.]
-	public int[] bbox = null;
+	public float[] bbox = null;
 	public Transform[] transforms = null;
 	
 	final public CoordinateTransformList< CoordinateTransform > createTransformList()

@@ -65,6 +65,30 @@ public class Utils
 	}
 	
 	/**
+	 * Writes min(a,b) into a
+	 * 
+	 * @param a
+	 * @param b
+	 */
+	final static public void min( final float[] a, final float[] b )
+	{
+		for ( int i = 0; i < a.length; ++i )
+			if ( b[ i ] < a[ i ] ) a[ i ] = b[ i ];
+	}
+
+	/**
+	 * Writes max(a,b) into a
+	 * 
+	 * @param a
+	 * @param b
+	 */
+	final static public void max( final float[] a, final float[] b )
+	{
+		for ( int i = 0; i < a.length; ++i )
+			if ( b[ i ] > a[ i ] ) a[ i ] = b[ i ];
+	}
+	
+	/**
 	 * Get a model from an integer specifier
 	 */
 	final static public AbstractModel< ? > createModel( final int modelIndex )
