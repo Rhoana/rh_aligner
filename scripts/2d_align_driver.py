@@ -64,6 +64,6 @@ json_concat(match_dir, correspondent_fname)
 
 # optimize the 2d layer montage
 optmon_fname = os.path.join(args.workspace_dir, "optimized_montage.json")
-optimize_montage_transform(correspondent_fname, optmon_fname, args.jar_file)
+optimize_montage_transform(correspondent_fname, args.tiles_fname, optmon_fname, args.jar_file)
 
 

@@ -17,6 +17,8 @@
 package org.janelia.alignment;
 
 import ij.ImagePlus;
+import ij.process.ImageProcessor;
+
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Writer;
@@ -25,9 +27,17 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
+
 import mpicbg.imagefeatures.Feature;
 import mpicbg.imagefeatures.FloatArray2DSIFT;
 import mpicbg.ij.SIFT;
+import mpicbg.models.CoordinateTransform;
+import mpicbg.models.CoordinateTransformList;
+import mpicbg.models.CoordinateTransformMesh;
+import mpicbg.models.TransformMesh;
+import mpicbg.trakem2.transform.TransformMeshMapping;
+import mpicbg.trakem2.transform.TransformMeshMappingWithMasks;
+import mpicbg.trakem2.transform.TransformMeshMappingWithMasks.ImageProcessorWithMasks;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
@@ -57,6 +67,7 @@ public class ComputeSiftFeatures
         @Parameter( names = "--all", description = "Compute for all tiles", required = false )
         private boolean all_tiles = false;
         
+        
         @Parameter( names = "--initialSigma", description = "Initial Gaussian blur sigma", required = false )
         private float initialSigma = 1.6f;
         
@@ -80,9 +91,24 @@ public class ComputeSiftFeatures
         
         @Parameter( names = "--threads", description = "Number of threads to be used", required = false )
         public int numThreads = Runtime.getRuntime().availableProcessors();
+        
+        @Parameter( names = "--res", description = " Mesh resolution, specified by the desired size of a triangle in pixels", required = false )
+        public int res = 64;
+
 	}
 	
 	private ComputeSiftFeatures() {}
+/*	
+	private static float[] translateBoundingBox( float[] originalBoundingBox, CoordinateTransformList< CoordinateTransform > ctlMipmap )
+	{
+		float[][] points = {
+				{ originalBoundingBox[0], originalBoundingBox[2] },
+				{ originalBoundingBox[0], originalBoundingBox[3] },
+				{ originalBoundingBox[0], originalBoundingBox[2] },
+		};
+	
+	}
+*/
 	
 	public static void main( final String[] args )
 	{
@@ -142,10 +168,10 @@ public class ComputeSiftFeatures
 
 		int start_index = params.all_tiles ? 0 : params.index;
                 int end_index = params.all_tiles ? tileSpecs.length : params.index + 1;
-                
+
                 for (int idx = start_index; idx < end_index; idx = idx + 1) {
                     TileSpec ts = tileSpecs[idx];
-		
+
                     /* load image TODO use Bioformats for strange formats */
                     String imageUrl = ts.getMipmapLevels().get("" + mipmapLevel).imageUrl;
                     final ImagePlus imp = Utils.openImagePlus( imageUrl.replaceFirst("file://", "").replaceFirst("file:/", "") );
@@ -164,10 +190,41 @@ public class ComputeSiftFeatures
                             siftParam.fdBins = params.fdBins;
                             FloatArray2DSIFT sift = new FloatArray2DSIFT(siftParam);
                             SIFT ijSIFT = new SIFT(sift);
-					
+
+				//			/* Apply transformations on the image, and only then get the sift features
+				//			 * (transformations may have an impact on the sift features)
+				//			 */
+				//			final ImageProcessor ipProc = imp.getProcessor();
+				//			final CoordinateTransformList< CoordinateTransform > ctl = ts.createTransformList();
+				//			/* attach mipmap transformation */
+				//			final CoordinateTransformList< CoordinateTransform > ctlMipmap = new CoordinateTransformList< CoordinateTransform >();
+				//			ctlMipmap.add( Utils.createScaleLevelTransform( mipmapLevel ) );
+				//			ctlMipmap.add( ctl );
+				//			/* find bounding box after transformations */
+				//			float[] originalBoundingBox = { 0, ipProc.getWidth(), 0, ipProc.getHeight() }; // left, right, top, bottom
+				//			float[] newBoundingBox = translateBoundingBox( originalBoundingBox, ctlMipmap );
+				//			/* create mesh */
+				//			final CoordinateTransformMesh mesh = new CoordinateTransformMesh( ctlMipmap,  ( int )( ipProc.getWidth() / params.res + 0.5 ), ipProc.getWidth(), ipProc.getHeight() );
+				//			final ImageProcessorWithMasks source = new ImageProcessorWithMasks( ipProc, null, null ); // no mask
+				//			final ImageProcessor tp = ipProc.createProcessor( targetImage.getWidth(), targetImage.getHeight() );
+				//			final ImageProcessorWithMasks target = new ImageProcessorWithMasks( tp, null, null ); // no mask
+				//			final TransformMeshMappingWithMasks< TransformMesh > mapping = new TransformMeshMappingWithMasks< TransformMesh >( mesh );
+				//			mapping.mapInterpolated( source, target );
+				//
+				//			
+				//			/* create mesh */
+
+
                             final List< Feature > fs = new ArrayList< Feature >();
                             ijSIFT.extractFeatures( imp.getProcessor(), fs );
-			
+
+				/* Apply the transformations on the location of every feature */
+				final CoordinateTransformList< CoordinateTransform > ctl = ts.createTransformList();
+				for (Feature feature : fs)
+				{
+					ctl.applyInPlace(feature.location);				
+				}
+
                             feature_data.add(new FeatureSpec("" + mipmapLevel, imageUrl, fs));
                         }
 		}
