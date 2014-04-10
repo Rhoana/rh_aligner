@@ -153,7 +153,13 @@ public class OptimizeSeriesElastic
 			e.printStackTrace( System.err );
 			return;
 		}
-		
+
+		// The mipmap level to work on
+		// TODO: Should be a parameter from the user,
+		//       and decide whether or not to create the mipmaps if they are missing
+		int mipmapLevel = 0;
+
+
 		/* Elastic alignment */
 
 		/* Initialization */
@@ -309,7 +315,7 @@ public class OptimizeSeriesElastic
 			final String tileUrl = entry.getKey();
 			final SpringMesh mesh = entry.getValue();
 			final TileSpec ts = new TileSpec();
-			ts.imageUrl = tileUrl;
+			ts.setMipmapLevelImageUrl("" + mipmapLevel, tileUrl);
 			ts.width = fullWidth;
 			ts.height = fullHeight;
 

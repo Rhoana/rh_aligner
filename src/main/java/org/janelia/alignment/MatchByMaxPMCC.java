@@ -181,6 +181,11 @@ public class MatchByMaxPMCC
 			e.printStackTrace( System.err );
 			return;
 		}
+		
+		// The mipmap level to work on
+		// TODO: Should be a parameter from the user,
+		//       and decide whether or not to create the mipmaps if they are missing
+		int mipmapLevel = 0;
 						
 		TileSpec ts1 = tileSpecs1[params.index1];
 		TileSpec ts2 = tileSpecs2[params.index2];
@@ -189,8 +194,10 @@ public class MatchByMaxPMCC
 		final ArrayList< PointMatch > pm21 = new ArrayList< PointMatch >();
 
 		/* load image TODO use Bioformats for strange formats */
-		final ImagePlus imp1 = Utils.openImagePlus( ts1.imageUrl.replaceFirst("file:///", "").replaceFirst("file://", "").replaceFirst("file:/", "") );
-		final ImagePlus imp2 = Utils.openImagePlus( ts2.imageUrl.replaceFirst("file:///", "").replaceFirst("file://", "").replaceFirst("file:/", "") );
+		final String imageUrl1 = ts1.getMipmapLevels().get("" + mipmapLevel).imageUrl;
+		final String imageUrl2 = ts2.getMipmapLevels().get("" + mipmapLevel).imageUrl;
+		final ImagePlus imp1 = Utils.openImagePlus( imageUrl1.replaceFirst("file:///", "").replaceFirst("file://", "").replaceFirst("file:/", "") );
+		final ImagePlus imp2 = Utils.openImagePlus( imageUrl2.replaceFirst("file:///", "").replaceFirst("file://", "").replaceFirst("file:/", "") );
 
 		final SpringMesh m1 = Utils.getMesh( imp1.getWidth(), imp1.getHeight(), params.layerScale, params.resolutionSpringMesh, params.stiffnessSpringMesh, params.dampSpringMesh, params.maxStretchSpringMesh );
 		final SpringMesh m2 = Utils.getMesh( imp2.getWidth(), imp2.getHeight(), params.layerScale, params.resolutionSpringMesh, params.stiffnessSpringMesh, params.dampSpringMesh, params.maxStretchSpringMesh );
@@ -242,13 +249,13 @@ public class MatchByMaxPMCC
 
 		if ( params.useLocalSmoothnessFilter )
 		{
-			System.out.println( ts1.imageUrl + " > " + ts2.imageUrl + ": found " + pm12.size() + " correspondence candidates." );
+			System.out.println( imageUrl1 + " > " + imageUrl2 + ": found " + pm12.size() + " correspondence candidates." );
 			localSmoothnessFilterModel.localSmoothnessFilter( pm12, pm12, params.localRegionSigma, params.maxLocalEpsilon, params.maxLocalTrust );
-			System.out.println( ts1.imageUrl + " > " + ts2.imageUrl + ": " + pm12.size() + " candidates passed local smoothness filter." );
+			System.out.println( imageUrl1 + " > " + imageUrl2 + ": " + pm12.size() + " candidates passed local smoothness filter." );
 		}
 		else
 		{
-			System.out.println( ts1.imageUrl + " > " + ts2.imageUrl + ": found " + pm12.size() + " correspondences." );
+			System.out.println( imageUrl1 + " > " + imageUrl2 + ": found " + pm12.size() + " correspondences." );
 		}
 
 
@@ -280,13 +287,13 @@ public class MatchByMaxPMCC
 
 		if ( params.useLocalSmoothnessFilter )
 		{
-			System.out.println( ts2.imageUrl + " > " + ts1.imageUrl + ": found " + pm21.size() + " correspondence candidates." );
+			System.out.println( imageUrl2 + " > " + imageUrl1 + ": found " + pm21.size() + " correspondence candidates." );
 			localSmoothnessFilterModel.localSmoothnessFilter( pm21, pm21, params.localRegionSigma, params.maxLocalEpsilon, params.maxLocalTrust );
-			System.out.println( ts2.imageUrl + " > " + ts1.imageUrl + ": " + pm21.size() + " candidates passed local smoothness filter." );
+			System.out.println( imageUrl2 + " > " + imageUrl1 + ": " + pm21.size() + " candidates passed local smoothness filter." );
 		}
 		else
 		{
-			System.out.println( ts2.imageUrl + " > " + ts1.imageUrl + ": found " + pm21.size() + " correspondences." );
+			System.out.println( imageUrl2 + " > " + imageUrl1 + ": found " + pm21.size() + " correspondences." );
 		}
 		
 		List< CorrespondenceSpec > corr_data = new ArrayList< CorrespondenceSpec >();
@@ -309,13 +316,15 @@ public class MatchByMaxPMCC
 
 		// TODO: Export / Import master sprint mesh vertices no calculated  individually per tile (v1, v2).
 		corr_data.add(new CorrespondenceSpec(
-				tileSpecs1[ params.index1 ].imageUrl,
-				tileSpecs2[ params.index2 ].imageUrl,
+				mipmapLevel,
+				imageUrl1,
+				imageUrl2,
 				pm12_strip));
 		
 		corr_data.add(new CorrespondenceSpec(
-				tileSpecs2[ params.index2 ].imageUrl,
-				tileSpecs1[ params.index1 ].imageUrl,
+				mipmapLevel,
+				imageUrl2,
+				imageUrl2,
 				pm21_strip));
 					
 		try {

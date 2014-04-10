@@ -126,16 +126,22 @@ public class ComputeSiftFeatures
 						
 		List< FeatureSpec > feature_data = new ArrayList< FeatureSpec >();
 		
+		// The mipmap level to work on
+		// TODO: Should be a parameter from the user,
+		//       and decide whether or not to create the mipmaps if they are missing
+		int mipmapLevel = 0;
+		
 		TileSpec ts = tileSpecs[params.index];
 		
 		/* load image TODO use Bioformats for strange formats */
-		final ImagePlus imp = Utils.openImagePlus( ts.imageUrl.replaceFirst("file://", "").replaceFirst("file:/", "") );
+		String imageUrl = ts.getMipmapLevels().get("" + mipmapLevel).imageUrl;
+		final ImagePlus imp = Utils.openImagePlus( imageUrl.replaceFirst("file://", "").replaceFirst("file:/", "") );
 		if ( imp == null )
-			System.err.println( "Failed to load image '" + ts.imageUrl + "'." );
+			System.err.println( "Failed to load image '" + imageUrl + "'." );
 		else
 		{
 			/* calculate sift features for the image or sub-region */
-			System.out.println( "Calculating SIFT features for image '" + ts.imageUrl + "'." );
+			System.out.println( "Calculating SIFT features for image '" + imageUrl + "'." );
 			FloatArray2DSIFT.Param siftParam = new FloatArray2DSIFT.Param();			
 			FloatArray2DSIFT sift = new FloatArray2DSIFT(siftParam);
 			SIFT ijSIFT = new SIFT(sift);
@@ -143,7 +149,7 @@ public class ComputeSiftFeatures
 			final List< Feature > fs = new ArrayList< Feature >();
 			ijSIFT.extractFeatures( imp.getProcessor(), fs );
 			
-			feature_data.add(new FeatureSpec(ts.imageUrl, fs));
+			feature_data.add(new FeatureSpec("" + mipmapLevel, imageUrl, fs));
 		}
 		
 		try {

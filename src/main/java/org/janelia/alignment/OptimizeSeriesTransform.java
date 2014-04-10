@@ -164,6 +164,12 @@ public class OptimizeSeriesTransform
 			return;
 		}
 
+		// The mipmap level to work on
+		// TODO: Should be a parameter from the user,
+		//       and decide whether or not to create the mipmaps if they are missing
+		int mipmapLevel = 0;
+		
+		
 		/* create tiles and models for all layers */
 		final HashMap< String, Tile< ? > > tileMap = new HashMap< String, Tile< ? > >();
 		
@@ -436,7 +442,7 @@ J:		for ( int i = 0; i < corr_data.length; )
 		    Tile< ? > tile_value = entry.getValue();
 		    
 		    TileSpec ts = new TileSpec();
-		    ts.imageUrl = tile_url;
+		    ts.setMipmapLevelImageUrl("" + mipmapLevel, tile_url);
 		    
 		    @SuppressWarnings("rawtypes")
 			Model genericModel = tile_value.getModel();
