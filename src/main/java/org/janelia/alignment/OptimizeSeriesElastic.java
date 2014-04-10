@@ -23,12 +23,12 @@ import java.io.FileWriter;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
 import mpicbg.trakem2.transform.AffineModel2D;
 import mpicbg.trakem2.transform.MovingLeastSquaresTransform;
-
 import mpicbg.models.NotEnoughDataPointsException;
 import mpicbg.models.PointMatch;
 import mpicbg.models.Spring;
@@ -36,6 +36,7 @@ import mpicbg.models.SpringMesh;
 import mpicbg.models.Tile;
 import mpicbg.models.TileConfiguration;
 import mpicbg.models.Vertex;
+
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import com.beust.jcommander.Parameters;
@@ -57,6 +58,9 @@ public class OptimizeSeriesElastic
         @Parameter( names = "--inputfile", description = "Correspondence list file (correspondences are in world space, after application of any existing transformations)", required = true )
         private String inputfile;
 
+        @Parameter( names = "--tilespecfile", description = "Tilespec file containing all tiles for this montage and current transforms", required = false )
+        private String tilespecfile = null;
+        
         @Parameter( names = "--modelIndex", description = "Model Index: 0=Translation, 1=Rigid, 2=Similarity, 3=Affine, 4=Homography", required = false )
         private int modelIndex = 3;
         
@@ -160,6 +164,45 @@ public class OptimizeSeriesElastic
 		int mipmapLevel = 0;
 
 
+		/* read all tilespecs */
+		final HashMap< String, TileSpec > tileSpecMap = new HashMap< String, TileSpec >();
+
+		if (params.tilespecfile != null)
+		{
+			final URL url;
+			final TileSpec[] tileSpecs;
+			
+			try
+			{
+				final Gson gson = new Gson();
+				url = new URL( params.tilespecfile );
+				tileSpecs = gson.fromJson( new InputStreamReader( url.openStream() ), TileSpec[].class );
+			}
+			catch ( final MalformedURLException e )
+			{
+				System.err.println( "URL malformed." );
+				e.printStackTrace( System.err );
+				return;
+			}
+			catch ( final JsonSyntaxException e )
+			{
+				System.err.println( "JSON syntax malformed." );
+				e.printStackTrace( System.err );
+				return;
+			}
+			catch ( final Exception e )
+			{
+				e.printStackTrace( System.err );
+				return;
+			}
+			
+			for (TileSpec ts : tileSpecs)
+			{
+				String imageUrl = ts.getMipmapLevels().get("" + mipmapLevel).imageUrl;
+				tileSpecMap.put(imageUrl, ts);
+			}
+		}
+		
 		/* Elastic alignment */
 
 		/* Initialization */
@@ -314,8 +357,15 @@ public class OptimizeSeriesElastic
 		{
 			final String tileUrl = entry.getKey();
 			final SpringMesh mesh = entry.getValue();
-			final TileSpec ts = new TileSpec();
-			ts.setMipmapLevelImageUrl("" + mipmapLevel, tileUrl);
+
+		    TileSpec ts = tileSpecMap.get(tileUrl);
+		    if (ts == null)
+		    {
+		    	System.out.println("Generating new tilespec for image " + tileUrl + ".");
+		    	ts = new TileSpec();
+		    	ts.setMipmapLevelImageUrl("" + mipmapLevel, tileUrl);
+		    }
+		    
 			ts.width = fullWidth;
 			ts.height = fullHeight;
 
@@ -336,7 +386,10 @@ public class OptimizeSeriesElastic
 			    Transform addedTransform = new Transform();				    
 			    addedTransform.className = mlt.getClass().getCanonicalName().toString();
 			    addedTransform.dataString = mlt.toDataString();
-				ts.transforms = new Transform[] {addedTransform};
+			    
+				ArrayList< Transform > outTransforms = new ArrayList< Transform >(Arrays.asList(ts.transforms));
+				outTransforms.add(addedTransform);
+				ts.transforms = outTransforms.toArray(ts.transforms);
 			}
 			catch ( final Exception e )
 			{

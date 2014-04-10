@@ -23,6 +23,7 @@ import java.io.FileWriter;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -175,7 +176,8 @@ public class OptimizeMontageTransform
 		
 		for (TileSpec ts : tileSpecs)
 		{
-			tileSpecMap.put(ts.imageUrl, ts);
+			String imageUrl = ts.getMipmapLevels().get("" + mipmapLevel).imageUrl;
+			tileSpecMap.put(imageUrl, ts);
 		}
 		
 		
@@ -288,14 +290,19 @@ public class OptimizeMontageTransform
 				
 		// Export new transforms, TODO: append to existing tilespec files
 		for(Entry<String, Tile< ? > > entry : tilesMap.entrySet()) {
-		    String tile_url = entry.getKey();
-		    Tile< ? > tile_value = entry.getValue();
+		    String tileUrl = entry.getKey();
+		    Tile< ? > tileValue = entry.getValue();
 		    
-		    TileSpec ts = new TileSpec();
-		    ts.setMipmapLevelImageUrl("" + mipmapLevel, tile_url);
+		    TileSpec ts = tileSpecMap.get(tileUrl);
+		    if (ts == null)
+		    {
+		    	System.out.println("Warning: Could not find input tilespec for image " + tileUrl + ". Generating new tilespec.");
+		    	ts = new TileSpec();
+		    	ts.setMipmapLevelImageUrl("" + mipmapLevel, tileUrl);
+		    }
 		    
 		    @SuppressWarnings("rawtypes")
-			Model genericModel = tile_value.getModel();
+			Model genericModel = tileValue.getModel();
 		    
 		    Transform addedTransform = new Transform();
 		    addedTransform.className = genericModel.getClass().getCanonicalName();
@@ -321,7 +328,10 @@ public class OptimizeMontageTransform
 				addedTransform.dataString = genericModel.toString();
 			}		    
 		    
-		    ts.transforms = new Transform[]{addedTransform};
+			//Apply to the corresponding tilespec transforms
+			ArrayList< Transform > outTransforms = new ArrayList< Transform >(Arrays.asList(ts.transforms));
+			outTransforms.add(addedTransform);
+			ts.transforms = outTransforms.toArray(ts.transforms);
 		    
 		    out_tiles.add(ts);
 		}

@@ -30,10 +30,8 @@ import java.util.Set;
 
 import mpicbg.trakem2.transform.AffineModel2D;
 import mpicbg.trakem2.transform.MovingLeastSquaresTransform2;
-
 import mpicbg.models.CoordinateTransform;
 import mpicbg.models.CoordinateTransformList;
-
 import mpicbg.models.NotEnoughDataPointsException;
 import mpicbg.models.PointMatch;
 import mpicbg.models.Spring;
@@ -158,6 +156,11 @@ public class OptimizeMontageElastic
 			return;
 		}
 		
+		// The mipmap level to work on
+		// TODO: Should be a parameter from the user,
+		//       and decide whether or not to create the mipmaps if they are missing
+		int mipmapLevel = 0;
+		
 		/* Initialization */
 		/* read all tilespecs */
 		final HashMap< String, TileSpec > tileSpecMap = new HashMap< String, TileSpec >();
@@ -189,7 +192,8 @@ public class OptimizeMontageElastic
 		
 		for (TileSpec ts : tileSpecs)
 		{
-			tileSpecMap.put(ts.imageUrl, ts);
+			String imageUrl = ts.getMipmapLevels().get("" + mipmapLevel).imageUrl;
+			tileSpecMap.put(imageUrl, ts);
 		}
 		
 		/* create tiles and models for all patches */
@@ -321,10 +325,11 @@ public class OptimizeMontageElastic
 					mlt.setMatches( matches );
 					
 					//Apply to the corresponding tilespec transforms
-					ArrayList< Transform > outTransforms = new ArrayList< Transform >(Arrays.asList(ts.transforms));
 				    Transform addedTransform = new Transform();
 				    addedTransform.className = mlt.getClass().getCanonicalName();
 				    addedTransform.dataString = mlt.toDataString();
+				    
+					ArrayList< Transform > outTransforms = new ArrayList< Transform >(Arrays.asList(ts.transforms));
 					outTransforms.add(addedTransform);
 					ts.transforms = outTransforms.toArray(ts.transforms);
 					out_tiles.add(ts);
