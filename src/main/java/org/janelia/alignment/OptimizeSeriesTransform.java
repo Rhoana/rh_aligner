@@ -16,7 +16,6 @@
  */
 package org.janelia.alignment;
 
-import java.awt.geom.AffineTransform;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Writer;
@@ -29,16 +28,20 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map.Entry;
 
-import mpicbg.models.AbstractAffineModel2D;
 import mpicbg.models.AbstractModel;
 import mpicbg.models.IllDefinedDataPointsException;
+import mpicbg.models.Model;
 import mpicbg.models.NotEnoughDataPointsException;
 import mpicbg.models.Point;
 import mpicbg.models.PointMatch;
 import mpicbg.models.Tile;
 import mpicbg.models.TileConfiguration;
 import mpicbg.models.Transforms;
-import mpicbg.models.InterpolatedAffineModel2D;
+import mpicbg.trakem2.transform.AffineModel2D;
+import mpicbg.trakem2.transform.HomographyModel2D;
+import mpicbg.trakem2.transform.RigidModel2D;
+import mpicbg.trakem2.transform.SimilarityModel2D;
+import mpicbg.trakem2.transform.TranslationModel2D;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
@@ -163,24 +166,22 @@ public class OptimizeSeriesTransform
 
 		/* create tiles and models for all layers */
 		final HashMap< String, Tile< ? > > tileMap = new HashMap< String, Tile< ? > >();
-		final AbstractAffineModel2D< ? > m = ( AbstractAffineModel2D< ? > )Utils.createModel( params.modelIndex );
-		final AbstractAffineModel2D< ? > r = ( AbstractAffineModel2D< ? > )Utils.createModel( params.regularizerIndex );
 		
 		for ( int i = 0; i < corr_data.length; ++i )
 		{
 			if (!tileMap.containsKey(corr_data[i].url1))
 			{
 				if ( params.regularize )
-					tileMap.put(corr_data[i].url1, new Tile( new InterpolatedAffineModel2D( m.copy(), r.copy(), params.lambda ) ) );
+					tileMap.put(corr_data[i].url1, Utils.createInterpolatedAffineTile( params.modelIndex, params.regularizerIndex, params.lambda ) );
 				else
-					tileMap.put(corr_data[i].url1, new Tile( m.copy() ) );
+					tileMap.put(corr_data[i].url1, Utils.createTile( params.modelIndex ) );
 			}
 			if (!tileMap.containsKey(corr_data[i].url2))
 			{
 				if ( params.regularize )
-					tileMap.put(corr_data[i].url2, new Tile( new InterpolatedAffineModel2D( m.copy(), r.copy(), params.lambda ) ) );
+					tileMap.put(corr_data[i].url2, Utils.createInterpolatedAffineTile( params.modelIndex, params.regularizerIndex, params.lambda ) );
 				else
-					tileMap.put(corr_data[i].url2, new Tile( m.copy() ) );
+					tileMap.put(corr_data[i].url2, Utils.createTile( params.modelIndex ) );
 			}
 		}
 		
@@ -435,11 +436,27 @@ J:		for ( int i = 0; i < corr_data.length; )
 		    TileSpec ts = new TileSpec();
 		    ts.imageUrl = tile_url;
 		    
-		    AffineTransform at = ((AbstractAffineModel2D< ? >) tile_value.getModel()).createAffine();
-		    Transform addedTransform = new Transform();
+		    @SuppressWarnings("rawtypes")
+			Model genericModel = tile_value.getModel();
 		    
-		    addedTransform.className = at.getClass().toString();
-		    addedTransform.dataString = at.toString();
+		    Transform addedTransform = new Transform();
+		    addedTransform.className = genericModel.getClass().getCanonicalName();
+		    
+			switch ( params.modelIndex )
+			{
+			case 0:
+				addedTransform.dataString = ((TranslationModel2D) genericModel).toDataString();
+			case 1:
+				addedTransform.dataString = ((RigidModel2D) genericModel).toDataString();
+			case 2:
+				addedTransform.dataString = ((SimilarityModel2D) genericModel).toDataString();
+			case 3:
+				addedTransform.dataString = ((AffineModel2D) genericModel).toDataString();
+			case 4:
+				addedTransform.dataString = ((HomographyModel2D) genericModel).toDataString();
+			default:
+				addedTransform.dataString = genericModel.toString();
+			}		    
 		    
 		    ts.transforms = new Transform[]{addedTransform};
 		    

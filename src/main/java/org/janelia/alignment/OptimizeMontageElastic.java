@@ -28,10 +28,12 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
-import mpicbg.models.AffineModel2D;
+import mpicbg.trakem2.transform.AffineModel2D;
+import mpicbg.trakem2.transform.MovingLeastSquaresTransform2;
+
 import mpicbg.models.CoordinateTransform;
 import mpicbg.models.CoordinateTransformList;
-import mpicbg.models.MovingLeastSquaresTransform2;
+
 import mpicbg.models.NotEnoughDataPointsException;
 import mpicbg.models.PointMatch;
 import mpicbg.models.Spring;
@@ -217,7 +219,7 @@ public class OptimizeMontageElastic
 			if (!tileMeshMap.containsKey( corr.url1 ))
 			{
 				final TileSpec ts = tileSpecMap.get(corr.url1);
-				final CoordinateTransformList< CoordinateTransform > ctl = ts.createTransformList();
+				final CoordinateTransformList< CoordinateTransform > ctl = (CoordinateTransformList< CoordinateTransform >) ts.createTransformList();
 				final SpringMesh mesh = Utils.getMesh( ts.width, ts.height, params.layerScale, params.resolutionSpringMesh, params.stiffnessSpringMesh, params.dampSpringMesh, params.maxStretchSpringMesh );
 
 				// Apply the tilespec transform to the mesh
@@ -322,9 +324,9 @@ public class OptimizeMontageElastic
 					
 					//Apply to the corresponding tilespec transforms
 					ArrayList< Transform > outTransforms = new ArrayList< Transform >(Arrays.asList(ts.transforms));
-				    Transform addedTransform = new Transform();				    
-				    addedTransform.className = mlt.getClass().toString();
-				    addedTransform.dataString = mlt.toString();
+				    Transform addedTransform = new Transform();
+				    addedTransform.className = mlt.getClass().getCanonicalName();
+				    addedTransform.dataString = mlt.toDataString();
 					outTransforms.add(addedTransform);
 					ts.transforms = outTransforms.toArray(ts.transforms);
 					out_tiles.add(ts);

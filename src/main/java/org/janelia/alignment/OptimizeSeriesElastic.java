@@ -25,8 +25,10 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
-import mpicbg.models.AffineModel2D;
-import mpicbg.models.MovingLeastSquaresTransform;
+
+import mpicbg.trakem2.transform.AffineModel2D;
+import mpicbg.trakem2.transform.MovingLeastSquaresTransform;
+
 import mpicbg.models.NotEnoughDataPointsException;
 import mpicbg.models.PointMatch;
 import mpicbg.models.Spring;
@@ -326,8 +328,8 @@ public class OptimizeSeriesElastic
 				mlt.setMatches( mesh.getVA().keySet() );
 	
 			    Transform addedTransform = new Transform();				    
-			    addedTransform.className = mlt.getClass().toString();
-			    addedTransform.dataString = mlt.toString();
+			    addedTransform.className = mlt.getClass().getCanonicalName().toString();
+			    addedTransform.dataString = mlt.toDataString();
 				ts.transforms = new Transform[] {addedTransform};
 			}
 			catch ( final Exception e )
