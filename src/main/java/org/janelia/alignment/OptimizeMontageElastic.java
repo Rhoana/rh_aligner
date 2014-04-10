@@ -16,7 +16,6 @@
  */
 package org.janelia.alignment;
 
-import java.awt.geom.AffineTransform;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Writer;
@@ -27,19 +26,16 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Set;
 
-import mpicbg.models.AbstractAffineModel2D;
-import mpicbg.models.AffineModel2D;
+import mpicbg.trakem2.transform.AffineModel2D;
+import mpicbg.trakem2.transform.MovingLeastSquaresTransform2;
 import mpicbg.models.CoordinateTransform;
 import mpicbg.models.CoordinateTransformList;
-import mpicbg.models.MovingLeastSquaresTransform2;
 import mpicbg.models.NotEnoughDataPointsException;
 import mpicbg.models.PointMatch;
 import mpicbg.models.Spring;
 import mpicbg.models.SpringMesh;
-import mpicbg.models.Tile;
 import mpicbg.models.Vertex;
 
 import com.beust.jcommander.JCommander;
@@ -60,7 +56,7 @@ public class OptimizeMontageElastic
 		@Parameter( names = "--help", description = "Display this note", help = true )
         private final boolean help = false;
 
-        @Parameter( names = "--inputfile", description = "Correspondence list file", required = true )
+        @Parameter( names = "--inputfile", description = "Correspondence list file (correspondences are in world space, after application of any existing transformations)", required = true )
         private String inputfile;
         
         @Parameter( names = "--tilespecfile", description = "Tilespec file containing all tiles for this montage and current transforms", required = true )
@@ -69,14 +65,14 @@ public class OptimizeMontageElastic
         @Parameter( names = "--modelIndex", description = "Model Index: 0=Translation, 1=Rigid, 2=Similarity, 3=Affine, 4=Homography", required = false )
         private int modelIndex = 3;
         
-        @Parameter( names = "--layerScale", description = "Layer scale", required = false )
-        private float layerScale = 0.2f;
-        
         @Parameter( names = "--tileWidth", description = "Tile width (specify if same for all tiles, otherwise tilespec data will be used)", required = false )
         private double tileWidth = 0;
         
         @Parameter( names = "--tileHeight", description = "Tile height (specify if same for all tiles, otherwise tilespec data will be used)", required = false )
         private double tileHeight = 0;
+        
+        @Parameter( names = "--layerScale", description = "Layer scale", required = false )
+        private float layerScale = 0.2f;
         
         @Parameter( names = "--resolutionSpringMesh", description = "resolutionSpringMesh", required = false )
         private int resolutionSpringMesh = 32;
@@ -160,11 +156,14 @@ public class OptimizeMontageElastic
 			return;
 		}
 		
+		// The mipmap level to work on
+		// TODO: Should be a parameter from the user,
+		//       and decide whether or not to create the mipmaps if they are missing
+		int mipmapLevel = 0;
+		
 		/* Initialization */
 		/* read all tilespecs */
 		final HashMap< String, TileSpec > tileSpecMap = new HashMap< String, TileSpec >();
-		
-		/* open tilespec */
 		final URL url;
 		final TileSpec[] tileSpecs;
 		try
@@ -193,12 +192,15 @@ public class OptimizeMontageElastic
 		
 		for (TileSpec ts : tileSpecs)
 		{
-			tileSpecMap.put(ts.imageUrl, ts);
+			String imageUrl = ts.getMipmapLevels().get("" + mipmapLevel).imageUrl;
+			tileSpecMap.put(imageUrl, ts);
 		}
 		
 		/* create tiles and models for all patches */
-		final HashMap< String, Tile< ? > > tilesMap = new HashMap< String, Tile< ? > >();
-		final ArrayList< Tile< ? > > fixedTiles = new ArrayList< Tile< ? > > ();
+		//final HashMap< String, Tile< ? > > tilesMap = new HashMap< String, Tile< ? > >();
+		//final ArrayList< Tile< ? > > fixedTiles = new ArrayList< Tile< ? > > ();
+		
+		final HashMap< String, TileSpec > fixedTilesMap = new HashMap< String, TileSpec > ();
 		
 //		/* make pairwise global models local */
 //		final ArrayList< Triple< Tile< ? >, Tile< ? >, InvertibleCoordinateTransform > > pairs =
@@ -219,7 +221,7 @@ public class OptimizeMontageElastic
 			if (!tileMeshMap.containsKey( corr.url1 ))
 			{
 				final TileSpec ts = tileSpecMap.get(corr.url1);
-				final CoordinateTransformList< CoordinateTransform > ctl = ts.createTransformList();
+				final CoordinateTransformList< CoordinateTransform > ctl = (CoordinateTransformList< CoordinateTransform >) ts.createTransformList();
 				final SpringMesh mesh = Utils.getMesh( ts.width, ts.height, params.layerScale, params.resolutionSpringMesh, params.stiffnessSpringMesh, params.dampSpringMesh, params.maxStretchSpringMesh );
 
 				// Apply the tilespec transform to the mesh
@@ -245,15 +247,14 @@ public class OptimizeMontageElastic
 			// Link meshes
 			for (PointMatch pm : corr.correspondencePointPairs)
 			{
-				PointMatch closestPointA = meshA.findClosestTargetPoint(pm.getP1().getW());
-				float dx = closestPointA.getP1().getW()[0] - pm.getP1().getW()[0]; 
-				float dy = closestPointA.getP1().getW()[1] - pm.getP1().getW()[1];
-				
-				final Vertex p1 = ( Vertex )closestPointA.getP1();
+				Vertex closestVertexA = meshA.findClosestTargetVertex(pm.getP1().getW());
+				float dx = closestVertexA.getW()[0] - pm.getP1().getW()[0]; 
+				float dy = closestVertexA.getW()[1] - pm.getP1().getW()[1];
+
 				float p2x = pm.getP2().getW()[0] + dx;
 				float p2y = pm.getP2().getW()[1] + dy;
 				final Vertex p2 = new Vertex( new float[]{p2x, p2y} );
-				p1.addSpring( p2, new Spring( 0, 1.0f ) );
+				closestVertexA.addSpring( p2, new Spring( 0, 1.0f ) );
 				meshB.addPassiveVertex( p2 );
 				
 			}
@@ -287,15 +288,23 @@ public class OptimizeMontageElastic
 			return;
 		}
 
+		System.out.println( "Optimization complete. Generating tile transforms.");
+		
+		ArrayList< TileSpec > out_tiles = new ArrayList< TileSpec >();
+		
 		/* apply */
-		for ( final Map.Entry< String, Tile< ? > > entry : tilesMap.entrySet() ) 
+		for ( final Map.Entry< String, SpringMesh > entry : tileMeshMap.entrySet() ) 
 		{
-			final Tile< ? > tile = entry.getValue();
-			if ( !fixedTiles.contains( tile ) )
+			final String tileUrl = entry.getKey();
+			final SpringMesh mesh = entry.getValue();
+			final TileSpec ts = tileSpecMap.get(tileUrl);
+			if ( !fixedTilesMap.containsKey( tileUrl ) )
 			{
-				final String tileUrl = entry.getKey();
-				final TileSpec ts = tileSpecMap.get( tileUrl );
-				final SpringMesh mesh = tileMeshMap.get( tileUrl );
+				if (mesh.getVA() == null)
+				{
+					System.out.println( "Error generating transform for tile " + tileUrl + "." );
+					continue;
+				}
 				final Set< PointMatch > matches = mesh.getVA().keySet();
 
 //				/* compensate for existing coordinate transform bounding box */
@@ -316,16 +325,18 @@ public class OptimizeMontageElastic
 					mlt.setMatches( matches );
 					
 					//Apply to the corresponding tilespec transforms
+				    Transform addedTransform = new Transform();
+				    addedTransform.className = mlt.getClass().getCanonicalName();
+				    addedTransform.dataString = mlt.toDataString();
+				    
 					ArrayList< Transform > outTransforms = new ArrayList< Transform >(Arrays.asList(ts.transforms));
-				    Transform addedTransform = new Transform();				    
-				    addedTransform.className = mlt.getClass().toString();
-				    addedTransform.dataString = mlt.toString();
 					outTransforms.add(addedTransform);
 					ts.transforms = outTransforms.toArray(ts.transforms);
+					out_tiles.add(ts);
 				}
 				catch ( final Exception e )
 				{
-					System.out.println( "Error applying transform." );
+					System.out.println( "Error applying transform to tile " + tileUrl + "." );
 					e.printStackTrace();
 				}
 				
@@ -340,28 +351,7 @@ public class OptimizeMontageElastic
 			}
 		}
 
-		System.out.println( "Done." );
-		
-		ArrayList< TileSpec > out_tiles = new ArrayList< TileSpec >();
-				
-		// Export new transforms, TODO: append to existing tilespec files
-		for(Entry<String, Tile< ? > > entry : tilesMap.entrySet()) {
-		    String tile_url = entry.getKey();
-		    Tile< ? > tile_value = entry.getValue();
-		    
-		    TileSpec ts = new TileSpec();
-		    ts.imageUrl = tile_url;
-		    
-		    AffineTransform at = ((AbstractAffineModel2D< ? >) tile_value.getModel()).createAffine();
-		    Transform addedTransform = new Transform();
-		    
-		    addedTransform.className = at.getClass().toString();
-		    addedTransform.dataString = at.toString();
-		    
-		    ts.transforms = new Transform[]{addedTransform};
-		    
-		    out_tiles.add(ts);
-		}
+		System.out.println( "Exporting " + out_tiles.size() + " tiles.");
 		
 		try {
 			Writer writer = new FileWriter(params.targetPath);
@@ -375,6 +365,8 @@ public class OptimizeMontageElastic
 			System.err.println( "Error writing JSON file: " + params.targetPath );
 			e.printStackTrace( System.err );
 		}
+		
+		System.out.println( "Done." );
 	}
 	
 }

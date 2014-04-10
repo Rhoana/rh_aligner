@@ -16,27 +16,13 @@
  */
 package org.janelia.alignment;
 
-import java.util.List;
-
-import mpicbg.models.PointMatch;
-
 /**
  * 
  *
- * @author Seymour Knowles-Barley
+ * @author Stephan Saalfeld <saalfeld@mpi-cbg.de>
  */
-public class CorrespondenceSpec
+public class ImageAndMask
 {
-	public String mipmapLevel;
-	public String url1;
-	public String url2;
-	public List< PointMatch > correspondencePointPairs ;
-	
-	public CorrespondenceSpec(int mipmapLevel, String url1, String url2, List< PointMatch > corr_data)
-	{
-		this.mipmapLevel = "" + mipmapLevel;
-		this.url1 = url1;
-		this.url2 = url2;
-		correspondencePointPairs = corr_data;
-	}
+	public String imageUrl = null;
+	public String maskUrl = null;
 }

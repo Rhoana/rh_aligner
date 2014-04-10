@@ -16,7 +16,6 @@
  */
 package org.janelia.alignment;
 
-import java.awt.geom.AffineTransform;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Writer;
@@ -24,16 +23,22 @@ import java.io.FileWriter;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
-import mpicbg.models.AbstractAffineModel2D;
+import mpicbg.models.Model;
 import mpicbg.models.PointMatch;
 import mpicbg.models.Tile;
 import mpicbg.models.TileConfiguration;
+import mpicbg.trakem2.transform.AffineModel2D;
+import mpicbg.trakem2.transform.HomographyModel2D;
+import mpicbg.trakem2.transform.RigidModel2D;
+import mpicbg.trakem2.transform.SimilarityModel2D;
+import mpicbg.trakem2.transform.TranslationModel2D;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
@@ -56,6 +61,9 @@ public class OptimizeMontageTransform
         @Parameter( names = "--inputfile", description = "Correspondence list file", required = true )
         private String inputfile;
                         
+        @Parameter( names = "--tilespecfile", description = "Tilespec file containing all tiles for this montage and current transforms", required = true )
+        private String tilespecfile;
+        
         @Parameter( names = "--modelIndex", description = "Model Index: 0=Translation, 1=Rigid, 2=Similarity, 3=Affine, 4=Homography", required = false )
         private int modelIndex = 1;
                         
@@ -89,6 +97,7 @@ public class OptimizeMontageTransform
 		
 		final Params params = new Params();
 		
+		/* Initialization */
 		try
         {
 			final JCommander jc = new JCommander( params, args );
@@ -107,6 +116,11 @@ public class OptimizeMontageTransform
         	return;
         }
 		
+		// The mipmap level to work on
+		// TODO: Should be a parameter from the user,
+		//       and decide whether or not to create the mipmaps if they are missing
+		int mipmapLevel = 0;
+
 		final CorrespondenceSpec[] corr_data;
 		try
 		{
@@ -132,8 +146,44 @@ public class OptimizeMontageTransform
 			return;
 		}
 		
+		/* read all tilespecs */
+		final HashMap< String, TileSpec > tileSpecMap = new HashMap< String, TileSpec >();
+		final URL url;
+		final TileSpec[] tileSpecs;
+		try
+		{
+			final Gson gson = new Gson();
+			url = new URL( params.tilespecfile );
+			tileSpecs = gson.fromJson( new InputStreamReader( url.openStream() ), TileSpec[].class );
+		}
+		catch ( final MalformedURLException e )
+		{
+			System.err.println( "URL malformed." );
+			e.printStackTrace( System.err );
+			return;
+		}
+		catch ( final JsonSyntaxException e )
+		{
+			System.err.println( "JSON syntax malformed." );
+			e.printStackTrace( System.err );
+			return;
+		}
+		catch ( final Exception e )
+		{
+			e.printStackTrace( System.err );
+			return;
+		}
+		
+		for (TileSpec ts : tileSpecs)
+		{
+			String imageUrl = ts.getMipmapLevels().get("" + mipmapLevel).imageUrl;
+			tileSpecMap.put(imageUrl, ts);
+		}
+		
+		
 //		final boolean tilesAreInPlace = true;
 		
+		// A map between a imageUrl and the Tile
 		final Map< String, Tile< ? > > tilesMap = new HashMap< String, Tile< ? > >();
 //		final List< Tile< ? > > tiles = new ArrayList< Tile< ? > >();
 		final List< Tile< ? > > fixedTiles = new ArrayList< Tile< ? > >();
@@ -144,39 +194,43 @@ public class OptimizeMontageTransform
 			final Tile< ? > tile1;
 			final Tile< ? > tile2;
 			
-			if (tilesMap.containsKey(corr.url1))
+			if ( Integer.parseInt( corr.mipmapLevel ) == mipmapLevel )
 			{
-				tile1 = tilesMap.get(corr.url1);
-			}
-			else
-			{
-				tile1 = Utils.createTile( params.modelIndex );
-				tilesMap.put(corr.url1, tile1);
-				//tiles.add(tile1);
-			}
 			
-			if (tilesMap.containsKey(corr.url2))
-			{
-				tile2 = tilesMap.get(corr.url2);
-			}
-			else
-			{
-				tile2 = Utils.createTile( params.modelIndex );
-				tilesMap.put(corr.url2, tile2);
-				//tiles.add(tile2);
-			}
-			tile1.addConnectedTile(tile2);
-			tile2.addConnectedTile(tile1);
-
-			// Forward Point Matches
-			tile1.addMatches( corr.correspondencePointPairs );
-			
-			// Backward Point Matches
-			for ( PointMatch pm : corr.correspondencePointPairs )
-			{
-				tile2.addMatch(new PointMatch(pm.getP2(), pm.getP1()));
-				System.out.println("p1 " + pm.getP1().getW()[0] + ", " + pm.getP1().getW()[1]);
-				System.out.println("p2 " + pm.getP2().getW()[0] + ", " + pm.getP2().getW()[1]);
+				if (tilesMap.containsKey(corr.url1))
+				{
+					tile1 = tilesMap.get(corr.url1);
+				}
+				else
+				{
+					tile1 = Utils.createTile( params.modelIndex );
+					tilesMap.put(corr.url1, tile1);
+					//tiles.add(tile1);
+				}
+				
+				if (tilesMap.containsKey(corr.url2))
+				{
+					tile2 = tilesMap.get(corr.url2);
+				}
+				else
+				{
+					tile2 = Utils.createTile( params.modelIndex );
+					tilesMap.put(corr.url2, tile2);
+					//tiles.add(tile2);
+				}
+				tile1.addConnectedTile(tile2);
+				tile2.addConnectedTile(tile1);
+	
+				// Forward Point Matches
+				tile1.addMatches( corr.correspondencePointPairs );
+				
+				// Backward Point Matches
+				for ( PointMatch pm : corr.correspondencePointPairs )
+				{
+					tile2.addMatch(new PointMatch(pm.getP2(), pm.getP1()));
+					System.out.println("p1 " + pm.getP1().getW()[0] + ", " + pm.getP1().getW()[1]);
+					System.out.println("p2 " + pm.getP2().getW()[0] + ", " + pm.getP2().getW()[1]);
+				}
 			}
 		}
 		
@@ -230,26 +284,59 @@ public class OptimizeMontageTransform
 			e.printStackTrace( System.err );
 		}
 		
+		System.out.println( "Optimization complete. Generating tile transforms.");
+		
 		ArrayList< TileSpec > out_tiles = new ArrayList< TileSpec >();
 				
 		// Export new transforms, TODO: append to existing tilespec files
 		for(Entry<String, Tile< ? > > entry : tilesMap.entrySet()) {
-		    String tile_url = entry.getKey();
-		    Tile< ? > tile_value = entry.getValue();
+		    String tileUrl = entry.getKey();
+		    Tile< ? > tileValue = entry.getValue();
 		    
-		    TileSpec ts = new TileSpec();
-		    ts.imageUrl = tile_url;
+		    TileSpec ts = tileSpecMap.get(tileUrl);
+		    if (ts == null)
+		    {
+		    	System.out.println("Warning: Could not find input tilespec for image " + tileUrl + ". Generating new tilespec.");
+		    	ts = new TileSpec();
+		    	ts.setMipmapLevelImageUrl("" + mipmapLevel, tileUrl);
+		    }
 		    
-		    AffineTransform at = ((AbstractAffineModel2D< ? >) tile_value.getModel()).createAffine();
+		    @SuppressWarnings("rawtypes")
+			Model genericModel = tileValue.getModel();
+		    
 		    Transform addedTransform = new Transform();
+		    addedTransform.className = genericModel.getClass().getCanonicalName();
 		    
-		    addedTransform.className = at.getClass().toString();
-		    addedTransform.dataString = at.toString();
+			switch ( params.modelIndex )
+			{
+			case 0:
+				addedTransform.dataString = ((TranslationModel2D) genericModel).toDataString();
+				break;
+			case 1:
+				addedTransform.dataString = ((RigidModel2D) genericModel).toDataString();
+				break;
+			case 2:
+				addedTransform.dataString = ((SimilarityModel2D) genericModel).toDataString();
+				break;
+			case 3:
+				addedTransform.dataString = ((AffineModel2D) genericModel).toDataString();
+				break;
+			case 4:
+				addedTransform.dataString = ((HomographyModel2D) genericModel).toDataString();
+				break;
+			default:
+				addedTransform.dataString = genericModel.toString();
+			}		    
 		    
-		    ts.transforms = new Transform[]{addedTransform};
+			//Apply to the corresponding tilespec transforms
+			ArrayList< Transform > outTransforms = new ArrayList< Transform >(Arrays.asList(ts.transforms));
+			outTransforms.add(addedTransform);
+			ts.transforms = outTransforms.toArray(ts.transforms);
 		    
 		    out_tiles.add(ts);
 		}
+		
+		System.out.println( "Exporting tiles.");
 		
 		try {
 			Writer writer = new FileWriter(params.targetPath);
@@ -263,6 +350,9 @@ public class OptimizeMontageTransform
 			System.err.println( "Error writing JSON file: " + params.targetPath );
 			e.printStackTrace( System.err );
 		}
+		
+		System.out.println( "Done." );
 	}
 	
+
 }
