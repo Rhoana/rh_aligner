@@ -191,9 +191,14 @@ public class OptimizeMontageElastic
 			return;
 		}
 		
+		// The mipmap level to work on
+		// TODO: Should be a parameter from the user,
+		//       and decide whether or not to create the mipmaps if they are missing
+		int mipmapLevel = 0;
+		
 		for (TileSpec ts : tileSpecs)
 		{
-			tileSpecMap.put(ts.imageUrl, ts);
+			tileSpecMap.put(ts.getMipmapLevels().get("" + mipmapLevel).imageUrl, ts);
 		}
 		
 		/* create tiles and models for all patches */
@@ -350,7 +355,7 @@ public class OptimizeMontageElastic
 		    Tile< ? > tile_value = entry.getValue();
 		    
 		    TileSpec ts = new TileSpec();
-		    ts.imageUrl = tile_url;
+		    ts.setMipmapLevelImageUrl("" + mipmapLevel, tile_url);
 		    
 		    AffineTransform at = ((AbstractAffineModel2D< ? >) tile_value.getModel()).createAffine();
 		    Transform addedTransform = new Transform();

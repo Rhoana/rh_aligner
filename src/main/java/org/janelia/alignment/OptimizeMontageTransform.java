@@ -107,6 +107,11 @@ public class OptimizeMontageTransform
         	return;
         }
 		
+		// The mipmap level to work on
+		// TODO: Should be a parameter from the user,
+		//       and decide whether or not to create the mipmaps if they are missing
+		int mipmapLevel = 0;
+
 		final CorrespondenceSpec[] corr_data;
 		try
 		{
@@ -134,6 +139,7 @@ public class OptimizeMontageTransform
 		
 //		final boolean tilesAreInPlace = true;
 		
+		// A map between a imageUrl and the Tile
 		final Map< String, Tile< ? > > tilesMap = new HashMap< String, Tile< ? > >();
 //		final List< Tile< ? > > tiles = new ArrayList< Tile< ? > >();
 		final List< Tile< ? > > fixedTiles = new ArrayList< Tile< ? > >();
@@ -144,39 +150,43 @@ public class OptimizeMontageTransform
 			final Tile< ? > tile1;
 			final Tile< ? > tile2;
 			
-			if (tilesMap.containsKey(corr.url1))
+			if ( Integer.parseInt( corr.mipmapLevel ) == mipmapLevel )
 			{
-				tile1 = tilesMap.get(corr.url1);
-			}
-			else
-			{
-				tile1 = Utils.createTile( params.modelIndex );
-				tilesMap.put(corr.url1, tile1);
-				//tiles.add(tile1);
-			}
 			
-			if (tilesMap.containsKey(corr.url2))
-			{
-				tile2 = tilesMap.get(corr.url2);
-			}
-			else
-			{
-				tile2 = Utils.createTile( params.modelIndex );
-				tilesMap.put(corr.url2, tile2);
-				//tiles.add(tile2);
-			}
-			tile1.addConnectedTile(tile2);
-			tile2.addConnectedTile(tile1);
-
-			// Forward Point Matches
-			tile1.addMatches( corr.correspondencePointPairs );
-			
-			// Backward Point Matches
-			for ( PointMatch pm : corr.correspondencePointPairs )
-			{
-				tile2.addMatch(new PointMatch(pm.getP2(), pm.getP1()));
-				System.out.println("p1 " + pm.getP1().getW()[0] + ", " + pm.getP1().getW()[1]);
-				System.out.println("p2 " + pm.getP2().getW()[0] + ", " + pm.getP2().getW()[1]);
+				if (tilesMap.containsKey(corr.url1))
+				{
+					tile1 = tilesMap.get(corr.url1);
+				}
+				else
+				{
+					tile1 = Utils.createTile( params.modelIndex );
+					tilesMap.put(corr.url1, tile1);
+					//tiles.add(tile1);
+				}
+				
+				if (tilesMap.containsKey(corr.url2))
+				{
+					tile2 = tilesMap.get(corr.url2);
+				}
+				else
+				{
+					tile2 = Utils.createTile( params.modelIndex );
+					tilesMap.put(corr.url2, tile2);
+					//tiles.add(tile2);
+				}
+				tile1.addConnectedTile(tile2);
+				tile2.addConnectedTile(tile1);
+	
+				// Forward Point Matches
+				tile1.addMatches( corr.correspondencePointPairs );
+				
+				// Backward Point Matches
+				for ( PointMatch pm : corr.correspondencePointPairs )
+				{
+					tile2.addMatch(new PointMatch(pm.getP2(), pm.getP1()));
+					System.out.println("p1 " + pm.getP1().getW()[0] + ", " + pm.getP1().getW()[1]);
+					System.out.println("p2 " + pm.getP2().getW()[0] + ", " + pm.getP2().getW()[1]);
+				}
 			}
 		}
 		
@@ -238,7 +248,7 @@ public class OptimizeMontageTransform
 		    Tile< ? > tile_value = entry.getValue();
 		    
 		    TileSpec ts = new TileSpec();
-		    ts.imageUrl = tile_url;
+		    ts.setMipmapLevelImageUrl("" + mipmapLevel, tile_url);
 		    
 		    AffineTransform at = ((AbstractAffineModel2D< ? >) tile_value.getModel()).createAffine();
 		    Transform addedTransform = new Transform();
@@ -265,4 +275,5 @@ public class OptimizeMontageTransform
 		}
 	}
 	
+
 }

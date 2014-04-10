@@ -17,6 +17,7 @@
 package org.janelia.alignment;
 
 import java.util.List;
+import java.util.TreeMap;
 
 import mpicbg.imagefeatures.Feature;
 
@@ -27,12 +28,33 @@ import mpicbg.imagefeatures.Feature;
  */
 public class FeatureSpec
 {
-	public String imageUrl;
-	public List< Feature > featureList ;
-	
-	public FeatureSpec(String url, List< Feature > flist)
+
+	public class ImageAndFeatures
 	{
-		imageUrl = url;
-		featureList = flist;
+		public String imageUrl;
+		public List< Feature > featureList;
+		
+		public ImageAndFeatures(String url, List< Feature > flist)
+		{
+			imageUrl = url;
+			featureList = flist;
+		}
+
 	}
+	
+	final private TreeMap< String, ImageAndFeatures > mipmapLevels = new TreeMap< String, ImageAndFeatures >();
+
+	public int mipmapLevel;
+	
+	public FeatureSpec(String mipmapLevel, String url, List< Feature > flist)
+	{
+		ImageAndFeatures iaf = new ImageAndFeatures(url, flist);
+		mipmapLevels.put(mipmapLevel, iaf);
+	}
+		
+	final public ImageAndFeatures getMipmapImageAndFeatures(int mipmapLevel)
+	{
+		return mipmapLevels.get("" + mipmapLevel);
+	}
+
 }

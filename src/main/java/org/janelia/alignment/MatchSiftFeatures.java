@@ -89,7 +89,12 @@ public class MatchSiftFeatures
         	jc.usage(); 
         	return;
         }
-		
+
+		// The mipmap level to work on
+		// TODO: Should be a parameter from the user,
+		//       and decide whether or not to create the mipmaps if they are missing
+		int mipmapLevel = 0;
+
 		/* open featurespec */
 		final FeatureSpec[] featureSpecs1;
 		final FeatureSpec[] featureSpecs2;
@@ -111,8 +116,8 @@ public class MatchSiftFeatures
 			return;
 		}
 
-		final List< Feature > fs1 = featureSpecs1[ params.index1 ].featureList;
-		final List< Feature > fs2 = featureSpecs2[ params.index2 ].featureList;
+		final List< Feature > fs1 = featureSpecs1[ params.index1 ].getMipmapImageAndFeatures(mipmapLevel).featureList;
+		final List< Feature > fs2 = featureSpecs2[ params.index2 ].getMipmapImageAndFeatures(mipmapLevel).featureList;
 		
 		final List< PointMatch > candidates = new ArrayList< PointMatch >();
 		FeatureTransform.matchFeatures( fs1, fs2, candidates, params.rod );
@@ -120,8 +125,9 @@ public class MatchSiftFeatures
 		List< CorrespondenceSpec > corr_data = new ArrayList< CorrespondenceSpec >();
 		
 		corr_data.add(new CorrespondenceSpec(
-				featureSpecs1[ params.index1 ].imageUrl,
-				featureSpecs2[ params.index2 ].imageUrl,
+				mipmapLevel,
+				featureSpecs1[ params.index1 ].getMipmapImageAndFeatures(mipmapLevel).imageUrl,
+				featureSpecs2[ params.index2 ].getMipmapImageAndFeatures(mipmapLevel).imageUrl,
 				candidates));
 					
 		try {
