@@ -57,20 +57,26 @@ public class ComputeSiftFeatures
         @Parameter( names = "--all", description = "Compute for all tiles", required = false )
         private boolean all_tiles = false;
         
+        @Parameter( names = "--initialSigma", description = "Initial Gaussian blur sigma", required = false )
+        private float initialSigma = 1.6f;
+        
+        @Parameter( names = "--steps", description = "Steps per scale octave", required = false )
+        private int steps = 3;
+        
+        @Parameter( names = "--minOctaveSize", description = "Min image size", required = false )
+        private int minOctaveSize = 64;
+        
+        @Parameter( names = "--maxOctaveSize", description = "Max image size", required = false )
+        private int maxOctaveSize = 1024;
+        
+        @Parameter( names = "--fdSize", description = "Feature descriptor size", required = false )
+        private int fdSize = 8;
+        
+        @Parameter( names = "--fdBins", description = "Feature descriptor bins", required = false )
+        private int fdBins = 8;
+        
         @Parameter( names = "--targetPath", description = "Path to the target image if any", required = true )
         public String targetPath = null;
-        
-        @Parameter( names = "--x", description = "Target image left coordinate", required = false )
-        public long x = 0;
-        
-        @Parameter( names = "--y", description = "Target image top coordinate", required = false )
-        public long y = 0;
-        
-        @Parameter( names = "--width", description = "Target image width", required = false )
-        public int width = 256;
-        
-        @Parameter( names = "--height", description = "Target image height", required = false )
-        public int height = 256;
         
         @Parameter( names = "--threads", description = "Number of threads to be used", required = false )
         public int numThreads = Runtime.getRuntime().availableProcessors();
@@ -149,7 +155,13 @@ public class ComputeSiftFeatures
                         {
                             /* calculate sift features for the image or sub-region */
                             System.out.println( "Calculating SIFT features for image '" + imageUrl + "'." );
-                            FloatArray2DSIFT.Param siftParam = new FloatArray2DSIFT.Param();			
+                            FloatArray2DSIFT.Param siftParam = new FloatArray2DSIFT.Param();
+                            siftParam.initialSigma = params.initialSigma;
+                            siftParam.steps = params.steps;
+                            siftParam.minOctaveSize = params.minOctaveSize;
+                            siftParam.maxOctaveSize = params.maxOctaveSize;
+                            siftParam.fdSize = params.fdSize;
+                            siftParam.fdBins = params.fdBins;
                             FloatArray2DSIFT sift = new FloatArray2DSIFT(siftParam);
                             SIFT ijSIFT = new SIFT(sift);
 					
