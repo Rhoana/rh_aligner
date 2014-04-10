@@ -23,6 +23,7 @@ import java.io.FileWriter;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -64,6 +65,9 @@ public class OptimizeSeriesTransform
         @Parameter( names = "--inputfile", description = "Correspondence list file", required = true )
         private String inputfile;
                         
+        @Parameter( names = "--tilespecfile", description = "Tilespec file containing all tiles for this montage and current transforms", required = false )
+        private String tilespecfile = null;
+        
         @Parameter( names = "--modelIndex", description = "Model Index: 0=Translation, 1=Rigid, 2=Similarity, 3=Affine, 4=Homography", required = false )
         private int modelIndex = 3;
         
@@ -168,6 +172,46 @@ public class OptimizeSeriesTransform
 		// TODO: Should be a parameter from the user,
 		//       and decide whether or not to create the mipmaps if they are missing
 		int mipmapLevel = 0;
+		
+		
+		/* read all tilespecs */
+		final HashMap< String, TileSpec > tileSpecMap = new HashMap< String, TileSpec >();
+
+		if (params.tilespecfile != null)
+		{
+			final URL url;
+			final TileSpec[] tileSpecs;
+			
+			try
+			{
+				final Gson gson = new Gson();
+				url = new URL( params.tilespecfile );
+				tileSpecs = gson.fromJson( new InputStreamReader( url.openStream() ), TileSpec[].class );
+			}
+			catch ( final MalformedURLException e )
+			{
+				System.err.println( "URL malformed." );
+				e.printStackTrace( System.err );
+				return;
+			}
+			catch ( final JsonSyntaxException e )
+			{
+				System.err.println( "JSON syntax malformed." );
+				e.printStackTrace( System.err );
+				return;
+			}
+			catch ( final Exception e )
+			{
+				e.printStackTrace( System.err );
+				return;
+			}
+			
+			for (TileSpec ts : tileSpecs)
+			{
+				String imageUrl = ts.getMipmapLevels().get("" + mipmapLevel).imageUrl;
+				tileSpecMap.put(imageUrl, ts);
+			}
+		}
 		
 		
 		/* create tiles and models for all layers */
@@ -438,14 +482,19 @@ J:		for ( int i = 0; i < corr_data.length; )
 		
 		// Export new transforms, TODO: append to existing tilespec files
 		for(Entry<String, Tile< ? > > entry : tileMap.entrySet()) {
-		    String tile_url = entry.getKey();
-		    Tile< ? > tile_value = entry.getValue();
+		    String tileUrl = entry.getKey();
+		    Tile< ? > tileValue = entry.getValue();
 		    
-		    TileSpec ts = new TileSpec();
-		    ts.setMipmapLevelImageUrl("" + mipmapLevel, tile_url);
+		    TileSpec ts = tileSpecMap.get(tileUrl);
+		    if (ts == null)
+		    {
+		    	System.out.println("Generating new tilespec for image " + tileUrl + ".");
+		    	ts = new TileSpec();
+		    	ts.setMipmapLevelImageUrl("" + mipmapLevel, tileUrl);
+		    }
 		    
 		    @SuppressWarnings("rawtypes")
-			Model genericModel = tile_value.getModel();
+			Model genericModel = tileValue.getModel();
 		    
 		    Transform addedTransform = new Transform();
 		    addedTransform.className = genericModel.getClass().getCanonicalName();
@@ -471,7 +520,10 @@ J:		for ( int i = 0; i < corr_data.length; )
 				addedTransform.dataString = genericModel.toString();
 			}		    
 		    
-		    ts.transforms = new Transform[]{addedTransform};
+			//Apply to the corresponding tilespec transforms
+			ArrayList< Transform > outTransforms = new ArrayList< Transform >(Arrays.asList(ts.transforms));
+			outTransforms.add(addedTransform);
+			ts.transforms = outTransforms.toArray(ts.transforms);
 		    
 		    out_tiles.add(ts);
 		}

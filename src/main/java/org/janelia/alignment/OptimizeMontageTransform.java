@@ -23,6 +23,7 @@ import java.io.FileWriter;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -60,6 +61,9 @@ public class OptimizeMontageTransform
         @Parameter( names = "--inputfile", description = "Correspondence list file", required = true )
         private String inputfile;
                         
+        @Parameter( names = "--tilespecfile", description = "Tilespec file containing all tiles for this montage and current transforms", required = true )
+        private String tilespecfile;
+        
         @Parameter( names = "--modelIndex", description = "Model Index: 0=Translation, 1=Rigid, 2=Similarity, 3=Affine, 4=Homography", required = false )
         private int modelIndex = 1;
                         
@@ -93,6 +97,7 @@ public class OptimizeMontageTransform
 		
 		final Params params = new Params();
 		
+		/* Initialization */
 		try
         {
 			final JCommander jc = new JCommander( params, args );
@@ -140,6 +145,41 @@ public class OptimizeMontageTransform
 			e.printStackTrace( System.err );
 			return;
 		}
+		
+		/* read all tilespecs */
+		final HashMap< String, TileSpec > tileSpecMap = new HashMap< String, TileSpec >();
+		final URL url;
+		final TileSpec[] tileSpecs;
+		try
+		{
+			final Gson gson = new Gson();
+			url = new URL( params.tilespecfile );
+			tileSpecs = gson.fromJson( new InputStreamReader( url.openStream() ), TileSpec[].class );
+		}
+		catch ( final MalformedURLException e )
+		{
+			System.err.println( "URL malformed." );
+			e.printStackTrace( System.err );
+			return;
+		}
+		catch ( final JsonSyntaxException e )
+		{
+			System.err.println( "JSON syntax malformed." );
+			e.printStackTrace( System.err );
+			return;
+		}
+		catch ( final Exception e )
+		{
+			e.printStackTrace( System.err );
+			return;
+		}
+		
+		for (TileSpec ts : tileSpecs)
+		{
+			String imageUrl = ts.getMipmapLevels().get("" + mipmapLevel).imageUrl;
+			tileSpecMap.put(imageUrl, ts);
+		}
+		
 		
 //		final boolean tilesAreInPlace = true;
 		
@@ -250,14 +290,19 @@ public class OptimizeMontageTransform
 				
 		// Export new transforms, TODO: append to existing tilespec files
 		for(Entry<String, Tile< ? > > entry : tilesMap.entrySet()) {
-		    String tile_url = entry.getKey();
-		    Tile< ? > tile_value = entry.getValue();
+		    String tileUrl = entry.getKey();
+		    Tile< ? > tileValue = entry.getValue();
 		    
-		    TileSpec ts = new TileSpec();
-		    ts.setMipmapLevelImageUrl("" + mipmapLevel, tile_url);
+		    TileSpec ts = tileSpecMap.get(tileUrl);
+		    if (ts == null)
+		    {
+		    	System.out.println("Warning: Could not find input tilespec for image " + tileUrl + ". Generating new tilespec.");
+		    	ts = new TileSpec();
+		    	ts.setMipmapLevelImageUrl("" + mipmapLevel, tileUrl);
+		    }
 		    
 		    @SuppressWarnings("rawtypes")
-			Model genericModel = tile_value.getModel();
+			Model genericModel = tileValue.getModel();
 		    
 		    Transform addedTransform = new Transform();
 		    addedTransform.className = genericModel.getClass().getCanonicalName();
@@ -283,7 +328,10 @@ public class OptimizeMontageTransform
 				addedTransform.dataString = genericModel.toString();
 			}		    
 		    
-		    ts.transforms = new Transform[]{addedTransform};
+			//Apply to the corresponding tilespec transforms
+			ArrayList< Transform > outTransforms = new ArrayList< Transform >(Arrays.asList(ts.transforms));
+			outTransforms.add(addedTransform);
+			ts.transforms = outTransforms.toArray(ts.transforms);
 		    
 		    out_tiles.add(ts);
 		}

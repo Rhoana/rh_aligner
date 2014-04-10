@@ -63,6 +63,9 @@ public class ComputeSiftFeatures
 
         @Parameter( names = "--index", description = "Tile index", required = false )
         private int index = 0;
+
+        @Parameter( names = "--all", description = "Compute for all tiles", required = false )
+        private boolean all_tiles = false;
         
         @Parameter( names = "--targetPath", description = "Path to the target image if any", required = true )
         public String targetPath = null;
@@ -88,7 +91,7 @@ public class ComputeSiftFeatures
 	}
 	
 	private ComputeSiftFeatures() {}
-	
+/*	
 	private static float[] translateBoundingBox( float[] originalBoundingBox, CoordinateTransformList< CoordinateTransform > ctlMipmap )
 	{
 		float[][] points = {
@@ -98,7 +101,7 @@ public class ComputeSiftFeatures
 		};
 		
 	}
-
+*/
 	
 	public static void main( final String[] args )
 	{
@@ -155,60 +158,63 @@ public class ComputeSiftFeatures
 		// TODO: Should be a parameter from the user,
 		//       and decide whether or not to create the mipmaps if they are missing
 		int mipmapLevel = 0;
-		
-		TileSpec ts = tileSpecs[params.index];
-		
-		/* load image TODO use Bioformats for strange formats */
-		String imageUrl = ts.getMipmapLevels().get("" + mipmapLevel).imageUrl;
-		final ImagePlus imp = Utils.openImagePlus( imageUrl.replaceFirst("file://", "").replaceFirst("file:/", "") );
-		if ( imp == null )
-			System.err.println( "Failed to load image '" + imageUrl + "'." );
-		else
-		{
-			/* calculate sift features for the image or sub-region */
-			System.out.println( "Calculating SIFT features for image '" + imageUrl + "'." );
-			FloatArray2DSIFT.Param siftParam = new FloatArray2DSIFT.Param();			
-			FloatArray2DSIFT sift = new FloatArray2DSIFT(siftParam);
-			SIFT ijSIFT = new SIFT(sift);
-			
-//			/* Apply transformations on the image, and only then get the sift features
-//			 * (transformations may have an impact on the sift features)
-//			 */
-//			final ImageProcessor ipProc = imp.getProcessor();
-//			final CoordinateTransformList< CoordinateTransform > ctl = ts.createTransformList();
-//			/* attach mipmap transformation */
-//			final CoordinateTransformList< CoordinateTransform > ctlMipmap = new CoordinateTransformList< CoordinateTransform >();
-//			ctlMipmap.add( Utils.createScaleLevelTransform( mipmapLevel ) );
-//			ctlMipmap.add( ctl );
-//			/* find bounding box after transformations */
-//			float[] originalBoundingBox = { 0, ipProc.getWidth(), 0, ipProc.getHeight() }; // left, right, top, bottom
-//			float[] newBoundingBox = translateBoundingBox( originalBoundingBox, ctlMipmap );
-//			/* create mesh */
-//			final CoordinateTransformMesh mesh = new CoordinateTransformMesh( ctlMipmap,  ( int )( ipProc.getWidth() / params.res + 0.5 ), ipProc.getWidth(), ipProc.getHeight() );
-//			final ImageProcessorWithMasks source = new ImageProcessorWithMasks( ipProc, null, null ); // no mask
-//			final ImageProcessor tp = ipProc.createProcessor( targetImage.getWidth(), targetImage.getHeight() );
-//			final ImageProcessorWithMasks target = new ImageProcessorWithMasks( tp, null, null ); // no mask
-//			final TransformMeshMappingWithMasks< TransformMesh > mapping = new TransformMeshMappingWithMasks< TransformMesh >( mesh );
-//			mapping.mapInterpolated( source, target );
-//
-//			
-//			/* create mesh */
 
-			
-			final List< Feature > fs = new ArrayList< Feature >();
-			ijSIFT.extractFeatures( imp.getProcessor(), fs );
-			
-			/* Apply the transformations on the location of every feature */
-			final CoordinateTransformList< CoordinateTransform > ctl = ts.createTransformList();
-			for (Feature feature : fs)
+		int start_index = params.all_tiles ? 0 : params.index;
+		int end_index = params.all_tiles ? tileSpecs.length : params.index + 1;
+
+		for (int idx = start_index; idx < end_index; idx = idx + 1) {
+			TileSpec ts = tileSpecs[idx];
+
+			/* load image TODO use Bioformats for strange formats */
+			String imageUrl = ts.getMipmapLevels().get("" + mipmapLevel).imageUrl;
+			final ImagePlus imp = Utils.openImagePlus( imageUrl.replaceFirst("file://", "").replaceFirst("file:/", "") );
+			if ( imp == null )
+				System.err.println( "Failed to load image '" + imageUrl + "'." );
+			else
 			{
-				ctl.applyInPlace(feature.location);				
+				/* calculate sift features for the image or sub-region */
+				System.out.println( "Calculating SIFT features for image '" + imageUrl + "'." );
+				FloatArray2DSIFT.Param siftParam = new FloatArray2DSIFT.Param();			
+				FloatArray2DSIFT sift = new FloatArray2DSIFT(siftParam);
+				SIFT ijSIFT = new SIFT(sift);
+
+				//			/* Apply transformations on the image, and only then get the sift features
+				//			 * (transformations may have an impact on the sift features)
+				//			 */
+				//			final ImageProcessor ipProc = imp.getProcessor();
+				//			final CoordinateTransformList< CoordinateTransform > ctl = ts.createTransformList();
+				//			/* attach mipmap transformation */
+				//			final CoordinateTransformList< CoordinateTransform > ctlMipmap = new CoordinateTransformList< CoordinateTransform >();
+				//			ctlMipmap.add( Utils.createScaleLevelTransform( mipmapLevel ) );
+				//			ctlMipmap.add( ctl );
+				//			/* find bounding box after transformations */
+				//			float[] originalBoundingBox = { 0, ipProc.getWidth(), 0, ipProc.getHeight() }; // left, right, top, bottom
+				//			float[] newBoundingBox = translateBoundingBox( originalBoundingBox, ctlMipmap );
+				//			/* create mesh */
+				//			final CoordinateTransformMesh mesh = new CoordinateTransformMesh( ctlMipmap,  ( int )( ipProc.getWidth() / params.res + 0.5 ), ipProc.getWidth(), ipProc.getHeight() );
+				//			final ImageProcessorWithMasks source = new ImageProcessorWithMasks( ipProc, null, null ); // no mask
+				//			final ImageProcessor tp = ipProc.createProcessor( targetImage.getWidth(), targetImage.getHeight() );
+				//			final ImageProcessorWithMasks target = new ImageProcessorWithMasks( tp, null, null ); // no mask
+				//			final TransformMeshMappingWithMasks< TransformMesh > mapping = new TransformMeshMappingWithMasks< TransformMesh >( mesh );
+				//			mapping.mapInterpolated( source, target );
+				//
+				//			
+				//			/* create mesh */
+
+
+				final List< Feature > fs = new ArrayList< Feature >();
+				ijSIFT.extractFeatures( imp.getProcessor(), fs );
+
+				/* Apply the transformations on the location of every feature */
+				final CoordinateTransformList< CoordinateTransform > ctl = ts.createTransformList();
+				for (Feature feature : fs)
+				{
+					ctl.applyInPlace(feature.location);				
+				}
+
+				feature_data.add(new FeatureSpec("" + mipmapLevel, imageUrl, fs));
 			}
-			
-			
-			feature_data.add(new FeatureSpec("" + mipmapLevel, imageUrl, fs));
 		}
-		
 		try {
 			Writer writer = new FileWriter(params.targetPath);
 	        //Gson gson = new GsonBuilder().create();

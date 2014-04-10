@@ -207,7 +207,7 @@ public class MatchByMaxPMCC
 
 		final CoordinateTransformList< CoordinateTransform > ctl1 = ts1.createTransformList();
 		final CoordinateTransformList< CoordinateTransform > ctl2 = ts2.createTransformList();
-		
+				
 		/* TODO: masks? */
 		/* calculate block matches */
 

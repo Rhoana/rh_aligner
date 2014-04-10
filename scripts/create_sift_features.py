@@ -29,7 +29,7 @@ def compute_all_tiles_sift_features(tile_files, jar, working_dir):
         fname, ext = os.path.splitext(tile_file.split(os.path.sep)[-1])
         sift_out_file = '{0}_siftFeatures.json'.format(fname)
         sift_out_file = os.path.join(working_dir, sift_out_file)
-        java_cmd = 'java -Xmx4g -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.ComputeSiftFeatures --url {1} --targetPath {2}'.format(jar, tile_url, sift_out_file)
+        java_cmd = 'java -Xmx4g -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.ComputeSiftFeatures --all --url {1} --targetPath {2}'.format(jar, tile_url, sift_out_file)
         print "Executing: {0}".format(java_cmd)
         call(java_cmd, shell=True) # w/o shell=True it seems that the env-vars are not set
 
