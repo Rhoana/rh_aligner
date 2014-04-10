@@ -11,6 +11,7 @@ Scripts
 -------
 
 * multibeam\_import\_tilespec.py - this script takes a multibeam EM data folder (image + pixelCoordinates.txt + metadata.txt files), processes the images, and outputs a single json file in the Tile-Spec format.
+* singlebeam\_import\_tilespec.py - this script takes a singlebeam EM data folder (directory above Section dirs ("Sec[0-9]*/") subdirs), processes the images, and outputs a single json file in the Tile-Spec format per Section directory, named "SecXXX.json" in the data folder.
 * filter\_tiles.py - this script takes a single json file and a bounding box coordinates, and produces a list of single-tile json files that intersect this bounding box.
 * create\_sift\_features.py - takes a directory of json files (each with a single tile), iterates over the files and extracts the SIFT features for each file.
 

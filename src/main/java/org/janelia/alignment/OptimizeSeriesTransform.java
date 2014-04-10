@@ -16,20 +16,6 @@
  */
 package org.janelia.alignment;
 
-import ij.IJ;
-import ij.ImagePlus;
-import ij.io.Opener;
-import ij.process.ByteProcessor;
-import ij.process.ColorProcessor;
-import ij.process.FloatProcessor;
-import ij.process.ImageProcessor;
-
-import java.awt.Graphics2D;
-import java.awt.geom.AffineTransform;
-import java.awt.image.BufferedImage;
-import java.awt.image.WritableRaster;
-import java.io.File;
-import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Writer;
@@ -40,41 +26,22 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Map.Entry;
 
-import javax.imageio.ImageIO;
-
-import mpicbg.models.AbstractAffineModel2D;
 import mpicbg.models.AbstractModel;
-import mpicbg.models.AffineModel2D;
-import mpicbg.models.CoordinateTransform;
-import mpicbg.models.CoordinateTransformList;
-import mpicbg.models.CoordinateTransformMesh;
-import mpicbg.models.ErrorStatistic;
-import mpicbg.models.HomographyModel2D;
 import mpicbg.models.IllDefinedDataPointsException;
-import mpicbg.models.InvertibleCoordinateTransform;
+import mpicbg.models.Model;
 import mpicbg.models.NotEnoughDataPointsException;
 import mpicbg.models.Point;
 import mpicbg.models.PointMatch;
-import mpicbg.models.RigidModel2D;
-import mpicbg.models.SimilarityModel2D;
-import mpicbg.models.SpringMesh;
 import mpicbg.models.Tile;
 import mpicbg.models.TileConfiguration;
-import mpicbg.models.TransformMesh;
 import mpicbg.models.Transforms;
-import mpicbg.models.TranslationModel2D;
-import mpicbg.models.Vertex;
-import mpicbg.models.InterpolatedAffineModel2D;
-import mpicbg.trakem2.transform.TransformMeshMappingWithMasks;
-import mpicbg.trakem2.transform.TransformMeshMappingWithMasks.ImageProcessorWithMasks;
-import mpicbg.imagefeatures.Feature;
-import mpicbg.imagefeatures.FloatArray2DSIFT;
-import mpicbg.ij.FeatureTransform;
-import mpicbg.ij.SIFT;
-import mpicbg.ij.blockmatching.BlockMatching;
+import mpicbg.trakem2.transform.AffineModel2D;
+import mpicbg.trakem2.transform.HomographyModel2D;
+import mpicbg.trakem2.transform.RigidModel2D;
+import mpicbg.trakem2.transform.SimilarityModel2D;
+import mpicbg.trakem2.transform.TranslationModel2D;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
@@ -205,24 +172,22 @@ public class OptimizeSeriesTransform
 		
 		/* create tiles and models for all layers */
 		final HashMap< String, Tile< ? > > tileMap = new HashMap< String, Tile< ? > >();
-		final AbstractAffineModel2D< ? > m = ( AbstractAffineModel2D< ? > )Utils.createModel( params.modelIndex );
-		final AbstractAffineModel2D< ? > r = ( AbstractAffineModel2D< ? > )Utils.createModel( params.regularizerIndex );
 		
 		for ( int i = 0; i < corr_data.length; ++i )
 		{
 			if (!tileMap.containsKey(corr_data[i].url1))
 			{
 				if ( params.regularize )
-					tileMap.put(corr_data[i].url1, new Tile( new InterpolatedAffineModel2D( m.copy(), r.copy(), params.lambda ) ) );
+					tileMap.put(corr_data[i].url1, Utils.createInterpolatedAffineTile( params.modelIndex, params.regularizerIndex, params.lambda ) );
 				else
-					tileMap.put(corr_data[i].url1, new Tile( m.copy() ) );
+					tileMap.put(corr_data[i].url1, Utils.createTile( params.modelIndex ) );
 			}
 			if (!tileMap.containsKey(corr_data[i].url2))
 			{
 				if ( params.regularize )
-					tileMap.put(corr_data[i].url2, new Tile( new InterpolatedAffineModel2D( m.copy(), r.copy(), params.lambda ) ) );
+					tileMap.put(corr_data[i].url2, Utils.createInterpolatedAffineTile( params.modelIndex, params.regularizerIndex, params.lambda ) );
 				else
-					tileMap.put(corr_data[i].url2, new Tile( m.copy() ) );
+					tileMap.put(corr_data[i].url2, Utils.createTile( params.modelIndex ) );
 			}
 		}
 		
@@ -477,11 +442,27 @@ J:		for ( int i = 0; i < corr_data.length; )
 		    TileSpec ts = new TileSpec();
 		    ts.setMipmapLevelImageUrl("" + mipmapLevel, tile_url);
 		    
-		    AffineTransform at = ((AbstractAffineModel2D< ? >) tile_value.getModel()).createAffine();
-		    Transform addedTransform = new Transform();
+		    @SuppressWarnings("rawtypes")
+			Model genericModel = tile_value.getModel();
 		    
-		    addedTransform.className = at.getClass().toString();
-		    addedTransform.dataString = at.toString();
+		    Transform addedTransform = new Transform();
+		    addedTransform.className = genericModel.getClass().getCanonicalName();
+		    
+			switch ( params.modelIndex )
+			{
+			case 0:
+				addedTransform.dataString = ((TranslationModel2D) genericModel).toDataString();
+			case 1:
+				addedTransform.dataString = ((RigidModel2D) genericModel).toDataString();
+			case 2:
+				addedTransform.dataString = ((SimilarityModel2D) genericModel).toDataString();
+			case 3:
+				addedTransform.dataString = ((AffineModel2D) genericModel).toDataString();
+			case 4:
+				addedTransform.dataString = ((HomographyModel2D) genericModel).toDataString();
+			default:
+				addedTransform.dataString = genericModel.toString();
+			}		    
 		    
 		    ts.transforms = new Transform[]{addedTransform};
 		    

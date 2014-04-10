@@ -32,18 +32,20 @@ import javax.imageio.ImageWriteParam;
 import javax.imageio.ImageWriter;
 import javax.imageio.stream.FileImageOutputStream;
 
+import mpicbg.trakem2.transform.TranslationModel2D;
+import mpicbg.trakem2.transform.RigidModel2D;
+import mpicbg.trakem2.transform.SimilarityModel2D;
+import mpicbg.trakem2.transform.AffineModel2D;
+import mpicbg.trakem2.transform.HomographyModel2D;
+
 import mpicbg.models.AbstractModel;
-import mpicbg.models.AffineModel2D;
 import mpicbg.models.CoordinateTransform;
-import mpicbg.models.HomographyModel2D;
+import mpicbg.models.InterpolatedAffineModel2D;
 import mpicbg.models.NotEnoughDataPointsException;
 import mpicbg.models.Point;
 import mpicbg.models.PointMatch;
-import mpicbg.models.RigidModel2D;
-import mpicbg.models.SimilarityModel2D;
 import mpicbg.models.SpringMesh;
 import mpicbg.models.Tile;
-import mpicbg.models.TranslationModel2D;
 
 /**
  * 
@@ -66,6 +68,30 @@ public class Utils
 			this.b = b;
 			this.c = c;
 		}
+	}
+	
+	/**
+	 * Writes min(a,b) into a
+	 * 
+	 * @param a
+	 * @param b
+	 */
+	final static public void min( final float[] a, final float[] b )
+	{
+		for ( int i = 0; i < a.length; ++i )
+			if ( b[ i ] < a[ i ] ) a[ i ] = b[ i ];
+	}
+
+	/**
+	 * Writes max(a,b) into a
+	 * 
+	 * @param a
+	 * @param b
+	 */
+	final static public void max( final float[] a, final float[] b )
+	{
+		for ( int i = 0; i < a.length; ++i )
+			if ( b[ i ] > a[ i ] ) a[ i ] = b[ i ];
 	}
 	
 	/**
@@ -93,23 +119,35 @@ public class Utils
 	/**
 	 * Get a tile from an integer specifier
 	 */
-	final static public Tile< ? > createTile( final int modelIndex )
+	@SuppressWarnings({ "rawtypes", "unchecked" })
+	final static public Tile createTile( final int modelIndex )
 	{
 		switch ( modelIndex )
 		{
 		case 0:
-			return (Tile< ? >) new Tile< TranslationModel2D >( new TranslationModel2D() );
+			return new Tile( new TranslationModel2D() );
 		case 1:
-			return (Tile< ? >) new Tile< RigidModel2D >( new RigidModel2D() );
+			return new Tile( new RigidModel2D() );
 		case 2:
-			return (Tile< ? >) new Tile< SimilarityModel2D >( new SimilarityModel2D() );
+			return new Tile( new SimilarityModel2D() );
 		case 3:
-			return (Tile< ? >) new Tile< AffineModel2D >( new AffineModel2D() );
+			return new Tile( new AffineModel2D() );
 		case 4:
-			return (Tile< ? >) new Tile< HomographyModel2D >( new HomographyModel2D() );
+			return new Tile( new HomographyModel2D() );
 		default:
 			return null;
 		}
+	}
+	
+	/**
+	 * Get an interpolated affine tile from an integer specifier
+	 */
+	@SuppressWarnings({ "rawtypes", "unchecked" })
+	final static public Tile createInterpolatedAffineTile( final int modelIndex, final int regularizerIndex, float lambda )
+	{
+		final AbstractModel< ? > m = createModel(modelIndex);
+		final AbstractModel< ? > r = createModel(regularizerIndex);
+		return new Tile( new InterpolatedAffineModel2D( m, r, lambda ) );
 	}
 	
 	/**
