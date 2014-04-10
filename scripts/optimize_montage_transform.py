@@ -27,8 +27,9 @@ def path2url(path):
 def optimize_montage_transform(correspondence_file, tilespec_file, output_file, jar_file):
 
 	corr_url = path2url(correspondence_file)
+	tiles_url = path2url(tilespec_file)
 	java_cmd = 'java -cp "{0}" org.janelia.alignment.OptimizeMontageTransform --inputfile {1} --tilespecfile {2} --targetPath {3}'.format(\
-		jar_file, corr_url, path2url(tilespec_file), output_file)
+		jar_file, corr_url, tiles_url, output_file)
 	#print "Executing: {0}".format(java_cmd)
 	call(java_cmd, shell=True) # w/o shell=True it seems that the env-vars are not set
 

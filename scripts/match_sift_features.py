@@ -118,7 +118,7 @@ def main():
 
     #print args
 
-    match_sift_features(args.tiles_dir, args,features_dir, args.workspace_dir, args.jar_file)
+    match_sift_features(args.tiles_dir, args.features_dir, args.workspace_dir, args.jar_file)
 
 if __name__ == '__main__':
     main()
