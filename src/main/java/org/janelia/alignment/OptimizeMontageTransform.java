@@ -244,6 +244,8 @@ public class OptimizeMontageTransform
 			e.printStackTrace( System.err );
 		}
 		
+		System.out.println( "Optimization complete. Generating tile transforms.");
+		
 		ArrayList< TileSpec > out_tiles = new ArrayList< TileSpec >();
 				
 		// Export new transforms, TODO: append to existing tilespec files
@@ -264,14 +266,19 @@ public class OptimizeMontageTransform
 			{
 			case 0:
 				addedTransform.dataString = ((TranslationModel2D) genericModel).toDataString();
+				break;
 			case 1:
 				addedTransform.dataString = ((RigidModel2D) genericModel).toDataString();
+				break;
 			case 2:
 				addedTransform.dataString = ((SimilarityModel2D) genericModel).toDataString();
+				break;
 			case 3:
 				addedTransform.dataString = ((AffineModel2D) genericModel).toDataString();
+				break;
 			case 4:
 				addedTransform.dataString = ((HomographyModel2D) genericModel).toDataString();
+				break;
 			default:
 				addedTransform.dataString = genericModel.toString();
 			}		    
@@ -280,6 +287,8 @@ public class OptimizeMontageTransform
 		    
 		    out_tiles.add(ts);
 		}
+		
+		System.out.println( "Exporting tiles.");
 		
 		try {
 			Writer writer = new FileWriter(params.targetPath);
@@ -293,6 +302,8 @@ public class OptimizeMontageTransform
 			System.err.println( "Error writing JSON file: " + params.targetPath );
 			e.printStackTrace( System.err );
 		}
+		
+		System.out.println( "Done." );
 	}
 	
 
