@@ -60,6 +60,9 @@ public class OptimizeMontageTransform
         @Parameter( names = "--inputfile", description = "Correspondence list file", required = true )
         private String inputfile;
                         
+        @Parameter( names = "--tilespecfile", description = "Tilespec file containing all tiles for this montage and current transforms", required = true )
+        private String tilespecfile;
+        
         @Parameter( names = "--modelIndex", description = "Model Index: 0=Translation, 1=Rigid, 2=Similarity, 3=Affine, 4=Homography", required = false )
         private int modelIndex = 1;
                         
@@ -93,6 +96,7 @@ public class OptimizeMontageTransform
 		
 		final Params params = new Params();
 		
+		/* Initialization */
 		try
         {
 			final JCommander jc = new JCommander( params, args );
@@ -135,6 +139,40 @@ public class OptimizeMontageTransform
 			e.printStackTrace( System.err );
 			return;
 		}
+		
+		/* read all tilespecs */
+		final HashMap< String, TileSpec > tileSpecMap = new HashMap< String, TileSpec >();
+		final URL url;
+		final TileSpec[] tileSpecs;
+		try
+		{
+			final Gson gson = new Gson();
+			url = new URL( params.tilespecfile );
+			tileSpecs = gson.fromJson( new InputStreamReader( url.openStream() ), TileSpec[].class );
+		}
+		catch ( final MalformedURLException e )
+		{
+			System.err.println( "URL malformed." );
+			e.printStackTrace( System.err );
+			return;
+		}
+		catch ( final JsonSyntaxException e )
+		{
+			System.err.println( "JSON syntax malformed." );
+			e.printStackTrace( System.err );
+			return;
+		}
+		catch ( final Exception e )
+		{
+			e.printStackTrace( System.err );
+			return;
+		}
+		
+		for (TileSpec ts : tileSpecs)
+		{
+			tileSpecMap.put(ts.imageUrl, ts);
+		}
+		
 		
 //		final boolean tilesAreInPlace = true;
 		

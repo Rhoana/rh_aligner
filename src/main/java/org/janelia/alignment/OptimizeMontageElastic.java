@@ -161,8 +161,6 @@ public class OptimizeMontageElastic
 		/* Initialization */
 		/* read all tilespecs */
 		final HashMap< String, TileSpec > tileSpecMap = new HashMap< String, TileSpec >();
-		
-		/* open tilespec */
 		final URL url;
 		final TileSpec[] tileSpecs;
 		try
