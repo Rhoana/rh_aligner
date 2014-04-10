@@ -426,6 +426,8 @@ J:		for ( int i = 0; i < corr_data.length; )
 //			}
 //		}
 			
+		System.out.println( "Optimization complete. Generating tile transforms.");
+		
 		ArrayList< TileSpec > out_tiles = new ArrayList< TileSpec >();
 		
 		// Export new transforms, TODO: append to existing tilespec files
@@ -446,14 +448,19 @@ J:		for ( int i = 0; i < corr_data.length; )
 			{
 			case 0:
 				addedTransform.dataString = ((TranslationModel2D) genericModel).toDataString();
+				break;
 			case 1:
 				addedTransform.dataString = ((RigidModel2D) genericModel).toDataString();
+				break;
 			case 2:
 				addedTransform.dataString = ((SimilarityModel2D) genericModel).toDataString();
+				break;
 			case 3:
 				addedTransform.dataString = ((AffineModel2D) genericModel).toDataString();
+				break;
 			case 4:
 				addedTransform.dataString = ((HomographyModel2D) genericModel).toDataString();
+				break;
 			default:
 				addedTransform.dataString = genericModel.toString();
 			}		    
@@ -462,6 +469,8 @@ J:		for ( int i = 0; i < corr_data.length; )
 		    
 		    out_tiles.add(ts);
 		}
+		
+		System.out.println( "Exporting tiles.");
 		
 		try {
 			Writer writer = new FileWriter(params.targetPath);
