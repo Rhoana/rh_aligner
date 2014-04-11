@@ -33,7 +33,7 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
 
 /**
- * 
+ *
  * @author Seymour Knowles-Barley
  */
 public class MatchSiftFeatures
@@ -44,33 +44,27 @@ public class MatchSiftFeatures
 		@Parameter( names = "--help", description = "Display this note", help = true )
         private final boolean help = false;
 
-        @Parameter( names = "--featurefile1", description = "First feature file", required = true )
-        private String featurefile1;
-        
-        @Parameter( names = "--featurefile2", description = "Second feature file", required = true )
-        private String featurefile2;
-        
+        @Parameter( names = "--featurefile", description = "Feature file", required = true )
+        private String featurefile;
+
         @Parameter( names = "--targetPath", description = "Path for the output correspondences", required = true )
         public String targetPath;
-        
-        @Parameter( names = "--index1", description = "Image index within first feature file", required = false )
-        public int index1 = 0;
-        
-        @Parameter( names = "--index2", description = "Image index within second feature file", required = false )
-        public int index2 = 0;
-                
+
+        @Parameter( names = "--indices", description = "Pair of indices within feature file, comma separated", required = true )
+        public List<String> indices = new ArrayList<String>();
+
         @Parameter( names = "--threads", description = "Number of threads to be used", required = false )
         public int numThreads = Runtime.getRuntime().availableProcessors();
-        
+
         @Parameter( names = "--rod", description = "ROD", required = false )
         public float rod = 0.92f;
 	}
-	
+
 	private MatchSiftFeatures() {}
-	
+
 	public static void main( final String[] args )
 	{
-		
+
 		final Params params = new Params();
 		try
         {
@@ -86,7 +80,7 @@ public class MatchSiftFeatures
         	e.printStackTrace();
             final JCommander jc = new JCommander( params );
         	jc.setProgramName( "java [-options] -cp render.jar org.janelia.alignment.RenderTile" );
-        	jc.usage(); 
+        	jc.usage();
         	return;
         }
 
@@ -96,13 +90,11 @@ public class MatchSiftFeatures
 		int mipmapLevel = 0;
 
 		/* open featurespec */
-		final FeatureSpec[] featureSpecs1;
-		final FeatureSpec[] featureSpecs2;
+		final FeatureSpec[] featureSpecs;
 		try
 		{
 			final Gson gson = new Gson();
-			featureSpecs1 = gson.fromJson( new FileReader( params.featurefile1 ), FeatureSpec[].class );
-			featureSpecs2 = gson.fromJson( new FileReader( params.featurefile2 ), FeatureSpec[].class );
+			featureSpecs = gson.fromJson( new FileReader( params.featurefile ), FeatureSpec[].class );
 		}
 		catch ( final JsonSyntaxException e )
 		{
@@ -116,20 +108,27 @@ public class MatchSiftFeatures
 			return;
 		}
 
-		final List< Feature > fs1 = featureSpecs1[ params.index1 ].getMipmapImageAndFeatures(mipmapLevel).featureList;
-		final List< Feature > fs2 = featureSpecs2[ params.index2 ].getMipmapImageAndFeatures(mipmapLevel).featureList;
-		
-		final List< PointMatch > candidates = new ArrayList< PointMatch >();
-		FeatureTransform.matchFeatures( fs1, fs2, candidates, params.rod );
-		
 		List< CorrespondenceSpec > corr_data = new ArrayList< CorrespondenceSpec >();
-		
-		corr_data.add(new CorrespondenceSpec(
-				mipmapLevel,
-				featureSpecs1[ params.index1 ].getMipmapImageAndFeatures(mipmapLevel).imageUrl,
-				featureSpecs2[ params.index2 ].getMipmapImageAndFeatures(mipmapLevel).imageUrl,
-				candidates));
-					
+
+                for (String idx_pair : params.indices) {
+                    String[] vals = idx_pair.split(":");
+                    if (vals.length != 2)
+                        throw new IllegalArgumentException("Index pair not in correct format:" + idx_pair);
+                    int idx1 = Integer.parseInt(vals[0]);
+                    int idx2 = Integer.parseInt(vals[1]);
+
+                    final List< Feature > fs1 = featureSpecs[idx1].getMipmapImageAndFeatures(mipmapLevel).featureList;
+                    final List< Feature > fs2 = featureSpecs[idx2].getMipmapImageAndFeatures(mipmapLevel).featureList;
+
+                    final List< PointMatch > candidates = new ArrayList< PointMatch >();
+                    FeatureTransform.matchFeatures( fs1, fs2, candidates, params.rod );
+
+                    corr_data.add(new CorrespondenceSpec(mipmapLevel,
+                                                         featureSpecs[idx1].getMipmapImageAndFeatures(mipmapLevel).imageUrl,
+                                                         featureSpecs[idx2].getMipmapImageAndFeatures(mipmapLevel).imageUrl,
+                                                         candidates));
+                }
+
 		try {
 			Writer writer = new FileWriter(params.targetPath);
 	        //Gson gson = new GsonBuilder().create();
