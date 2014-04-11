@@ -6,6 +6,7 @@ import json
 import re
 import tifffile # fast peeking at tiff sizes
 from decimal import *
+import urlparse, urllib
 
 
 def path2url(path):
@@ -38,7 +39,11 @@ def write_tilespec(subdir, output_json_fname):
                 image_size = tiffinfo.pages[0].shape
         coords = extract_coords(image_file, image_size)
         tilespec = {
-            "imageUrl" : path2url(os.path.abspath(image_file)),
+            "mipmapLevels" : {
+                "0" : {
+                    "imageUrl" : path2url(os.path.abspath(image_file)),
+                    }
+                },
             "minIntensity" : 0.0,
             "maxIntensity" : 255.0,
             "transforms" : [{
