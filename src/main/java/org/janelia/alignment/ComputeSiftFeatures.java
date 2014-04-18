@@ -55,7 +55,7 @@ public class ComputeSiftFeatures
         private int index = 0;
 
         @Parameter( names = "--all", description = "Compute for all tiles", required = false )
-        private boolean all_tiles = false;
+        private boolean all_tiles = true;
         
         @Parameter( names = "--targetPath", description = "Path to the target image if any", required = true )
         public String targetPath = null;
@@ -135,37 +135,37 @@ public class ComputeSiftFeatures
 		int mipmapLevel = 0;
 
 		int start_index = params.all_tiles ? 0 : params.index;
-                int end_index = params.all_tiles ? tileSpecs.length : params.index + 1;
-                
-                for (int idx = start_index; idx < end_index; idx = idx + 1) {
-                    TileSpec ts = tileSpecs[idx];
-		
-                    /* load image TODO use Bioformats for strange formats */
-                    String imageUrl = ts.getMipmapLevels().get("" + mipmapLevel).imageUrl;
-                    final ImagePlus imp = Utils.openImagePlus( imageUrl.replaceFirst("file://", "").replaceFirst("file:/", "") );
-                    if ( imp == null )
-			System.err.println( "Failed to load image '" + imageUrl + "'." );
-                    else
-                        {
-                            /* calculate sift features for the image or sub-region */
-                            System.out.println( "Calculating SIFT features for image '" + imageUrl + "'." );
-                            FloatArray2DSIFT.Param siftParam = new FloatArray2DSIFT.Param();			
-                            FloatArray2DSIFT sift = new FloatArray2DSIFT(siftParam);
-                            SIFT ijSIFT = new SIFT(sift);
-					
-                            final List< Feature > fs = new ArrayList< Feature >();
-                            ijSIFT.extractFeatures( imp.getProcessor(), fs );
-			
-                            feature_data.add(new FeatureSpec("" + mipmapLevel, imageUrl, fs));
-                        }
+		int end_index = params.all_tiles ? tileSpecs.length : params.index + 1;
+
+		for (int idx = start_index; idx < end_index; idx = idx + 1) {
+			TileSpec ts = tileSpecs[idx];
+
+			/* load image TODO use Bioformats for strange formats */
+			String imageUrl = ts.getMipmapLevels().get( String.valueOf( mipmapLevel ) ).imageUrl;
+			final ImagePlus imp = Utils.openImagePlus( imageUrl.replaceFirst("file://", "").replaceFirst("file:/", "") );
+			if ( imp == null )
+				System.err.println( "Failed to load image '" + imageUrl + "'." );
+			else
+			{
+				/* calculate sift features for the image or sub-region */
+				System.out.println( "Calculating SIFT features for image '" + imageUrl + "'." );
+				FloatArray2DSIFT.Param siftParam = new FloatArray2DSIFT.Param();			
+				FloatArray2DSIFT sift = new FloatArray2DSIFT(siftParam);
+				SIFT ijSIFT = new SIFT(sift);
+
+				final List< Feature > fs = new ArrayList< Feature >();
+				ijSIFT.extractFeatures( imp.getProcessor(), fs );
+
+				feature_data.add(new FeatureSpec( String.valueOf( mipmapLevel ), imageUrl, fs ));
+			}
 		}
 		try {
 			Writer writer = new FileWriter(params.targetPath);
-	        //Gson gson = new GsonBuilder().create();
-	        Gson gson = new GsonBuilder().setPrettyPrinting().create();
-	        gson.toJson(feature_data, writer);
-	        writer.close();
-	    }
+			//Gson gson = new GsonBuilder().create();
+			Gson gson = new GsonBuilder().setPrettyPrinting().create();
+			gson.toJson(feature_data, writer);
+			writer.close();
+		}
 		catch ( final IOException e )
 		{
 			System.err.println( "Error writing JSON file: " + params.targetPath );

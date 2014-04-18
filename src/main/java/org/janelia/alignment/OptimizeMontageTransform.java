@@ -176,7 +176,7 @@ public class OptimizeMontageTransform
 		
 		for (TileSpec ts : tileSpecs)
 		{
-			String imageUrl = ts.getMipmapLevels().get("" + mipmapLevel).imageUrl;
+			String imageUrl = ts.getMipmapLevels().get( String.valueOf( mipmapLevel ) ).imageUrl;
 			tileSpecMap.put(imageUrl, ts);
 		}
 		
@@ -298,7 +298,7 @@ public class OptimizeMontageTransform
 		    {
 		    	System.out.println("Warning: Could not find input tilespec for image " + tileUrl + ". Generating new tilespec.");
 		    	ts = new TileSpec();
-		    	ts.setMipmapLevelImageUrl("" + mipmapLevel, tileUrl);
+		    	ts.setMipmapLevelImageUrl( String.valueOf( mipmapLevel ), tileUrl);
 		    }
 		    
 		    @SuppressWarnings("rawtypes")

@@ -54,7 +54,7 @@ public class FeatureSpec
 		
 	final public ImageAndFeatures getMipmapImageAndFeatures(int mipmapLevel)
 	{
-		return mipmapLevels.get("" + mipmapLevel);
+		return mipmapLevels.get( String.valueOf( mipmapLevel ) );
 	}
 
 }

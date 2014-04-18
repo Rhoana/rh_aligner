@@ -22,9 +22,13 @@ import java.io.Writer;
 import java.io.FileWriter;
 import java.util.ArrayList;
 import java.util.List;
+
+import org.janelia.alignment.FeatureSpec.ImageAndFeatures;
+
 import mpicbg.models.PointMatch;
 import mpicbg.imagefeatures.Feature;
 import mpicbg.ij.FeatureTransform;
+
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import com.beust.jcommander.Parameters;
@@ -50,14 +54,14 @@ public class MatchSiftFeatures
         @Parameter( names = "--targetPath", description = "Path for the output correspondences", required = true )
         public String targetPath;
 
-        @Parameter( names = "--indices", description = "Pair of indices within feature file, comma separated", required = true )
+        @Parameter( names = "--indices", description = "Pair of indices within feature file, comma separated (each pair is separated by a colon)", required = true )
         public List<String> indices = new ArrayList<String>();
 
         @Parameter( names = "--threads", description = "Number of threads to be used", required = false )
         public int numThreads = Runtime.getRuntime().availableProcessors();
 
         @Parameter( names = "--rod", description = "ROD", required = false )
-        public float rod = 0.92f;
+        public float rod = 0.5f;
 	}
 
 	private MatchSiftFeatures() {}
@@ -94,7 +98,7 @@ public class MatchSiftFeatures
 		try
 		{
 			final Gson gson = new Gson();
-			featureSpecs = gson.fromJson( new FileReader( params.featurefile ), FeatureSpec[].class );
+			featureSpecs = gson.fromJson( new FileReader( params.featurefile.replace("file://", "").replace("file:/", "") ), FeatureSpec[].class );
 		}
 		catch ( final JsonSyntaxException e )
 		{
@@ -110,36 +114,41 @@ public class MatchSiftFeatures
 
 		List< CorrespondenceSpec > corr_data = new ArrayList< CorrespondenceSpec >();
 
-                for (String idx_pair : params.indices) {
-                    String[] vals = idx_pair.split(":");
-                    if (vals.length != 2)
-                        throw new IllegalArgumentException("Index pair not in correct format:" + idx_pair);
-                    int idx1 = Integer.parseInt(vals[0]);
-                    int idx2 = Integer.parseInt(vals[1]);
+		for (String idx_pair : params.indices) {
+			String[] vals = idx_pair.split(":");
+			if (vals.length != 2)
+				throw new IllegalArgumentException("Index pair not in correct format:" + idx_pair);
+			int idx1 = Integer.parseInt(vals[0]);
+			int idx2 = Integer.parseInt(vals[1]);
+			
+			final ImageAndFeatures iaf1 = featureSpecs[idx1].getMipmapImageAndFeatures( mipmapLevel );
+			final ImageAndFeatures iaf2 = featureSpecs[idx2].getMipmapImageAndFeatures( mipmapLevel );
 
-                    final List< Feature > fs1 = featureSpecs[idx1].getMipmapImageAndFeatures(mipmapLevel).featureList;
-                    final List< Feature > fs2 = featureSpecs[idx2].getMipmapImageAndFeatures(mipmapLevel).featureList;
+			final List< Feature > fs1 = iaf1.featureList;
+			final List< Feature > fs2 = iaf2.featureList;
 
-                    final List< PointMatch > candidates = new ArrayList< PointMatch >();
-                    FeatureTransform.matchFeatures( fs1, fs2, candidates, params.rod );
+			final List< PointMatch > candidates = new ArrayList< PointMatch >();
+			FeatureTransform.matchFeatures( fs1, fs2, candidates, params.rod );
 
-                    corr_data.add(new CorrespondenceSpec(mipmapLevel,
-                                                         featureSpecs[idx1].getMipmapImageAndFeatures(mipmapLevel).imageUrl,
-                                                         featureSpecs[idx2].getMipmapImageAndFeatures(mipmapLevel).imageUrl,
-                                                         candidates));
-                }
+			corr_data.add(new CorrespondenceSpec(mipmapLevel,
+					iaf1.imageUrl,
+					iaf2.imageUrl,
+					candidates));
+		}
 
-		try {
-			Writer writer = new FileWriter(params.targetPath);
-	        //Gson gson = new GsonBuilder().create();
-	        Gson gson = new GsonBuilder().setPrettyPrinting().create();
-	        gson.toJson(corr_data, writer);
-	        writer.close();
-	    }
-		catch ( final IOException e )
-		{
-			System.err.println( "Error writing JSON file: " + params.targetPath );
-			e.printStackTrace( System.err );
+		if (corr_data.size() > 0) {
+			try {
+				Writer writer = new FileWriter(params.targetPath);
+				//Gson gson = new GsonBuilder().create();
+				Gson gson = new GsonBuilder().setPrettyPrinting().create();
+				gson.toJson(corr_data, writer);
+				writer.close();
+			}
+			catch ( final IOException e )
+			{
+				System.err.println( "Error writing JSON file: " + params.targetPath );
+				e.printStackTrace( System.err );
+			}
 		}
 	}
 }
