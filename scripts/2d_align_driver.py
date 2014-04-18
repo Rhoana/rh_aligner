@@ -61,7 +61,7 @@ match_json = os.path.join(args.workspace_dir, "{0}_sift_matches.json".format(til
 match_sift_features(filter_json, sifts_json, match_json, args.jar_file)
 
 # optimize the 2d layer montage
-#optmon_fname = os.path.join(args.workspace_dir, "{0}_optimized_montage.json".format(tiles_fname_prefix))
-#optimize_montage_transform(match_json, filter_json, optmon_fname, args.jar_file)
+optmon_fname = os.path.join(args.workspace_dir, "{0}_optimized_montage.json".format(tiles_fname_prefix))
+optimize_montage_transform(match_json, filter_json, optmon_fname, args.jar_file)
 
 

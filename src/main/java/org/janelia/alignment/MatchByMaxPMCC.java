@@ -75,25 +75,25 @@ public class MatchByMaxPMCC
         public int index2 = 0;
         
         @Parameter( names = "--layerScale", description = "Layer scale", required = false )
-        public float layerScale = 0.2f;
+        public float layerScale = 0.5f;
         
         @Parameter( names = "--searchRadius", description = "Search window radius", required = false )
-        public int searchRadius = 200;
+        public int searchRadius = 20;
         
         @Parameter( names = "--blockRadius", description = "Matching block radius", required = false )
-        public int blockRadius = 200;
+        public int blockRadius = 50;
                 
         @Parameter( names = "--resolutionSpringMesh", description = "resolutionSpringMesh", required = false )
-        public int resolutionSpringMesh = 32;
+        public int resolutionSpringMesh = 64;
         
         @Parameter( names = "--minR", description = "minR", required = false )
         public float minR = 0.5f;
         
         @Parameter( names = "--maxCurvatureR", description = "maxCurvatureR", required = false )
-        public float maxCurvatureR = 10f;
+        public float maxCurvatureR = 100f;
         
         @Parameter( names = "--rodR", description = "rodR", required = false )
-        public float rodR = 0.9f;
+        public float rodR = 1.0f;
         
         @Parameter( names = "--useLocalSmoothnessFilter", description = "useLocalSmoothnessFilter", required = false )
         public boolean useLocalSmoothnessFilter = true;
@@ -196,11 +196,11 @@ public class MatchByMaxPMCC
 		/* load image TODO use Bioformats for strange formats */
 		final String imageUrl1 = ts1.getMipmapLevels().get("" + mipmapLevel).imageUrl;
 		final String imageUrl2 = ts2.getMipmapLevels().get("" + mipmapLevel).imageUrl;
-		final ImagePlus imp1 = Utils.openImagePlus( imageUrl1.replaceFirst("file:///", "").replaceFirst("file://", "").replaceFirst("file:/", "") );
-		final ImagePlus imp2 = Utils.openImagePlus( imageUrl2.replaceFirst("file:///", "").replaceFirst("file://", "").replaceFirst("file:/", "") );
+		final ImagePlus imp1 = Utils.openImagePlus( imageUrl1.replaceFirst("file://", "").replaceFirst("file:/", "") );
+		final ImagePlus imp2 = Utils.openImagePlus( imageUrl2.replaceFirst("file://", "").replaceFirst("file:/", "") );
 
-		final SpringMesh m1 = Utils.getMesh( imp1.getWidth(), imp1.getHeight(), params.layerScale, params.resolutionSpringMesh, params.stiffnessSpringMesh, params.dampSpringMesh, params.maxStretchSpringMesh );
-		final SpringMesh m2 = Utils.getMesh( imp2.getWidth(), imp2.getHeight(), params.layerScale, params.resolutionSpringMesh, params.stiffnessSpringMesh, params.dampSpringMesh, params.maxStretchSpringMesh );
+		final SpringMesh m1 = Utils.getMesh( imp1.getWidth(), imp1.getHeight(), 1.0f, params.resolutionSpringMesh, params.stiffnessSpringMesh, params.dampSpringMesh, params.maxStretchSpringMesh );
+		final SpringMesh m2 = Utils.getMesh( imp2.getWidth(), imp2.getHeight(), 1.0f, params.resolutionSpringMesh, params.stiffnessSpringMesh, params.dampSpringMesh, params.maxStretchSpringMesh );
 
 		final ArrayList< Vertex > v1 = m1.getVertices();
 		final ArrayList< Vertex > v2 = m2.getVertices();
@@ -228,8 +228,8 @@ public class MatchByMaxPMCC
 					ip2,
 					null, //mask1
 					null, //mask2
-					1.0f, //Math.min( 1.0f, ( float )params.maxImageSize / ip1.getWidth() ),
-					transform12,
+					params.layerScale, //Math.min( 1.0f, ( float )params.maxImageSize / ip1.getWidth() ),
+					transform12.createInverse(),
 					blockRadius,
 					blockRadius,
 					searchRadius,
@@ -265,8 +265,8 @@ public class MatchByMaxPMCC
 				ip1,
 				null, //mask2
 				null, //mask1
-				1.0f, //Math.min( 1.0f, ( float )p.maxImageSize / ip2.getWidth() ),
-				transform12.createInverse(),
+				params.layerScale, //Math.min( 1.0f, ( float )p.maxImageSize / ip2.getWidth() ),
+				transform12,
 				blockRadius,
 				blockRadius,
 				searchRadius,
