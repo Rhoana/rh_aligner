@@ -98,8 +98,8 @@ for tile_full_path in tile_order:
             "dataString" : "{0} {1}".format(raw_coords[0], raw_coords[1])
         }],
         # BoundingBox in the format "from_x to_x from_y to_y" (left right top bottom)
-        "boundingBox" : "{0} {1} {2} {3}".format(raw_coords[0], raw_coords[0] + tile_width,
-            raw_coords[1], raw_coords[1] + tile_height)
+        "bbox" : [raw_coords[0], raw_coords[0] + tile_width,
+            raw_coords[1], raw_coords[1] + tile_height]
     }
 
     export.append(tilespec)

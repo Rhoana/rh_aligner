@@ -24,7 +24,7 @@ def filename_decimal_key(path):
 def find_image_files(subdir):
     return glob.glob(os.path.join(subdir, 'Tile_r*-c*.tif'))
 
-def write_tilespec(subdir, output_json_fname):
+def write_tilespec(subdir, output_json_fname, layer):
     '''Writes the tilespec for a single directory (aka, section)'''
     tilespecs = []
     image_size = None
@@ -51,6 +51,7 @@ def write_tilespec(subdir, output_json_fname):
                     # x, y offset of upper right corner
                     "data" : "{0} {1}".format(coords[0], coords[1])
                     }],
+            "layer" : layer,
             # BoundingBox in the format "from_x to_x from_y to_y" (left right top bottom)
             "bbox" : [coords[0], coords[0] + image_size[1],
                       coords[1], coords[1] + image_size[0]]
@@ -72,4 +73,5 @@ if __name__ == '__main__':
     for sub_folder in glob.glob(os.path.join(input_folder, 'Sec*')):
         if os.path.isdir(sub_folder):
             output_path = os.path.join(input_folder, os.path.basename(sub_folder) + '.json')
-            write_tilespec(sub_folder, output_path)
+            layer = int(sub_folder.split("Sec")[1])
+            write_tilespec(sub_folder, output_path, layer)

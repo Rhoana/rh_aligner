@@ -45,6 +45,7 @@ public class TileSpec
 	public int height = -1;
 	public double minIntensity = 0;
 	public double maxIntensity = 255;
+	public int layer = -1;
 	// bounding box after transformations are applied [left, right, top, bottom] possibly with extra entries for [front, back, etc.]
 	public float[] bbox = null;
 	public Transform[] transforms = null;

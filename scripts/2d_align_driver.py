@@ -45,25 +45,23 @@ print args
 if not os.path.exists(args.workspace_dir):
 	os.makedirs(args.workspace_dir)
 
+tiles_fname_prefix = os.path.splitext(os.path.basename(args.tiles_fname))[0]
+
 # filter the tiles to the requested bounding box
-filter_dir = os.path.join(args.workspace_dir, "filterd")
-filter_tiles(args.tiles_fname, filter_dir, args.bounding_box)
+filter_json = os.path.join(args.workspace_dir, "{0}_filterd.json".format(tiles_fname_prefix))
+filter_tiles(args.tiles_fname, filter_json, args.bounding_box)
 
 
 # create the sift features of these tiles
-sift_dir = os.path.join(args.workspace_dir, "sifts")
-create_sift_features(filter_dir, sift_dir, args.jar_file)
+sifts_json = os.path.join(args.workspace_dir, "{0}_sifts.json".format(tiles_fname_prefix))
+create_sift_features(filter_json, sifts_json, args.jar_file)
 
 # match the features of overlapping tiles
-match_dir = os.path.join(args.workspace_dir, "sift_matches")
-match_sift_features(filter_dir, sift_dir, match_dir, args.jar_file)
-
-# concatenate all corresponding points to a single file
-correspondent_fname = os.path.join(args.workspace_dir, "all_correspondent.json")
-json_concat(match_dir, correspondent_fname)
+match_json = os.path.join(args.workspace_dir, "{0}_sift_matches.json".format(tiles_fname_prefix))
+match_sift_features(filter_json, sifts_json, match_json, args.jar_file)
 
 # optimize the 2d layer montage
-optmon_fname = os.path.join(args.workspace_dir, "optimized_montage.json")
-optimize_montage_transform(correspondent_fname, optmon_fname, args.jar_file)
+#optmon_fname = os.path.join(args.workspace_dir, "{0}_optimized_montage.json".format(tiles_fname_prefix))
+#optimize_montage_transform(match_json, filter_json, optmon_fname, args.jar_file)
 
 
