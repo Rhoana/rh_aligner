@@ -49,9 +49,11 @@ def write_tilespec(subdir, output_json_fname, layer):
             "transforms" : [{
                     "className" : "mpicbg.trakem2.transform.TranslationModel2D",
                     # x, y offset of upper right corner
-                    "data" : "{0} {1}".format(coords[0], coords[1])
+                    "dataString" : "{0} {1}".format(float(coords[0]), float(coords[1]))
                     }],
             "layer" : layer,
+            "width" : image_size[1],
+            "height" : image_size[0],
             # BoundingBox in the format "from_x to_x from_y to_y" (left right top bottom)
             "bbox" : [coords[0], coords[0] + image_size[1],
                       coords[1], coords[1] + image_size[0]]
