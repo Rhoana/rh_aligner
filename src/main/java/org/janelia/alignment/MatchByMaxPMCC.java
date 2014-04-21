@@ -18,6 +18,7 @@ package org.janelia.alignment;
 
 import ij.ImagePlus;
 import ij.process.FloatProcessor;
+
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Writer;
@@ -26,6 +27,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
+
 import mpicbg.models.AbstractModel;
 import mpicbg.models.CoordinateTransform;
 import mpicbg.models.CoordinateTransformList;
@@ -59,20 +61,14 @@ public class MatchByMaxPMCC
 		@Parameter( names = "--help", description = "Display this note", help = true )
         private final boolean help = false;
 
-        @Parameter( names = "--inputfile1", description = "First image or tilespec file", required = true )
-        private String inputfile1;
-        
-        @Parameter( names = "--inputfile2", description = "Second image or tilespec file", required = true )
-        private String inputfile2;
+        @Parameter( names = "--inputfile", description = "Tilespec file", required = true )
+        private String inputfile;
         
         @Parameter( names = "--targetPath", description = "Path for the output correspondences", required = true )
         public String targetPath;
         
-        @Parameter( names = "--index1", description = "Image index within first tilespec file", required = false )
-        public int index1 = 0;
-        
-        @Parameter( names = "--index2", description = "Image index within second tilespec file", required = false )
-        public int index2 = 0;
+        @Parameter( names = "--indices", description = "Pair of indices within feature file, comma separated (each pair is separated by a colon)", required = true )
+        public List<String> indices = new ArrayList<String>();
         
         @Parameter( names = "--layerScale", description = "Layer scale", required = false )
         public float layerScale = 0.5f;
@@ -96,7 +92,7 @@ public class MatchByMaxPMCC
         public float rodR = 1.0f;
         
         @Parameter( names = "--useLocalSmoothnessFilter", description = "useLocalSmoothnessFilter", required = false )
-        public boolean useLocalSmoothnessFilter = true;
+        public boolean useLocalSmoothnessFilter = false;
         
         @Parameter( names = "--localModelIndex", description = "localModelIndex", required = false )
         public int localModelIndex = 1;
@@ -154,15 +150,12 @@ public class MatchByMaxPMCC
         }
 		
 		/* open tilespec1 */
-		final TileSpec[] tileSpecs1;
-		final TileSpec[] tileSpecs2;
+		final TileSpec[] tileSpecs;
 		try
 		{
 			final Gson gson = new Gson();
-			URL url = new URL( params.inputfile1 );
-			tileSpecs1 = gson.fromJson( new InputStreamReader( url.openStream() ), TileSpec[].class );
-			url = new URL( params.inputfile2 );
-			tileSpecs2 = gson.fromJson( new InputStreamReader( url.openStream() ), TileSpec[].class );
+			URL url = new URL( params.inputfile );
+			tileSpecs = gson.fromJson( new InputStreamReader( url.openStream() ), TileSpec[].class );
 		}
 		catch ( final MalformedURLException e )
 		{
@@ -186,50 +179,96 @@ public class MatchByMaxPMCC
 		// TODO: Should be a parameter from the user,
 		//       and decide whether or not to create the mipmaps if they are missing
 		int mipmapLevel = 0;
-						
-		TileSpec ts1 = tileSpecs1[params.index1];
-		TileSpec ts2 = tileSpecs2[params.index2];
+
+		List< CorrespondenceSpec > corr_data = new ArrayList< CorrespondenceSpec >();
+
+		for (String idx_pair : params.indices) {
+			String[] vals = idx_pair.split(":");
+			if (vals.length != 2)
+				throw new IllegalArgumentException("Index pair not in correct format:" + idx_pair);
+			int idx1 = Integer.parseInt(vals[0]);
+			int idx2 = Integer.parseInt(vals[1]);
+
+			TileSpec ts1 = tileSpecs[idx1];
+			TileSpec ts2 = tileSpecs[idx2];
 		
-		final ArrayList< PointMatch > pm12 = new ArrayList< PointMatch >();
-		final ArrayList< PointMatch > pm21 = new ArrayList< PointMatch >();
-
-		/* load image TODO use Bioformats for strange formats */
-		final String imageUrl1 = ts1.getMipmapLevels().get("" + mipmapLevel).imageUrl;
-		final String imageUrl2 = ts2.getMipmapLevels().get("" + mipmapLevel).imageUrl;
-		final ImagePlus imp1 = Utils.openImagePlus( imageUrl1.replaceFirst("file://", "").replaceFirst("file:/", "") );
-		final ImagePlus imp2 = Utils.openImagePlus( imageUrl2.replaceFirst("file://", "").replaceFirst("file:/", "") );
-
-		final SpringMesh m1 = Utils.getMesh( imp1.getWidth(), imp1.getHeight(), 1.0f, params.resolutionSpringMesh, params.stiffnessSpringMesh, params.dampSpringMesh, params.maxStretchSpringMesh );
-		final SpringMesh m2 = Utils.getMesh( imp2.getWidth(), imp2.getHeight(), 1.0f, params.resolutionSpringMesh, params.stiffnessSpringMesh, params.dampSpringMesh, params.maxStretchSpringMesh );
-
-		final ArrayList< Vertex > v1 = m1.getVertices();
-		final ArrayList< Vertex > v2 = m2.getVertices();
-
-		final CoordinateTransformList< CoordinateTransform > ctl1 = ts1.createTransformList();
-		final CoordinateTransformList< CoordinateTransform > ctl2 = ts2.createTransformList();
-				
-		/* TODO: masks? */
-		/* calculate block matches */
-
-		final AbstractModel< ? > localSmoothnessFilterModel = Utils.createModel( params.localModelIndex );
-
-		final FloatProcessor ip1 = ( FloatProcessor )imp1.getProcessor().convertToFloat().duplicate();
-		final FloatProcessor ip2 = ( FloatProcessor )imp2.getProcessor().convertToFloat().duplicate();
-		
-		final int blockRadius = Math.max( 16, mpicbg.util.Util.roundPos( params.layerScale * params.blockRadius ) );
-        final int searchRadius = Math.round( params.layerScale * params.searchRadius );
-
-		final TranslationModel2D transform12 = (( TranslationModel2D )ctl1.get(0)).createInverse();
-		transform12.concatenate( (( TranslationModel2D )( Object )ctl2.get(0)) );
-		
-		try{
+			final ArrayList< PointMatch > pm12 = new ArrayList< PointMatch >();
+			final ArrayList< PointMatch > pm21 = new ArrayList< PointMatch >();
+	
+			/* load image TODO use Bioformats for strange formats */
+			final String imageUrl1 = ts1.getMipmapLevels().get( String.valueOf( mipmapLevel ) ).imageUrl;
+			final String imageUrl2 = ts2.getMipmapLevels().get( String.valueOf( mipmapLevel ) ).imageUrl;
+			final ImagePlus imp1 = Utils.openImagePlus( imageUrl1.replaceFirst("file://", "").replaceFirst("file:/", "") );
+			final ImagePlus imp2 = Utils.openImagePlus( imageUrl2.replaceFirst("file://", "").replaceFirst("file:/", "") );
+	
+			final SpringMesh m1 = Utils.getMesh( imp1.getWidth(), imp1.getHeight(), 1.0f, params.resolutionSpringMesh, params.stiffnessSpringMesh, params.dampSpringMesh, params.maxStretchSpringMesh );
+			final SpringMesh m2 = Utils.getMesh( imp2.getWidth(), imp2.getHeight(), 1.0f, params.resolutionSpringMesh, params.stiffnessSpringMesh, params.dampSpringMesh, params.maxStretchSpringMesh );
+	
+			final ArrayList< Vertex > v1 = m1.getVertices();
+			final ArrayList< Vertex > v2 = m2.getVertices();
+	
+			final CoordinateTransformList< CoordinateTransform > ctl1 = ts1.createTransformList();
+			final CoordinateTransformList< CoordinateTransform > ctl2 = ts2.createTransformList();
+					
+			/* TODO: masks? */
+			/* calculate block matches */
+	
+			final AbstractModel< ? > localSmoothnessFilterModel = Utils.createModel( params.localModelIndex );
+	
+			final FloatProcessor ip1 = ( FloatProcessor )imp1.getProcessor().convertToFloat().duplicate();
+			final FloatProcessor ip2 = ( FloatProcessor )imp2.getProcessor().convertToFloat().duplicate();
+			
+			final int blockRadius = Math.max( 16, mpicbg.util.Util.roundPos( params.layerScale * params.blockRadius ) );
+	        final int searchRadius = Math.round( params.layerScale * params.searchRadius );
+	
+			final TranslationModel2D transform12 = (( TranslationModel2D )ctl1.get(0)).createInverse();
+			transform12.concatenate( (( TranslationModel2D )( Object )ctl2.get(0)) );
+			
+			try{
+				BlockMatching.matchByMaximalPMCC(
+						ip1,
+						ip2,
+						null, //mask1
+						null, //mask2
+						params.layerScale, //Math.min( 1.0f, ( float )params.maxImageSize / ip1.getWidth() ),
+						transform12.createInverse(),
+						blockRadius,
+						blockRadius,
+						searchRadius,
+						searchRadius,
+						params.minR,
+						params.rodR,
+						params.maxCurvatureR,
+						v1,
+						pm12,
+						new ErrorStatistic( 1 ) );
+			}
+			catch ( final Exception e )
+			{
+				e.printStackTrace( System.err );
+				return;
+			}
+	
+			if ( params.useLocalSmoothnessFilter )
+			{
+				System.out.println( imageUrl1 + " > " + imageUrl2 + ": found " + pm12.size() + " correspondence candidates." );
+				localSmoothnessFilterModel.localSmoothnessFilter( pm12, pm12, params.localRegionSigma, params.maxLocalEpsilon, params.maxLocalTrust );
+				System.out.println( imageUrl1 + " > " + imageUrl2 + ": " + pm12.size() + " candidates passed local smoothness filter." );
+			}
+			else
+			{
+				System.out.println( imageUrl1 + " > " + imageUrl2 + ": found " + pm12.size() + " correspondences." );
+			}
+	
+	
+			try{
 			BlockMatching.matchByMaximalPMCC(
-					ip1,
 					ip2,
-					null, //mask1
+					ip1,
 					null, //mask2
-					params.layerScale, //Math.min( 1.0f, ( float )params.maxImageSize / ip1.getWidth() ),
-					transform12.createInverse(),
+					null, //mask1
+					params.layerScale, //Math.min( 1.0f, ( float )p.maxImageSize / ip2.getWidth() ),
+					transform12,
 					blockRadius,
 					blockRadius,
 					searchRadius,
@@ -237,107 +276,75 @@ public class MatchByMaxPMCC
 					params.minR,
 					params.rodR,
 					params.maxCurvatureR,
-					v1,
-					pm12,
+					v2,
+					pm21,
 					new ErrorStatistic( 1 ) );
-		}
-		catch ( final Exception e )
-		{
-			e.printStackTrace( System.err );
-			return;
-		}
-
-		if ( params.useLocalSmoothnessFilter )
-		{
-			System.out.println( imageUrl1 + " > " + imageUrl2 + ": found " + pm12.size() + " correspondence candidates." );
-			localSmoothnessFilterModel.localSmoothnessFilter( pm12, pm12, params.localRegionSigma, params.maxLocalEpsilon, params.maxLocalTrust );
-			System.out.println( imageUrl1 + " > " + imageUrl2 + ": " + pm12.size() + " candidates passed local smoothness filter." );
-		}
-		else
-		{
-			System.out.println( imageUrl1 + " > " + imageUrl2 + ": found " + pm12.size() + " correspondences." );
-		}
-
-
-		try{
-		BlockMatching.matchByMaximalPMCC(
-				ip2,
-				ip1,
-				null, //mask2
-				null, //mask1
-				params.layerScale, //Math.min( 1.0f, ( float )p.maxImageSize / ip2.getWidth() ),
-				transform12,
-				blockRadius,
-				blockRadius,
-				searchRadius,
-				searchRadius,
-				params.minR,
-				params.rodR,
-				params.maxCurvatureR,
-				v2,
-				pm21,
-				new ErrorStatistic( 1 ) );
-		}
-		catch ( final Exception e )
-		{
-			e.printStackTrace( System.err );
-			return;
-		}
-
-
-		if ( params.useLocalSmoothnessFilter )
-		{
-			System.out.println( imageUrl2 + " > " + imageUrl1 + ": found " + pm21.size() + " correspondence candidates." );
-			localSmoothnessFilterModel.localSmoothnessFilter( pm21, pm21, params.localRegionSigma, params.maxLocalEpsilon, params.maxLocalTrust );
-			System.out.println( imageUrl2 + " > " + imageUrl1 + ": " + pm21.size() + " candidates passed local smoothness filter." );
-		}
-		else
-		{
-			System.out.println( imageUrl2 + " > " + imageUrl1 + ": found " + pm21.size() + " correspondences." );
+			}
+			catch ( final Exception e )
+			{
+				e.printStackTrace( System.err );
+				return;
+			}
+	
+	
+			if ( params.useLocalSmoothnessFilter )
+			{
+				System.out.println( imageUrl2 + " > " + imageUrl1 + ": found " + pm21.size() + " correspondence candidates." );
+				localSmoothnessFilterModel.localSmoothnessFilter( pm21, pm21, params.localRegionSigma, params.maxLocalEpsilon, params.maxLocalTrust );
+				System.out.println( imageUrl2 + " > " + imageUrl1 + ": " + pm21.size() + " candidates passed local smoothness filter." );
+			}
+			else
+			{
+				System.out.println( imageUrl2 + " > " + imageUrl1 + ": found " + pm21.size() + " correspondences." );
+			}
+			
+			// Remove Vertex (spring mesh) details from points
+			final ArrayList< PointMatch > pm12_strip = new ArrayList< PointMatch >();
+			final ArrayList< PointMatch > pm21_strip = new ArrayList< PointMatch >();
+			for (PointMatch pm: pm12)
+			{
+				ctl1.applyInPlace(pm.getP1().getW());
+				ctl2.applyInPlace(pm.getP2().getW());
+				pm12_strip.add(new PointMatch(
+						new Point(pm.getP1().getL(), pm.getP1().getW()),
+						new Point(pm.getP2().getL(), pm.getP2().getW())));
+			}
+			for (PointMatch pm: pm21)
+			{
+				ctl1.applyInPlace(pm.getP1().getW());
+				ctl2.applyInPlace(pm.getP2().getW());
+				pm21_strip.add(new PointMatch(
+						new Point(pm.getP1().getL(), pm.getP1().getW()),
+						new Point(pm.getP2().getL(), pm.getP2().getW())));
+			}
+	
+			// TODO: Export / Import master sprint mesh vertices no calculated  individually per tile (v1, v2).
+			corr_data.add(new CorrespondenceSpec(
+					mipmapLevel,
+					imageUrl1,
+					imageUrl2,
+					pm12_strip));
+			
+			corr_data.add(new CorrespondenceSpec(
+					mipmapLevel,
+					imageUrl2,
+					imageUrl1,
+					pm21_strip));
 		}
 		
-		List< CorrespondenceSpec > corr_data = new ArrayList< CorrespondenceSpec >();
-		
-		// Remove Vertex (spring mesh) details from points
-		final ArrayList< PointMatch > pm12_strip = new ArrayList< PointMatch >();
-		final ArrayList< PointMatch > pm21_strip = new ArrayList< PointMatch >();
-		for (PointMatch pm: pm12)
-		{
-			pm12_strip.add(new PointMatch(
-					new Point(pm.getP1().getL(), pm.getP1().getW()),
-					new Point(pm.getP2().getL(), pm.getP2().getW())));
-		}
-		for (PointMatch pm: pm21)
-		{
-			pm21_strip.add(new PointMatch(
-					new Point(pm.getP1().getL(), pm.getP1().getW()),
-					new Point(pm.getP2().getL(), pm.getP2().getW())));
-		}
-
-		// TODO: Export / Import master sprint mesh vertices no calculated  individually per tile (v1, v2).
-		corr_data.add(new CorrespondenceSpec(
-				mipmapLevel,
-				imageUrl1,
-				imageUrl2,
-				pm12_strip));
-		
-		corr_data.add(new CorrespondenceSpec(
-				mipmapLevel,
-				imageUrl2,
-				imageUrl2,
-				pm21_strip));
-					
-		try {
-			Writer writer = new FileWriter(params.targetPath);
-	        //Gson gson = new GsonBuilder().create();
-	        Gson gson = new GsonBuilder().setPrettyPrinting().create();
-	        gson.toJson(corr_data, writer);
-	        writer.close();
-	    }
-		catch ( final IOException e )
-		{
-			System.err.println( "Error writing JSON file: " + params.targetPath );
-			e.printStackTrace( System.err );
+		if ( corr_data.size() > 0 ) {
+			try {
+				Writer writer = new FileWriter(params.targetPath);
+		        //Gson gson = new GsonBuilder().create();
+		        Gson gson = new GsonBuilder().setPrettyPrinting().create();
+		        gson.toJson(corr_data, writer);
+		        writer.close();
+		    }
+			catch ( final IOException e )
+			{
+				System.err.println( "Error writing JSON file: " + params.targetPath );
+				e.printStackTrace( System.err );
+			}
 		}
 	}
 	
