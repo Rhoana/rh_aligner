@@ -38,6 +38,7 @@ import mpicbg.trakem2.transform.AffineModel2D;
 import mpicbg.trakem2.transform.HomographyModel2D;
 import mpicbg.trakem2.transform.RigidModel2D;
 import mpicbg.trakem2.transform.SimilarityModel2D;
+import mpicbg.trakem2.transform.TransformMesh;
 import mpicbg.trakem2.transform.TranslationModel2D;
 
 import com.beust.jcommander.JCommander;
@@ -81,7 +82,10 @@ public class OptimizeMontageTransform
                                 
         @Parameter( names = "--meanFactor", description = "Mean factor", required = false )
         private float meanFactor = 3.0f;
-                        
+
+        @Parameter( names = "--meshResolution", description = "The mesh resolution for the bounding box transformation", required = false )
+        private int meshResolution = 20;
+
         @Parameter( names = "--targetPath", description = "Path for the output correspondences", required = true )
         public String targetPath;
         
@@ -333,6 +337,19 @@ public class OptimizeMontageTransform
 			outTransforms.add(addedTransform);
 			ts.transforms = outTransforms.toArray(ts.transforms);
 		    
+			// Get the bounding box of this tile in the world coordinates
+			if ( ts.width != -1 && ts.height != -1 )
+			{
+				TransformMesh bboxTransform = new TransformMesh( ts.createTransformList(),
+						params.meshResolution, ts.width, ts.height);
+				
+				ts.bbox = new float[] {
+						bboxTransform.getBoundingBox().x,
+						bboxTransform.getBoundingBox().x + bboxTransform.getBoundingBox().width,
+						bboxTransform.getBoundingBox().y,
+						bboxTransform.getBoundingBox().y + bboxTransform.getBoundingBox().height,
+				};
+			}
 		    out_tiles.add(ts);
 		}
 		
