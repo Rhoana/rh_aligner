@@ -229,132 +229,149 @@ public class Render
 			/* obtain available mipmap urls as a sorted map */
 			final TreeMap< String, ImageAndMask > mipmapLevels = ts.getMipmapLevels();
 			
-			ImageAndMask mipmapEntry = null;
-			ImageProcessor ip = null;
-			final int width, height;
-			/* figure width and height */
-			if ( ts.width < 0 || ts.height < 0 )
+			/* If the tilespec has a bounding box, check if there is an overlap between
+			 * the bounding box and the output we wish to render
+			 */
+			boolean relevantTile = true;
+			if ( ts.bbox != null )
 			{
-				mipmapEntry = mipmapLevels.get( "0" );
-				/* load image TODO use Bioformats for strange formats */
-				final String imgUrl = mipmapEntry.imageUrl;
-				final ImagePlus imp = Utils.openImagePlusUrl( imgUrl );
-				if ( imp == null )
-				{
-					System.err.println( "Failed to load image '" + imgUrl + "'." );
-					continue;
-				}
-				ip = imp.getProcessor();
-				width = imp.getWidth();
-				height = imp.getHeight();
-			}
-			else
-			{
-				width = ts.width;
-				height = ts.height;
-			}
-			
-			/* estimate average scale */
-			final double s = Utils.sampleAverageScale( ctl, width, height, triangleSize );
-			int mipmapLevel = Utils.bestMipmapLevel( s );
-			
-			final ImageProcessor ipMipmap;
-			if ( ip == null )
-			{
-				String key = mipmapLevels.floorKey( String.valueOf( mipmapLevel ) );
-				if ( key == null )
-					key = mipmapLevels.firstKey();
+				final double endX = x + targetImage.getWidth();
+				final double endY = y + targetImage.getHeight();
 				
-				/* load image TODO use Bioformats for strange formats */
-				mipmapEntry = mipmapLevels.get( key );
-				final String imgUrl = mipmapEntry.imageUrl;
-				final ImagePlus imp = Utils.openImagePlusUrl( imgUrl );
-				if ( imp == null )
+				if ((x > ts.bbox[1]) || (endX < ts.bbox[0]) ||
+				   (y > ts.bbox[3]) || (endY < ts.bbox[2]))
+					relevantTile = false;
+			}
+			
+			if ( relevantTile )
+			{
+				ImageAndMask mipmapEntry = null;
+				ImageProcessor ip = null;
+				final int width, height;
+				/* figure width and height */
+				if ( ts.width < 0 || ts.height < 0 )
 				{
-					System.err.println( "Failed to load image '" + imgUrl + "'." );
-					continue;
-				}
-				ip = imp.getProcessor();
-				final int currentMipmapLevel = Integer.parseInt( key );
-				if ( currentMipmapLevel >= mipmapLevel )
-				{
-					mipmapLevel = currentMipmapLevel;
-					ipMipmap = ip;
+					mipmapEntry = mipmapLevels.get( "0" );
+					/* load image TODO use Bioformats for strange formats */
+					final String imgUrl = mipmapEntry.imageUrl;
+					final ImagePlus imp = Utils.openImagePlusUrl( imgUrl );
+					if ( imp == null )
+					{
+						System.err.println( "Failed to load image '" + imgUrl + "'." );
+						continue;
+					}
+					ip = imp.getProcessor();
+					width = imp.getWidth();
+					height = imp.getHeight();
 				}
 				else
-					ipMipmap = Downsampler.downsampleImageProcessor( ip, mipmapLevel - currentMipmapLevel );
-			}
-			else
-			{
-				/* create according mipmap level */
-				ipMipmap = Downsampler.downsampleImageProcessor( ip, mipmapLevel );
-			}
-			
-			/* create a target */
-			final ImageProcessor tp = ipMipmap.createProcessor( targetImage.getWidth(), targetImage.getHeight() );
-			
-			/* open mask */
-			final ByteProcessor bpMaskSource;
-			final ByteProcessor bpMaskTarget;
-			final String maskUrl = mipmapEntry.maskUrl;
-			if ( maskUrl != null )
-			{
-				final ImagePlus impMask = Utils.openImagePlusUrl( maskUrl );
-				if ( impMask == null )
 				{
-					System.err.println( "Failed to load mask '" + maskUrl + "'." );
-					bpMaskSource = null;
-					bpMaskTarget = null;
+					width = ts.width;
+					height = ts.height;
+				}
+				
+				/* estimate average scale */
+				final double s = Utils.sampleAverageScale( ctl, width, height, triangleSize );
+				int mipmapLevel = Utils.bestMipmapLevel( s );
+				
+				final ImageProcessor ipMipmap;
+				if ( ip == null )
+				{
+					String key = mipmapLevels.floorKey( String.valueOf( mipmapLevel ) );
+					if ( key == null )
+						key = mipmapLevels.firstKey();
+					
+					/* load image TODO use Bioformats for strange formats */
+					mipmapEntry = mipmapLevels.get( key );
+					final String imgUrl = mipmapEntry.imageUrl;
+					final ImagePlus imp = Utils.openImagePlusUrl( imgUrl );
+					if ( imp == null )
+					{
+						System.err.println( "Failed to load image '" + imgUrl + "'." );
+						continue;
+					}
+					ip = imp.getProcessor();
+					final int currentMipmapLevel = Integer.parseInt( key );
+					if ( currentMipmapLevel >= mipmapLevel )
+					{
+						mipmapLevel = currentMipmapLevel;
+						ipMipmap = ip;
+					}
+					else
+						ipMipmap = Downsampler.downsampleImageProcessor( ip, mipmapLevel - currentMipmapLevel );
 				}
 				else
 				{
 					/* create according mipmap level */
-					bpMaskSource = Downsampler.downsampleByteProcessor( impMask.getProcessor().convertToByteProcessor(), mipmapLevel );
-					bpMaskTarget = new ByteProcessor( tp.getWidth(), tp.getHeight() );
+					ipMipmap = Downsampler.downsampleImageProcessor( ip, mipmapLevel );
 				}
+				
+				/* create a target */
+				final ImageProcessor tp = ipMipmap.createProcessor( targetImage.getWidth(), targetImage.getHeight() );
+				
+				/* open mask */
+				final ByteProcessor bpMaskSource;
+				final ByteProcessor bpMaskTarget;
+				final String maskUrl = mipmapEntry.maskUrl;
+				if ( maskUrl != null )
+				{
+					final ImagePlus impMask = Utils.openImagePlusUrl( maskUrl );
+					if ( impMask == null )
+					{
+						System.err.println( "Failed to load mask '" + maskUrl + "'." );
+						bpMaskSource = null;
+						bpMaskTarget = null;
+					}
+					else
+					{
+						/* create according mipmap level */
+						bpMaskSource = Downsampler.downsampleByteProcessor( impMask.getProcessor().convertToByteProcessor(), mipmapLevel );
+						bpMaskTarget = new ByteProcessor( tp.getWidth(), tp.getHeight() );
+					}
+				}
+				else
+				{
+					bpMaskSource = null;
+					bpMaskTarget = null;
+				}
+				
+				
+				/* attach mipmap transformation */
+				final CoordinateTransformList< CoordinateTransform > ctlMipmap = new CoordinateTransformList< CoordinateTransform >();
+				ctlMipmap.add( Utils.createScaleLevelTransform( mipmapLevel ) );
+				ctlMipmap.add( ctl );
+				
+				/* create mesh */
+				final CoordinateTransformMesh mesh = new CoordinateTransformMesh( ctlMipmap,  ( int )( width / triangleSize + 0.5 ), ipMipmap.getWidth(), ipMipmap.getHeight() );
+				
+				final ImageProcessorWithMasks source = new ImageProcessorWithMasks( ipMipmap, bpMaskSource, null );
+				final ImageProcessorWithMasks target = new ImageProcessorWithMasks( tp, bpMaskTarget, null );
+				final TransformMeshMappingWithMasks< TransformMesh > mapping = new TransformMeshMappingWithMasks< TransformMesh >( mesh );
+				mapping.mapInterpolated( source, target );
+				
+				/* convert to 24bit RGB */
+				tp.setMinAndMax( ts.minIntensity, ts.maxIntensity );
+				final ColorProcessor cp = tp.convertToColorProcessor();
+				
+				final int[] cpPixels = ( int[] )cp.getPixels();
+				final byte[] alphaPixels;
+				
+				
+				/* set alpha channel */
+				if ( bpMaskTarget != null )
+					alphaPixels = ( byte[] )bpMaskTarget.getPixels();
+				else
+					alphaPixels = ( byte[] )target.outside.getPixels();
+	
+				for ( int i = 0; i < cpPixels.length; ++i )
+					cpPixels[ i ] &= 0x00ffffff | ( alphaPixels[ i ] << 24 );
+	
+				final BufferedImage image = new BufferedImage( cp.getWidth(), cp.getHeight(), BufferedImage.TYPE_INT_ARGB );
+				final WritableRaster raster = image.getRaster();
+				raster.setDataElements( 0, 0, cp.getWidth(), cp.getHeight(), cpPixels );
+				
+				targetGraphics.drawImage( image, 0, 0, null );
 			}
-			else
-			{
-				bpMaskSource = null;
-				bpMaskTarget = null;
-			}
-			
-			
-			/* attach mipmap transformation */
-			final CoordinateTransformList< CoordinateTransform > ctlMipmap = new CoordinateTransformList< CoordinateTransform >();
-			ctlMipmap.add( Utils.createScaleLevelTransform( mipmapLevel ) );
-			ctlMipmap.add( ctl );
-			
-			/* create mesh */
-			final CoordinateTransformMesh mesh = new CoordinateTransformMesh( ctlMipmap,  ( int )( width / triangleSize + 0.5 ), ipMipmap.getWidth(), ipMipmap.getHeight() );
-			
-			final ImageProcessorWithMasks source = new ImageProcessorWithMasks( ipMipmap, bpMaskSource, null );
-			final ImageProcessorWithMasks target = new ImageProcessorWithMasks( tp, bpMaskTarget, null );
-			final TransformMeshMappingWithMasks< TransformMesh > mapping = new TransformMeshMappingWithMasks< TransformMesh >( mesh );
-			mapping.mapInterpolated( source, target );
-			
-			/* convert to 24bit RGB */
-			tp.setMinAndMax( ts.minIntensity, ts.maxIntensity );
-			final ColorProcessor cp = tp.convertToColorProcessor();
-			
-			final int[] cpPixels = ( int[] )cp.getPixels();
-			final byte[] alphaPixels;
-			
-			
-			/* set alpha channel */
-			if ( bpMaskTarget != null )
-				alphaPixels = ( byte[] )bpMaskTarget.getPixels();
-			else
-				alphaPixels = ( byte[] )target.outside.getPixels();
-
-			for ( int i = 0; i < cpPixels.length; ++i )
-				cpPixels[ i ] &= 0x00ffffff | ( alphaPixels[ i ] << 24 );
-
-			final BufferedImage image = new BufferedImage( cp.getWidth(), cp.getHeight(), BufferedImage.TYPE_INT_ARGB );
-			final WritableRaster raster = image.getRaster();
-			raster.setDataElements( 0, 0, cp.getWidth(), cp.getHeight(), cpPixels );
-			
-			targetGraphics.drawImage( image, 0, 0, null );
 		}
 	}
 	
