@@ -11,18 +11,16 @@ import os
 import glob
 import argparse
 from subprocess import call
-import urlparse, urllib
+import utils
 
 
-def path2url(path):
-    return urlparse.urljoin('file:', urllib.pathname2url(path))
+def create_sift_features(tiles_fname, out_fname, jar_file, conf=None):
 
-
-def create_sift_features(tiles_fname, out_fname, jar_file):
-
-    tiles_url = path2url(os.path.abspath(tiles_fname))
+    tiles_url = utils.path2url(os.path.abspath(tiles_fname))
+    conf_args = utils.conf_args(conf, 'ComputeSiftFeatures')
     # Compute the Sift features for each tile in the tile spec file
-    java_cmd = 'java -Xmx4g -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.ComputeSiftFeatures --all --url {1} --targetPath {2}'.format(jar_file, tiles_url, out_fname)
+    java_cmd = 'java -Xmx4g -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.ComputeSiftFeatures --all --url {1} --targetPath {2} {3}'.format(\
+        jar_file, tiles_url, out_fname, conf_args)
     print "Executing: {0}".format(java_cmd)
     call(java_cmd, shell=True) # w/o shell=True it seems that the env-vars are not set
 

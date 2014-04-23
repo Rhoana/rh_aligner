@@ -6,17 +6,19 @@ from subprocess import call
 from bounding_box import BoundingBox
 import json
 import itertools
+import utils
 
 # common functions
 
 
 
-def match_multiple_sift_features(tiles_file, features_file, index_pairs, jar, out_fname):
-    java_cmd = 'java -Xmx4g -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.MatchSiftFeatures --featurefile {1} {2} --targetPath {3}'.format(
+def match_multiple_sift_features(tiles_file, features_file, index_pairs, jar, out_fname, conf_args):
+    java_cmd = 'java -Xmx4g -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.MatchSiftFeatures --featurefile {1} {2} --targetPath {3} {4}'.format(
         jar,
         features_file,
         " ".join("--indices {}:{}".format(a, b) for a, b in index_pairs),
-        out_fname)
+        out_fname,
+        conf_args)
     print "Executing: {0}".format(java_cmd)
     call(java_cmd, shell=True) # w/o shell=True it seems that the env-vars are not set
 
@@ -33,7 +35,7 @@ def load_data_files(tile_file, features_file):
     return tilespecs, {ft["mipmapLevels"]["0"]["imageUrl"] : idx for idx, ft in enumerate(features)}
 
 
-def match_sift_features(tiles_file, features_file, out_fname, jar_file):
+def match_sift_features(tiles_file, features_file, out_fname, jar_file, conf=None):
 
     tilespecs, feature_indices = load_data_files(tiles_file, features_file)
     for k, v in feature_indices.iteritems():
@@ -60,7 +62,9 @@ def match_sift_features(tiles_file, features_file, out_fname, jar_file):
             idx2 = feature_indices[imageUrl2]
             indices.append((idx1, idx2))
 
-    match_multiple_sift_features(tiles_file, features_file, indices, jar_file, out_fname)
+    conf_args = utils.conf_args(conf, 'MatchSiftFeatures')
+
+    match_multiple_sift_features(tiles_file, features_file, indices, jar_file, out_fname, conf_args)
 
 def main():
     # Command line parser

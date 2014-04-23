@@ -14,21 +14,15 @@ from subprocess import call
 from bounding_box import BoundingBox
 import json
 import itertools
-import urllib
-import urlparse
-
-# common functions
-
-def path2url(path):
-    return urlparse.urljoin(
-        'file:', urllib.pathname2url(os.path.abspath(path)))
+import utils
 
 
-def match_two_tiles_by_max_pmcc_features(tiles_fname, index_pairs, jar, out_fname):
-    java_cmd = 'java -Xmx6g -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.MatchByMaxPMCC --inputfile {1} {2} --targetPath {3}'.format(\
+def match_two_tiles_by_max_pmcc_features(tiles_fname, index_pairs, jar, out_fname, conf_args):
+    java_cmd = 'java -Xmx6g -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.MatchByMaxPMCC --inputfile {1} {2} --targetPath {3} {4}'.format(\
         jar, tiles_fname,
         " ".join("--indices {}:{}".format(a, b) for a, b in index_pairs),
-        out_fname)
+        out_fname,
+        conf_args)
     print "Executing: {0}".format(java_cmd)
     call(java_cmd, shell=True) # w/o shell=True it seems that the env-vars are not set
 
@@ -49,7 +43,7 @@ def load_entire_data(tile_file):
 
 
 
-def match_by_max_pmcc(tiles_fname, out_fname, jar_file):
+def match_by_max_pmcc(tiles_fname, out_fname, jar_file, conf=None):
 
     tiles = load_entire_data(tiles_fname)
 
@@ -73,7 +67,9 @@ def match_by_max_pmcc(tiles_fname, out_fname, jar_file):
         #else:
         #    print "Tiles: {0} and {1} do not overlap, so no matching is done".format(pair[0], pair[1])
 
-    match_two_tiles_by_max_pmcc_features(tiles_fname, indices, jar_file, out_fname)
+    conf_args = utils.conf_args(conf, 'MatchByMaxPMCC')
+
+    match_two_tiles_by_max_pmcc_features(tiles_fname, indices, jar_file, out_fname, conf_args)
 
 
 def main():

@@ -11,26 +11,17 @@ import os
 import glob
 import argparse
 from subprocess import call
-import urllib
-import urlparse
+import utils
 
 
-# common functions
+def optimize_montage_transform(correspondence_file, tilespec_file, output_file, jar_file, conf=None):
 
-def path2url(path):
-	return urlparse.urljoin(
-		'file:', urllib.pathname2url(os.path.abspath(path)))
-
-
-
-
-def optimize_montage_transform(correspondence_file, tilespec_file, output_file, jar_file):
-
-	corr_url = path2url(correspondence_file)
-	tiles_url = path2url(tilespec_file)
-	java_cmd = 'java -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.OptimizeMontageTransform --inputfile {1} --tilespecfile {2} --targetPath {3}'.format(\
-		jar_file, corr_url, tiles_url, output_file)
-	#print "Executing: {0}".format(java_cmd)
+	corr_url = utils.path2url(correspondence_file)
+	tiles_url = utils.path2url(tilespec_file)
+	conf_args = utils.conf_args(conf, 'OptimizeMontageTransform')
+	java_cmd = 'java -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.OptimizeMontageTransform --inputfile {1} --tilespecfile {2} --targetPath {3} {4}'.format(\
+		jar_file, corr_url, tiles_url, output_file, conf_args)
+	print "Executing: {0}".format(java_cmd)
 	call(java_cmd, shell=True) # w/o shell=True it seems that the env-vars are not set
 
 

@@ -1,0 +1,29 @@
+{
+    "ComputeSiftFeatures" : {
+        "steps" : 3,
+        "minOctaveSize" : 64,
+        "maxOctaveSize" : 1024,
+        "res" : 64
+    },
+    "MatchSiftFeatures" : {
+        "rod" : 0.5
+    },
+    "OptimizeMontageTransform" : {
+        "modelIndex" : 3,
+        "maxIterations" : 2000
+    },
+    "MatchByMaxPMCC" : {
+        "layerScale" : 0.5,
+        "searchRadius" : 20,
+        "blockRadius" : 50
+    },
+    "OptimizeMontageElastic" : {
+        
+    },
+    "OptimizeSeriesTransform" : {
+        
+    },
+    "OptimizeSeriesElastic" : {
+        
+    }
+}
