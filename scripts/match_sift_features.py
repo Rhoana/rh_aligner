@@ -79,10 +79,15 @@ def main():
     parser.add_argument('-j', '--jar_file', type=str,
                         help='the jar file that includes the render (default: ../target/render-0.0.1-SNAPSHOT.jar)',
                         default='../target/render-0.0.1-SNAPSHOT.jar')
+    parser.add_argument('-c', '--conf_file_name', type=str, 
+                        help='the configuration file with the parameters for each step of the alignment process in json format (uses default parameters, if not supplied)',
+                        default=None)
+
 
     args = parser.parse_args()
 
-    match_sift_features(args.tiles_file, args.features_file, args.output_file, args.jar_file)
+    match_sift_features(args.tiles_file, args.features_file, args.output_file, args.jar_file, \
+        conf=utils.conf_args_from_file(args.conf_file_name, "MatchSiftFeatures"))
 
 if __name__ == '__main__':
     main()
