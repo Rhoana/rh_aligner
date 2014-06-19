@@ -70,6 +70,12 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
 
+/**
+ * A reconstruction of the entire 3D elastic alignment process
+ * in a single file.
+ * TODO: After this works well, we need to break it down to other functions and files
+ * and remove this file.
+ */
 public class ElasticLayerAlignment {
 
 	@Parameters
