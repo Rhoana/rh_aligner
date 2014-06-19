@@ -110,6 +110,38 @@ public class ComputeSiftFeatures
 	}
 */
 	
+    public static List< Feature > computeTileSiftFeatures( String imageUrl, FloatArray2DSIFT.Param siftParam )
+    {
+            /* calculate sift features for the image or sub-region */
+            System.out.println( "Calculating SIFT features for image '" + imageUrl + "'." );
+            final ImagePlus imp = Utils.openImagePlus( imageUrl.replaceFirst("file://", "").replaceFirst("file:/", "") );
+            if ( imp == null )
+            {
+                    throw new RuntimeException( "Failed to load image '" + imageUrl );
+            }
+
+            FloatArray2DSIFT sift = new FloatArray2DSIFT(siftParam);
+            SIFT ijSIFT = new SIFT(sift);
+
+
+            final List< Feature > fs = new ArrayList< Feature >();
+            ijSIFT.extractFeatures( imp.getProcessor(), fs );
+
+            return fs;
+    }
+
+    public static List< Feature > computeImageSiftFeatures( ImageProcessor ip, FloatArray2DSIFT.Param siftParam )
+    {
+            FloatArray2DSIFT sift = new FloatArray2DSIFT(siftParam);
+            SIFT ijSIFT = new SIFT(sift);
+
+
+            final List< Feature > fs = new ArrayList< Feature >();
+            ijSIFT.extractFeatures( ip, fs );
+
+            return fs;
+    }
+	
 	public static void main( final String[] args )
 	{
 		
@@ -168,28 +200,22 @@ public class ComputeSiftFeatures
 
 		int start_index = params.all_tiles ? 0 : params.index;
 		int end_index = params.all_tiles ? tileSpecs.length : params.index + 1;
-		
+
+		/* calculate sift features for the image or sub-region */
+		FloatArray2DSIFT.Param siftParam = new FloatArray2DSIFT.Param();
+		siftParam.initialSigma = params.initialSigma;
+		siftParam.steps = params.steps;
+		siftParam.minOctaveSize = params.minOctaveSize;
+		siftParam.maxOctaveSize = params.maxOctaveSize;
+		siftParam.fdSize = params.fdSize;
+		siftParam.fdBins = params.fdBins;
+
 		for (int idx = start_index; idx < end_index; idx = idx + 1) {
 			TileSpec ts = tileSpecs[idx];
 		
 			/* load image TODO use Bioformats for strange formats */
 			String imageUrl = ts.getMipmapLevels().get( String.valueOf( mipmapLevel ) ).imageUrl;
-			final ImagePlus imp = Utils.openImagePlus( imageUrl.replaceFirst("file://", "").replaceFirst("file:/", "") );
-			if ( imp == null )
-				System.err.println( "Failed to load image '" + imageUrl + "'." );
-			else
-			{
-				/* calculate sift features for the image or sub-region */
-				System.out.println( "Calculating SIFT features for image '" + imageUrl + "'." );
-				FloatArray2DSIFT.Param siftParam = new FloatArray2DSIFT.Param();
-				siftParam.initialSigma = params.initialSigma;
-				siftParam.steps = params.steps;
-				siftParam.minOctaveSize = params.minOctaveSize;
-				siftParam.maxOctaveSize = params.maxOctaveSize;
-				siftParam.fdSize = params.fdSize;
-				siftParam.fdBins = params.fdBins;
-				FloatArray2DSIFT sift = new FloatArray2DSIFT(siftParam);
-				SIFT ijSIFT = new SIFT(sift);
+
 		
 //			/* Apply transformations on the image, and only then get the sift features
 //			 * (transformations may have an impact on the sift features)
@@ -214,19 +240,17 @@ public class ComputeSiftFeatures
 //			
 //			/* create mesh */
 		
-		
-				final List< Feature > fs = new ArrayList< Feature >();
-				ijSIFT.extractFeatures( imp.getProcessor(), fs );
-		
-				/* Apply the transformations on the location of every feature */
-				final CoordinateTransformList< CoordinateTransform > ctl = ts.createTransformList();
-				for (Feature feature : fs)
-				{
-					ctl.applyInPlace(feature.location);				
-				}
-		
-				feature_data.add(new FeatureSpec( String.valueOf( mipmapLevel ), imageUrl, fs));
+
+			final List< Feature > fs = computeTileSiftFeatures( imageUrl, siftParam );
+	
+			/* Apply the transformations on the location of every feature */
+			final CoordinateTransformList< CoordinateTransform > ctl = ts.createTransformList();
+			for (Feature feature : fs)
+			{
+				ctl.applyInPlace(feature.location);				
 			}
+	
+			feature_data.add(new FeatureSpec( String.valueOf( mipmapLevel ), imageUrl, fs));
 		}
 		try {
 			Writer writer = new FileWriter(params.targetPath);
