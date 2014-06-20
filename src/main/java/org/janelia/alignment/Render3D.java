@@ -1,5 +1,6 @@
 package org.janelia.alignment;
 
+import ij.IJ;
 import ij.ImageJ;
 import ij.ImagePlus;
 import ij.process.ColorProcessor;
@@ -30,11 +31,18 @@ public class Render3D {
         @Parameter( names = "--threads", description = "Number of threads to be used", required = false )
         public int numThreads = Runtime.getRuntime().availableProcessors();
 
-        @Parameter( names = "--initial_width", description = "The initial width of the image", required = false )
-        public int initialWidth = 2500;
+        @Parameter( names = "--width", description = "The width of the output image (considering all sections)", required = false )
+        public int width = 2500;
 
         @Parameter( names = "--layer", description = "The layer to render first (default: the first layer)", required = false )
         public int layer = -1;
+
+        @Parameter( names = "--hide", description = "Hide the output and do not show on screen (default: false)", required = false )
+        public boolean hide = false;
+
+        @Parameter( names = "--targetDir", description = "The directory to save the output files to (default: no saving)", required = false )
+        public String targetDir = null;
+
 	}
 	
 	private Render3D() {}
@@ -65,24 +73,34 @@ public class Render3D {
 		return params;
 	}
 	
-	private static void showLayerImage( TileSpecsImage image, double scale, int layer )
+
+	private static ImagePlus renderLayerImage( TileSpecsImage image, double scale, int layer )
 	{
 		System.out.println( "Showing layer: " + layer );
 		
 		ColorProcessor cp = image.render( layer, 0, (float) scale );
 		ImagePlus curLayer = new ImagePlus( "Layer " + layer, cp );
-		curLayer.show();
+		return curLayer;
 	}
+
+	private static void saveLayerImage( ImagePlus image, String outFile )
+	{
+		IJ.save( image, outFile );
+		System.out.println( "Image " + outFile + " was saved." );
+	}
+
 	
 	public static void main( final String[] args )
 	{
-		new ImageJ();
 		
 		final Params params = parseParams( args );
 		
 		if ( params == null )
 			return;
-		
+
+		if ( !params.hide )
+			new ImageJ();
+
 		// Open all tiles
 		TileSpecsImage entireImage = TileSpecsImage.createImageFromFiles( params.files );
 		
@@ -90,7 +108,7 @@ public class Render3D {
 		BoundingBox bbox = entireImage.getBoundingBox();
 		
 		// Compute the initial scale (initialWidth pixels wide), round with a 2 digits position
-		double scale = Math.round( ( (double)params.initialWidth / bbox.getWidth() ) * 100.0 ) / 100.0;
+		double scale = Math.round( ( (double)params.width / bbox.getWidth() ) * 100.0 ) / 100.0;
 		scale = Math.min( scale, 1.0 );
 		
 		System.out.println( "Scale is: " + scale );
@@ -108,11 +126,27 @@ public class Render3D {
 					firstLayer + DEFAULT_LAYERS_NUM_TO_SHOW );
 			for ( int i = firstLayer; i < lastLayer; i++ )
 			{
-				showLayerImage( entireImage, scale, i );
+				ImagePlus image = renderLayerImage( entireImage, scale, i );
+				if ( !params.hide )
+					image.show();
+				if ( params.targetDir != null )
+				{
+					String outFile = String.format( "%s/Section_%03d.png", params.targetDir, i );
+					saveLayerImage( image, outFile );
+				}
 			}
 		}
 		else // Show the wanted layer
-			showLayerImage( entireImage, scale, firstLayer );
+		{
+			ImagePlus image = renderLayerImage( entireImage, scale, firstLayer );
+			if ( !params.hide )
+				image.show();
+			if ( params.targetDir != null )
+			{
+				String outFile = String.format( "%s/Section_%03d.png", params.targetDir, firstLayer  );
+				saveLayerImage( image, outFile );
+			}
+		}
 		
 		/* save the modified image */
 		/*
