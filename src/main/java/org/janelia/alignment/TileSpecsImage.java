@@ -14,6 +14,11 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -41,6 +46,9 @@ public class TileSpecsImage {
 	private List< TileSpec > tileSpecs;
 	private BoundingBox boundingBox;
 	private double triangleSize;
+	// The number of threads used to perfrom the rendering and bounding box computation
+	private int threadsNum;
+	
 	
 	/* C'tors */
 	
@@ -73,6 +81,10 @@ public class TileSpecsImage {
 	
 	/* Public methods */
 
+	public void setThreadsNum( int threadsNum ) {
+		this.threadsNum = threadsNum;
+	}
+	
 	public void renderAndSave( String outFile, int layer, int mipmapLevel ) {
 		renderAndSave( outFile, layer, mipmapLevel, 1.0f );
 	}
@@ -100,6 +112,7 @@ public class TileSpecsImage {
 		final int offsetX = 0; //boundingBox.getStartPoint().getX();
 		final int offsetY = 0; //boundingBox.getStartPoint().getY();
 		
+		final ExecutorService threadPool = Executors.newFixedThreadPool( threadsNum );
 		
 		for ( TileSpec ts : tileSpecs ) {
 
@@ -181,7 +194,7 @@ public class TileSpecsImage {
 			final ImageProcessorWithMasks source = new ImageProcessorWithMasks( tsIpMipmap, bpMaskSource, null );
 			final ImageProcessorWithMasks target = new ImageProcessorWithMasks( tp, bpMaskTarget, null );
 			final TransformMeshMappingWithMasks< TransformMesh > mapping = new TransformMeshMappingWithMasks< TransformMesh >( mesh );
-			mapping.mapInterpolated( source, target );
+			mapping.mapInterpolated( source, target, threadsNum );
 			
 			/* convert to 24bit RGB */
 			tp.setMinAndMax( ts.minIntensity, ts.maxIntensity );
@@ -197,11 +210,43 @@ public class TileSpecsImage {
 			else
 				alphaPixels = ( byte[] )target.outside.getPixels();
 
-			for ( int i = 0; i < cpPixels.length; ++i )
-				cpPixels[ i ] &= 0x00ffffff | ( alphaPixels[ i ] << 24 );
+
+			final int pixelsPerThread = cpPixels.length / threadsNum;
+			final List< Future< ? > > futures = new ArrayList< Future< ? >>();
+
+			for ( int t = 0; t < threadsNum; t++ ) {
+				final int threadIndex = t;
+				final Future< ? > future = threadPool.submit( new Runnable() {
+
+					@Override
+					public void run() {
+						int startIndex = threadIndex * pixelsPerThread;
+						int endIndex = ( threadIndex + 1 ) * pixelsPerThread;
+						if ( threadIndex == threadsNum - 1 )
+							endIndex = cpPixels.length;
+						for ( int i = startIndex; i < endIndex; ++i )
+							cpPixels[ i ] &= 0x00ffffff | ( alphaPixels[ i ] << 24 );
+						
+					}
+				});
+				futures.add( future );
+			}
 			
+			try {
+				for ( Future< ? > future : futures ) {
+					future.get();
+				}
+			} catch ( InterruptedException e ) {
+				e.printStackTrace();
+				throw new RuntimeException( e );
+			} catch ( ExecutionException e ) {
+				e.printStackTrace();
+				throw new RuntimeException( e );
+			}
 		}
-			
+		
+		threadPool.shutdown();
+		
 		return cp;
 	}
 
@@ -269,6 +314,7 @@ public class TileSpecsImage {
 
 	private void initialize() {
 		boundingBox = null;
+		threadsNum = Runtime.getRuntime().availableProcessors();
 	}
 	
 
@@ -350,7 +396,7 @@ public class TileSpecsImage {
 		final CoordinateTransformList< CoordinateTransform > ctl = ts.createTransformList();
 		/* create mesh */
 		final CoordinateTransformMesh mesh = new CoordinateTransformMesh( ctl,  ( int )( origWidth / triangleSize + 0.5 ), ip.getWidth(), ip.getHeight() );
-		final BoundingBox boundingBox = findBoundingBox( mesh, ip );
+		final BoundingBox boundingBox = findBoundingBox( mesh, ip, threadsNum );
 		System.out.println( " tilespec bounding box is: " + boundingBox );
 
 		// Create the corresponding bounding box, and return it
@@ -374,40 +420,60 @@ public class TileSpecsImage {
 			final int numThreads )
 	{
 		// Create an uninitialized bounding box
-		BoundingBox boundingBox = new BoundingBox();
+		final BoundingBox boundingBox = new BoundingBox();
 		
-/*		if ( numThreads == 1 )
+		if ( numThreads == 1 )
 		{
-*/
+
 			/* no overhead for thread creation */
 			final Set< AffineModel2D > s = transform.getAV().keySet();
 			//System.out.println( "BoundingBox transform keySet size: " + s.size() );
 			for ( final AffineModel2D ai : s )
 				findBoundingBox( transform, ai, source, boundingBox );
-/*
+
 		}
 		else
 		{
-			final List< AffineModel2D > l = new ArrayList< AffineModel2D >();
-			l.addAll( transform.getAV().keySet() );
-			final AtomicInteger i = new AtomicInteger( 0 );
-			final ArrayList< Thread > threads = new ArrayList< Thread >( numThreads );
-			for ( int k = 0; k < numThreads; ++k )
-			{
-				final Thread mtt = new MapTriangleInterpolatedThread( i, l, transform, source, target );
-				threads.add( mtt );
-				mtt.start();
+			final AffineModel2D[] s = transform.getAV().keySet().toArray( new AffineModel2D[ 0 ] );
+			final int modelsPerThread = s.length / numThreads;
+			final ExecutorService threadPool = Executors.newFixedThreadPool( numThreads );
+			
+			final BoundingBox[] threadBoundingBoxes = new BoundingBox[ numThreads ];
+			final Future< ? >[] futures = new Future< ? >[ numThreads ];
+			
+			for ( int t = 0; t < numThreads; t++ ) {
+				final int threadIndex = t;
+				threadBoundingBoxes[ t ] = new BoundingBox();
+				futures[ t ] = threadPool.submit( new Runnable() {
+
+					@Override
+					public void run() {
+						int startIndex = threadIndex * modelsPerThread;
+						int endIndex = ( threadIndex + 1 ) * modelsPerThread;
+						if ( threadIndex == numThreads - 1 )
+							endIndex = s.length;
+						for ( int i = startIndex; i < endIndex; ++i )
+							findBoundingBox( transform, s[ i ], source, threadBoundingBoxes[ threadIndex ] );						
+					}
+				});
 			}
-			for ( final Thread mtt : threads )
-			{
-				try
-				{
-					mtt.join();
+			
+			try {
+				for ( int t = 0; t < numThreads; t++ ) {
+					futures[ t ].get();
+					boundingBox.extendByBoundingBox( threadBoundingBoxes[ t ]);
 				}
-				catch ( InterruptedException e ) {}
+			} catch ( InterruptedException e ) {
+				e.printStackTrace();
+				throw new RuntimeException( e );
+			} catch ( ExecutionException e ) {
+				e.printStackTrace();
+				throw new RuntimeException( e );
 			}
+
+			threadPool.shutdown();
 		}
-*/
+
 		return boundingBox;
 	}
 
