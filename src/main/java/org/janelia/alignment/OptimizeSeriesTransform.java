@@ -96,7 +96,7 @@ public class OptimizeSeriesTransform
         private boolean rejectIdentity = false;
         
         @Parameter( names = "--identityTolerance", description = "Identity transform rejection tolerance", required = false )
-        private float identityTolerance = 0.5f;
+        private float identityTolerance = 5.0f;
         
         @Parameter( names = "--multipleHypotheses", description = "Return multiple hypotheses", required = false )
         private boolean multipleHypotheses = false;
@@ -208,7 +208,7 @@ public class OptimizeSeriesTransform
 			
 			for (TileSpec ts : tileSpecs)
 			{
-				String imageUrl = ts.getMipmapLevels().get("" + mipmapLevel).imageUrl;
+				String imageUrl = ts.getMipmapLevels().get( String.valueOf( mipmapLevel ) ).imageUrl;
 				tileSpecMap.put(imageUrl, ts);
 			}
 		}
@@ -490,7 +490,7 @@ J:		for ( int i = 0; i < corr_data.length; )
 		    {
 		    	System.out.println("Generating new tilespec for image " + tileUrl + ".");
 		    	ts = new TileSpec();
-		    	ts.setMipmapLevelImageUrl("" + mipmapLevel, tileUrl);
+		    	ts.setMipmapLevelImageUrl( String.valueOf( mipmapLevel ), tileUrl );
 		    }
 		    
 		    @SuppressWarnings("rawtypes")

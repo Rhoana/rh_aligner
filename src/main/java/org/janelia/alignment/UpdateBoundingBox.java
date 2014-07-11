@@ -1,5 +1,6 @@
 package org.janelia.alignment;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -28,6 +29,9 @@ public class UpdateBoundingBox {
 
         @Parameter( names = "--suffix", description = "The suffix to add to the out file", required = false )
         public String filesSuffix = "_bbox";
+        
+        @Parameter( names = "--targetDir", description = "The directory to put the output files (default: current directory)", required = false )
+        public String targetDir = null;
         
 	}
 
@@ -74,6 +78,12 @@ public class UpdateBoundingBox {
 			// Save the image
 			String outFileName = fileName.replace( ".json", params.filesSuffix + ".json" );
 			outFileName = outFileName.replace( "file://", "" );
+			if ( params.targetDir != null)
+			{
+				File oldFile = new File( outFileName );
+				File newFile = new File( params.targetDir, oldFile.getName() );
+				outFileName = newFile.getAbsolutePath();
+			}
 			tsImage.saveTileSpecs( outFileName );
 		}
 	}

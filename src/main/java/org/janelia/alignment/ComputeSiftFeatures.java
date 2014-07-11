@@ -250,7 +250,9 @@ public class ComputeSiftFeatures
 				ctl.applyInPlace(feature.location);				
 			}
 	
-			feature_data.add(new FeatureSpec( String.valueOf( mipmapLevel ), imageUrl, fs));
+			final double scale = 1.0;
+			
+			feature_data.add(new FeatureSpec( String.valueOf( mipmapLevel ), imageUrl, scale, fs));
 		}
 		try {
 			Writer writer = new FileWriter(params.targetPath);
