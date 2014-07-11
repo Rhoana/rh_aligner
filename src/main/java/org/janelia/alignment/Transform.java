@@ -43,12 +43,4 @@ public class Transform
 			return new IdentityModel();
 		}
 	}
-	
-	public static Transform createTransform( final mpicbg.trakem2.transform.CoordinateTransform ct )
-	{
-		final Transform t = new Transform();
-		t.className = ct.getClass().getCanonicalName();
-		t.dataString = ct.toDataString();
-		return t;
-	}
 }

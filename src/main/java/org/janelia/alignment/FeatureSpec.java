@@ -32,13 +32,11 @@ public class FeatureSpec
 	public class ImageAndFeatures
 	{
 		public String imageUrl;
-		public double scale;
 		public List< Feature > featureList;
 		
-		public ImageAndFeatures(String url, double scale, List< Feature > flist)
+		public ImageAndFeatures(String url, List< Feature > flist)
 		{
 			imageUrl = url;
-			this.scale = scale;
 			featureList = flist;
 		}
 
@@ -46,9 +44,11 @@ public class FeatureSpec
 	
 	final private TreeMap< String, ImageAndFeatures > mipmapLevels = new TreeMap< String, ImageAndFeatures >();
 
-	public FeatureSpec(String mipmapLevel, String url, double scale, List< Feature > flist)
+	public int mipmapLevel;
+	
+	public FeatureSpec(String mipmapLevel, String url, List< Feature > flist)
 	{
-		ImageAndFeatures iaf = new ImageAndFeatures(url, scale, flist);
+		ImageAndFeatures iaf = new ImageAndFeatures(url, flist);
 		mipmapLevels.put(mipmapLevel, iaf);
 	}
 		

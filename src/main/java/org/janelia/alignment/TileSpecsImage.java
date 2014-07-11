@@ -114,7 +114,6 @@ public class TileSpecsImage {
 		
 		final ExecutorService threadPool = Executors.newFixedThreadPool( threadsNum );
 		
-		long startTime = System.currentTimeMillis();
 		for ( TileSpec ts : tileSpecs ) {
 
 			if ( ts.layer != layer )
@@ -233,22 +232,19 @@ public class TileSpecsImage {
 				futures.add( future );
 			}
 			
-			for ( Future< ? > future : futures ) {
-				try {
+			try {
+				for ( Future< ? > future : futures ) {
 					future.get();
-				} catch ( InterruptedException e ) {
-					e.printStackTrace();
-					throw new RuntimeException( e );
-				} catch ( ExecutionException e ) {
-					e.printStackTrace();
-					throw new RuntimeException( e );
 				}
+			} catch ( InterruptedException e ) {
+				e.printStackTrace();
+				throw new RuntimeException( e );
+			} catch ( ExecutionException e ) {
+				e.printStackTrace();
+				throw new RuntimeException( e );
 			}
 		}
 		
-		System.out.println( "Rendering layer " + layer + " (" + tp.getWidth() + ", " + tp.getHeight() +
-				") took " + ((System.currentTimeMillis() - startTime) / 1000) + " seconds." );
-
 		threadPool.shutdown();
 		
 		return cp;

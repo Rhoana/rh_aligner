@@ -71,25 +71,25 @@ public class MatchByMaxPMCC
         public List<String> indices = new ArrayList<String>();
         
         @Parameter( names = "--layerScale", description = "Layer scale", required = false )
-        public float layerScale = 0.1f;
+        public float layerScale = 0.5f;
         
         @Parameter( names = "--searchRadius", description = "Search window radius", required = false )
-        public int searchRadius = 200;
+        public int searchRadius = 20;
         
         @Parameter( names = "--blockRadius", description = "Matching block radius", required = false )
-        public int blockRadius = 579;
+        public int blockRadius = 50;
                 
         @Parameter( names = "--resolutionSpringMesh", description = "resolutionSpringMesh", required = false )
-        public int resolutionSpringMesh = 16;
+        public int resolutionSpringMesh = 64;
         
         @Parameter( names = "--minR", description = "minR", required = false )
-        public float minR = 0.6f;
+        public float minR = 0.5f;
         
         @Parameter( names = "--maxCurvatureR", description = "maxCurvatureR", required = false )
-        public float maxCurvatureR = 10.0f;
+        public float maxCurvatureR = 100f;
         
         @Parameter( names = "--rodR", description = "rodR", required = false )
-        public float rodR = 0.9f;
+        public float rodR = 1.0f;
         
         @Parameter( names = "--useLocalSmoothnessFilter", description = "useLocalSmoothnessFilter", required = false )
         public boolean useLocalSmoothnessFilter = false;
@@ -102,13 +102,13 @@ public class MatchByMaxPMCC
         public float localRegionSigma = 200f;
         
         @Parameter( names = "--maxLocalEpsilon", description = "maxLocalEpsilon", required = false )
-        public float maxLocalEpsilon = 12f;
+        public float maxLocalEpsilon = 100f;
         
         @Parameter( names = "--maxLocalTrust", description = "maxLocalTrust", required = false )
         public int maxLocalTrust = 3;
         
-        //@Parameter( names = "--maxNumNeighbors", description = "maxNumNeighbors", required = false )
-        //public float maxNumNeighbors = 3f;
+        @Parameter( names = "--maxNumNeighbors", description = "maxNumNeighbors", required = false )
+        public float maxNumNeighbors = 3f;
         		
         @Parameter( names = "--stiffnessSpringMesh", description = "stiffnessSpringMesh", required = false )
         public float stiffnessSpringMesh = 0.1f;

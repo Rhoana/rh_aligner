@@ -62,7 +62,7 @@ public class OptimizeSeriesElastic
         private String tilespecfile = null;
         
         @Parameter( names = "--modelIndex", description = "Model Index: 0=Translation, 1=Rigid, 2=Similarity, 3=Affine, 4=Homography", required = false )
-        private int modelIndex = 1;
+        private int modelIndex = 3;
         
         @Parameter( names = "--meshWidth", description = "Mesh width (in pixels) for all images in this series.", required = true )
         public int meshWidth;
@@ -71,13 +71,13 @@ public class OptimizeSeriesElastic
         public int meshHeight;
         
         @Parameter( names = "--layerScale", description = "Layer scale", required = false )
-        private float layerScale = 0.1f;
+        private float layerScale = 0.2f;
         
         @Parameter( names = "--resolutionSpringMesh", description = "resolutionSpringMesh", required = false )
         private int resolutionSpringMesh = 32;
         
-        //@Parameter( names = "--springLengthSpringMesh", description = "springLengthSpringMesh", required = false )
-        //private float springLengthSpringMesh = 100f;
+        @Parameter( names = "--springLengthSpringMesh", description = "springLengthSpringMesh", required = false )
+        private float springLengthSpringMesh = 100f;
 		
         @Parameter( names = "--stiffnessSpringMesh", description = "stiffnessSpringMesh", required = false )
         private float stiffnessSpringMesh = 0.1f;
@@ -89,7 +89,7 @@ public class OptimizeSeriesElastic
         private float maxStretchSpringMesh = 2000.0f;
         
         @Parameter( names = "--maxEpsilon", description = "maxEpsilon", required = false )
-        private float maxEpsilon = 200.0f;
+        private float maxEpsilon = 25.0f;
         
         @Parameter( names = "--maxIterationsSpringMesh", description = "maxIterationsSpringMesh", required = false )
         private int maxIterationsSpringMesh = 1000;
@@ -97,8 +97,8 @@ public class OptimizeSeriesElastic
         @Parameter( names = "--maxPlateauwidthSpringMesh", description = "maxPlateauwidthSpringMesh", required = false )
         private int maxPlateauwidthSpringMesh = 200;
         
-        //@Parameter( names = "--resolutionOutput", description = "resolutionOutput", required = false )
-        //private int resolutionOutput = 128;
+        @Parameter( names = "--resolutionOutput", description = "resolutionOutput", required = false )
+        private int resolutionOutput = 128;
         
         @Parameter( names = "--targetPath", description = "Path for the output correspondences", required = true )
         public String targetPath;
