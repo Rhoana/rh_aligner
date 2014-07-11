@@ -39,6 +39,20 @@ class BoundingBox:
 			return True
 		return False
 
+	def extend(self, other_bbox):
+		# updates the current bounding box by extending it to include the other_bbox
+		if self.from_x > other_bbox.from_x:
+			self.from_x = other_bbox.from_x
+		if self.from_y > other_bbox.from_y:
+			self.from_y = other_bbox.from_y
+		if self.to_x < other_bbox.to_x:
+			self.to_x = other_bbox.to_x
+		if self.to_y < other_bbox.to_y:
+			self.to_y = other_bbox.to_y
+
 	def toStr(self):
 		return '{0} {1} {2} {3}'.format(self.from_x, self.to_x, self.from_y, self.to_y)
+
+	def toArray(self):
+		return [self.from_x, self.to_x, self.from_y, self.to_y]
 
