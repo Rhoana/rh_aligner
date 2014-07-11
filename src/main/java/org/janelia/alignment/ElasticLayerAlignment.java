@@ -1,20 +1,8 @@
 package org.janelia.alignment;
 
-import ij.IJ;
-import ij.ImagePlus;
 import ij.process.ColorProcessor;
 import ij.process.FloatProcessor;
-import ij.process.ImageProcessor;
-import ini.trakem2.utils.Filter;
-//import ini.trakem2.utils.Utils;
 
-
-
-
-
-import java.awt.Color;
-import java.awt.Image;
-import java.awt.Rectangle;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -26,17 +14,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import javax.imageio.ImageIO;
-
-import mpicbg.ij.SIFT;
 import mpicbg.ij.blockmatching.BlockMatching;
 import mpicbg.imagefeatures.Feature;
 import mpicbg.imagefeatures.FloatArray2DSIFT;
@@ -44,7 +27,6 @@ import mpicbg.models.AbstractModel;
 import mpicbg.models.AffineModel2D;
 import mpicbg.models.ErrorStatistic;
 import mpicbg.models.HomographyModel2D;
-import mpicbg.models.IllDefinedDataPointsException;
 import mpicbg.models.InvertibleCoordinateTransform;
 import mpicbg.models.NotEnoughDataPointsException;
 import mpicbg.models.Point;
@@ -59,8 +41,8 @@ import mpicbg.models.Transforms;
 import mpicbg.models.TranslationModel2D;
 import mpicbg.models.Vertex;
 import mpicbg.trakem2.align.Util;
+import mpicbg.trakem2.transform.CoordinateTransform;
 import mpicbg.trakem2.transform.MovingLeastSquaresTransform;
-import mpicbg.trakem2.transform.MovingLeastSquaresTransform2;
 import mpicbg.trakem2.util.Triple;
 
 import com.beust.jcommander.JCommander;
@@ -216,6 +198,9 @@ public class ElasticLayerAlignment {
         @Parameter( names = "--pmmcModelIndex", description = "Model Index: 0=Translation, 1=Rigid, 2=Similarity, 3=Affine, 4=Homography", required = false )
         private int pmcc_localModelIndex = 1;
 
+        @Parameter( names = "--debugDir", description = "Directory to store the debugging files (not stored, if not given)", required = false )
+        private String debugDir = null;
+        
 	}
 
 	private ElasticLayerAlignment() { }
@@ -453,6 +438,24 @@ public class ElasticLayerAlignment {
 			final List< Feature > fs = ComputeSiftFeatures.computeImageSiftFeatures( cp, siftParam );
 			System.out.println( "Found " + fs.size() + " features in the layer" );
 			sifts.put( layerIndex, fs );
+			
+			if ( params.debugDir != null )
+			{
+				String siftOutFile = params.debugDir + File.separatorChar + "sifts_Section" + layerIndex + ".json";
+				List< FeatureSpec > featureData = new ArrayList< FeatureSpec >();
+
+				featureData.add(new FeatureSpec( String.valueOf( mipmapLevel ), "Debug: Layer " + layerIndex, scale, fs));
+
+				try
+				{
+					Writer writer = new FileWriter( siftOutFile );
+					Gson gson = new GsonBuilder().setPrettyPrinting().create();
+					gson.toJson( featureData, writer );
+					writer.close();
+				}
+				catch ( Exception e )
+				{ }
+			}
 		}
 		
 		/* join */
@@ -596,6 +599,29 @@ J:			for ( int j = layeri + 1; j < range; )
 									Utils.log( "Could not store point match candidates for layers " + layerNameB + " and " + layerNameA + "." );
 								*/
 								System.out.println( "Found " + candidates.size() + " candidates when matching layers " + layerNameA + " and " + layerNameB );
+								
+								if ( param.debugDir != null )
+								{
+									String matchSiftOutFile = param.debugDir + File.separatorChar + "match_sifts_Sections" + sliceA + "_" + sliceB + ".json";
+									List< CorrespondenceSpec > corr_data = new ArrayList< CorrespondenceSpec >();
+
+									corr_data.add(new CorrespondenceSpec( 0,
+											layerNameA,
+											layerNameA,
+											candidates));
+
+									if (corr_data.size() > 0) {
+										try {
+											Writer writer = new FileWriter( matchSiftOutFile );
+											Gson gson = new GsonBuilder().setPrettyPrinting().create();
+											gson.toJson( corr_data, writer );
+											writer.close();
+										}
+										catch ( Exception e )
+										{ }
+									}
+								}
+
 							}
 		
 							AbstractModel< ? > model;
@@ -662,13 +688,35 @@ J:			for ( int j = layeri + 1; j < range; )
 							{
 								System.out.println( layerNameB + " -> " + layerNameA + ": " + inliers.size() + " corresponding features with an average displacement of " + ( PointMatch.meanDistance( inliers ) / param.layerScale ) + "px identified." );
 								System.out.println( "Estimated transformation model: " + model );
-								models.set( ti, new Triple< Integer, Integer, AbstractModel< ? > >( sliceA, sliceB, model ) );
+								models.set( ti, new Triple< Integer, Integer, AbstractModel< ? > >( sliceA, sliceB, model ) );								
 							}
 							else
 							{
 								System.out.println( layerNameB + " -> " + layerNameA + ": no correspondences found." );
 								return;
 							}
+							
+							if ( param.debugDir != null )
+							{
+								String ransacModelOutFile = param.debugDir + File.separatorChar + "ransac_Sections" + sliceA + "_" + sliceB + ".json";
+
+								try {
+									if ( modelFound )
+									{
+										Writer writer = new FileWriter( ransacModelOutFile );
+										Gson gson = new GsonBuilder().setPrettyPrinting().create();
+									
+										// Save the model to disk
+										gson.toJson( model, writer );
+										
+										writer.close();										
+									}
+								}
+								catch ( Exception e )
+								{ }
+							}
+
+
 						}
 					};
 					threads.add( thread );
@@ -1097,6 +1145,44 @@ J:			for ( int j = layeri + 1; j < range; )
 						t2.connect( t1, pm21 );
 					}
 				}
+				
+				
+				if ( param.debugDir != null )
+				{
+					String maxPMCCOutFile = param.debugDir + File.separatorChar + "pmcc_Sections" + pair.a + "_" + pair.b + ".json";
+
+					try {
+						Writer writer = new FileWriter( maxPMCCOutFile );
+						Gson gson = new GsonBuilder().setPrettyPrinting().create();
+
+						final List< CorrespondenceSpec > corr_data = new ArrayList< CorrespondenceSpec >();
+
+						corr_data.add(new CorrespondenceSpec(
+								mipmapLevel,
+								"layer_" + pair.a,
+								"layer_" + pair.b,
+								pm12,
+								( pm12.size() > pair.c.getMinNumMatches() ) ));
+
+						corr_data.add(new CorrespondenceSpec(
+								mipmapLevel,
+								"layer_" + pair.b,
+								"layer_" + pair.a,
+								pm21,
+								( pm21.size() > pair.c.getMinNumMatches() ) ));
+
+
+						gson.toJson( corr_data, writer );
+
+						writer.close();
+					}
+					catch ( Exception e )
+					{ }
+				}
+				
+				
+				
+				
 				
 				System.out.println( pair.a + " <> " + pair.b + " spring constant = " + springConstant );
 			}
