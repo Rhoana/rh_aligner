@@ -119,12 +119,11 @@ public class Render3D {
 		if ( firstLayer == -1 )
 			firstLayer = bbox.getStartPoint().getZ();
 
-		// if no layer is given as input, show the first DEFAULT_LAYERS_NUM_TO_SHOW layers
+		// if no layer is given as input, show all layers
 		if ( params.layer == -1 )
 		{
-			final int lastLayer = Math.min( bbox.getStartPoint().getZ() + bbox.getDepth(),
-					firstLayer + DEFAULT_LAYERS_NUM_TO_SHOW );
-			for ( int i = firstLayer; i < lastLayer; i++ )
+			final int lastLayer = bbox.getEndPoint().getZ();
+			for ( int i = firstLayer; i < lastLayer + 1; i++ )
 			{
 				ImagePlus image = renderLayerImage( entireImage, scale, i );
 				if ( !params.hide )
