@@ -227,7 +227,48 @@ public class OptimizeLayersElastic {
 		return newPms;
 	}
 
+	private static ArrayList< SpringMesh > fixAllPointMatchVertices(
+			final Params param,
+			final HashMap< Integer, HashMap< Integer, CorrespondenceSpec > > layersCorrs,
+			final int startLayer,
+			final int endLayer )
+	{
+		final int meshWidth = ( int )Math.ceil( param.imageWidth * param.layerScale );
+		final int meshHeight = ( int )Math.ceil( param.imageHeight * param.layerScale );
+		
+		final ArrayList< SpringMesh > meshes = new ArrayList< SpringMesh >( endLayer - startLayer + 1 );
+		for ( int i = startLayer; i <= endLayer; ++i )
+		{
+			final SpringMesh singleMesh = new SpringMesh(
+					param.resolutionSpringMesh,
+					meshWidth,
+					meshHeight,
+					param.stiffnessSpringMesh,
+					param.maxStretchSpringMesh * param.layerScale,
+					param.dampSpringMesh ); 
+			meshes.add( singleMesh );
+			
+			if ( layersCorrs.containsKey( i ) )
+			{
+				HashMap< Integer, CorrespondenceSpec > layerICorrs = layersCorrs.get( i );
+				for ( CorrespondenceSpec corrspec : layerICorrs.values() )
+				{
+					final List< PointMatch > pms = corrspec.correspondencePointPairs;
+					if ( pms != null )
+					{
+						final List< PointMatch > pmsFixed = fixPointMatchVertices( pms, singleMesh.getVertices() );
+						corrspec.correspondencePointPairs = pmsFixed;
+					}
+					
+				}
+			}
+		}
 
+		return meshes;
+	}
+
+	
+	
 	/**
 	 * Optimizes the layers using elastic transformation,
 	 * and updates the transformations of the tile-specs in the given layerTs.
@@ -255,21 +296,10 @@ public class OptimizeLayersElastic {
 		
 		/* Initialization */
 		final TileConfiguration initMeshes = new TileConfiguration();
+				
+		final ArrayList< SpringMesh > meshes = fixAllPointMatchVertices(
+				param, layersCorrs, startLayer, endLayer );
 		
-		final int meshWidth = ( int )Math.ceil( param.imageWidth * param.layerScale );
-		final int meshHeight = ( int )Math.ceil( param.imageHeight * param.layerScale );
-		
-		final ArrayList< SpringMesh > meshes = new ArrayList< SpringMesh >( endLayer - startLayer + 1 );
-		for ( int i = startLayer; i <= endLayer; ++i )
-			meshes.add(
-					new SpringMesh(
-							param.resolutionSpringMesh,
-							meshWidth,
-							meshHeight,
-							param.stiffnessSpringMesh,
-							param.maxStretchSpringMesh * param.layerScale,
-							param.dampSpringMesh ) );
-
 		for ( int layerA = startLayer; layerA < endLayer; layerA++ )
 		{
 			
@@ -335,9 +365,9 @@ public class OptimizeLayersElastic {
 				{
 					if ( pm12 != null )
 					{
-						final List< PointMatch > pm12Fixed = fixPointMatchVertices( pm12, m1.getVertices() );
+						//final List< PointMatch > pm12Fixed = fixPointMatchVertices( pm12, m1.getVertices() );
 						
-						for ( final PointMatch pm : pm12Fixed )
+						for ( final PointMatch pm : pm12 )
 						{
 							final Vertex p1 = ( Vertex )pm.getP1();
 							final Vertex p2 = new Vertex( pm.getP2() );
@@ -354,7 +384,7 @@ public class OptimizeLayersElastic {
 						{
 							initMeshes.addTile( t1 );
 							initMeshes.addTile( t2 );
-							t1.connect( t2, pm12Fixed );
+							t1.connect( t2, pm12 );
 						}
 
 					}
@@ -367,9 +397,9 @@ public class OptimizeLayersElastic {
 				{
 					if ( pm21 != null )
 					{
-						final List< PointMatch > pm21Fixed = fixPointMatchVertices( pm21, m2.getVertices() );
+						//final List< PointMatch > pm21Fixed = fixPointMatchVertices( pm21, m2.getVertices() );
 
-						for ( final PointMatch pm : pm21Fixed )
+						for ( final PointMatch pm : pm21 )
 						{
 							final Vertex p1 = ( Vertex )pm.getP1();
 							final Vertex p2 = new Vertex( pm.getP2() );
@@ -386,7 +416,7 @@ public class OptimizeLayersElastic {
 						{
 							initMeshes.addTile( t1 );
 							initMeshes.addTile( t2 );
-							t2.connect( t1, pm21Fixed );
+							t2.connect( t1, pm21 );
 						}
 					}
 
