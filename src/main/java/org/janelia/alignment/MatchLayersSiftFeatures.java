@@ -80,6 +80,43 @@ public class MatchLayersSiftFeatures
 
 	private MatchLayersSiftFeatures() {}
 
+	private static Vector< PointMatch > findMatchingFeatures(
+			final List< Feature > fs1,
+			final List< Feature > fs2,
+			final float rod )
+	{
+		final Vector< PointMatch > matches = new Vector< PointMatch >();
+		
+		for ( final Feature f1 : fs1 )
+		{
+			Feature best = null;
+			float best_d = Float.MAX_VALUE;
+			float second_best_d = Float.MAX_VALUE;
+			
+			for ( final Feature f2 : fs2 )
+			{
+				final float d = f1.descriptorDistance( f2 );
+				if ( d < best_d )
+				{
+					second_best_d = best_d;
+					best_d = d;
+					best = f2;
+				}
+				else if ( d < second_best_d )
+					second_best_d = d;
+			}
+			if ( best != null && second_best_d < Float.MAX_VALUE && best_d / second_best_d < rod )
+				matches.addElement(
+						new PointMatch(
+								new Point(
+										new float[] { f1.location[ 0 ], f1.location[ 1 ] } ),
+								new Point(
+										new float[] { best.location[ 0 ], best.location[ 1 ] } ),
+								( f1.scale + best.scale ) / 2.0f ) );
+		}
+		
+		return matches;
+	}
 
 	/**
 	 * Identify corresponding features
@@ -98,7 +135,7 @@ public class MatchLayersSiftFeatures
 			final int threadsNum )
 	{
 		final Vector< PointMatch > matches = new Vector< PointMatch >();
-		
+				
 		@SuppressWarnings("unchecked")
 		final List< Feature >[] fs1Sublists = new List[ threadsNum ];
 		
@@ -124,8 +161,8 @@ public class MatchLayersSiftFeatures
 
 				@Override
 				public void run() {
-					final List< PointMatch > threadMatches = FloatArray2DSIFT.createMatches(
-							fs1Sublists[ threadIndex ], fs2, rod );
+					final List< PointMatch > threadMatches = findMatchingFeatures(
+							fs1Sublists[ threadIndex], fs2, rod );
 					synchronized( matches )
 					{
 						matches.addAll( threadMatches );
@@ -258,9 +295,9 @@ public class MatchLayersSiftFeatures
 		System.out.println( "Searching for matching candidates" );
 		//			final List< PointMatch > candidates = new ArrayList< PointMatch >();
 //			FeatureTransform.matchFeatures( fs1, fs2, candidates, params.rod );
-		final List< PointMatch > candidates = FloatArray2DSIFT.createMatches( fs2, fs1, params.rod );
+		//final List< PointMatch > candidates = FloatArray2DSIFT.createMatches( fs2, fs1, params.rod );
 		// To be consistent with the original matches calculation, we match fs2 -> fs1
-		//final List< PointMatch > candidates = createMatches( fs2, fs1, params.rod, params.numThreads );
+		final List< PointMatch > candidates = createMatches( fs2, fs1, params.rod, params.numThreads );
 
 		System.out.println( "Found " + candidates.size() + " matching candidates, scaling..." );
 
