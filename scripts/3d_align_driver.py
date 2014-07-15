@@ -70,8 +70,8 @@ parser.add_argument('-b', '--bounding_box', type=str,
                     help='the bounding box of the part of image that needs to be aligned format: "from_x to_x from_y to_y" (default: all tiles)',
                     default='{0} {1} {2} {3}'.format((-sys.maxint - 1), sys.maxint, (-sys.maxint - 1), sys.maxint))
 parser.add_argument('-d', '--max_layer_distance', type=int, 
-                    help='the largest distance between two layers to be matched (default: 2)',
-                    default=2)
+                    help='the largest distance between two layers to be matched (default: 1)',
+                    default=1)
 parser.add_argument('-c', '--conf_file_name', type=str, 
                     help='the configuration file with the parameters for each step of the alignment process in json format (uses default parameters, if )',
                     default=None)
@@ -160,11 +160,11 @@ fixed_layer = all_layers[0]
 
 
 # Match and optimize each two layers in the required distance
-layers_to_process = all_layers[:-(args.max_layer_distance - 1)]
-print "max_layer_num {0}".format(layers_to_process)
 all_pmcc_files = []
-for i in layers_to_process:
-    for j in range(1, args.max_layer_distance):
+for i in all_layers:
+    layers_to_process = min(i + args.max_layer_distance, all_layers[-1] + 1) - i
+    print "layers_to_process {0}".format(layers_to_process)
+    for j in range(1, layers_to_process):
         print "j {0}".format(j)
         fname1_prefix = layer_to_json_prefix[i]
         fname2_prefix = layer_to_json_prefix[i + j]
@@ -189,6 +189,7 @@ for i in layers_to_process:
             match_layers_by_max_pmcc(args.jar_file, layer_to_ts_json[i], layer_to_ts_json[i + j], ransac_fname, imageWidth, imageHeight, [fixed_layer], pmcc_fname, conf)
         all_pmcc_files.append(pmcc_fname)
 
+print "All pmcc files: {0}".format(all_pmcc_files)
 
 # Optimize all layers to a single 3d image
 all_ts_files = layer_to_ts_json.values()
