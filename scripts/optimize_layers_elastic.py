@@ -27,8 +27,8 @@ def optimize_layers_elastic(tile_files, corr_files, image_width, image_height, f
         int(image_height),
         out_dir,
         conf_args)
-    print "Executing: {0}".format(java_cmd)
-    call(java_cmd, shell=True) # w/o shell=True it seems that the env-vars are not set
+    utils.execute_shell_command(java_cmd)
+
 
 def main():
     # Command line parser

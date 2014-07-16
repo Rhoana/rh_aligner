@@ -29,8 +29,8 @@ def match_layers_by_max_pmcc(jar_file, tiles_file1, tiles_file2, models_file, im
         out_fname,
         fixed_str,
         conf_args)
-    print "Executing: {0}".format(java_cmd)
-    call(java_cmd, shell=True) # w/o shell=True it seems that the env-vars are not set
+    utils.execute_shell_command(java_cmd)
+
 
 def main():
     # Command line parser

@@ -24,8 +24,8 @@ def match_layers_sift_features(tiles_file1, features_file1, tiles_file2, feature
         utils.path2url(features_file2),
         out_fname,
         conf_args)
-    print "Executing: {0}".format(java_cmd)
-    call(java_cmd, shell=True) # w/o shell=True it seems that the env-vars are not set
+    utils.execute_shell_command(java_cmd)
+
 
 def main():
     # Command line parser

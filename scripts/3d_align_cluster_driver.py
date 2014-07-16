@@ -203,7 +203,7 @@ class CreateLayerSiftFeatures(Job):
         self.threads = threads_num
         self.threads_str = "-t {0}".format(threads_num)
         self.memory = 12000
-        self.time = 50
+        self.time = 20
         self.output = output_file
         #self.already_done = os.path.exists(self.output_file)
 
@@ -230,7 +230,7 @@ class MatchLayersSiftFeatures(Job):
         self.threads = threads_num
         self.threads_str = "-t {0}".format(threads_num)
         self.memory = 2000
-        self.time = 30
+        self.time = 10
         self.output = corr_output_file
         #self.already_done = os.path.exists(self.output_file)
 
@@ -259,7 +259,7 @@ class FilterRansac(Job):
             self.conf_fname = '-c "{0}"'.format(conf_fname)
         self.dependencies = dependencies
         self.memory = 2000
-        self.time = 30
+        self.time = 10
         self.output = output_fname
         #self.already_done = os.path.exists(self.output_file)
 
@@ -296,7 +296,7 @@ class MatchLayersByMaxPMCC(Job):
         self.threads_str = '-t {0}'.format(threads_num)
         self.dependencies = dependencies
         self.memory = 8000
-        self.time = 30
+        self.time = 10
         self.output = pmcc_output_file
         #self.already_done = os.path.exists(self.output_file)
 
@@ -314,7 +314,7 @@ class MatchLayersByMaxPMCC(Job):
 
 
 class OptimizeLayersElastic(Job):
-    def __init__(self, dependencies, tiles_fnames, corr_fnames, image_width, image_height, fixed_layers, output_dir, jar_file, conf_fname=None):
+    def __init__(self, dependencies, outputs, tiles_fnames, corr_fnames, image_width, image_height, fixed_layers, output_dir, jar_file, conf_fname=None):
         Job.__init__(self)
         self.already_done = False
         self.tiles_fnames = '--tile_files {0}'.format(" ".join(tiles_fnames))
@@ -334,7 +334,7 @@ class OptimizeLayersElastic(Job):
         self.dependencies = dependencies
         self.memory = 12000
         self.time = 30
-        self.output = output_dir
+        self.output = outputs
         #self.already_done = os.path.exists(self.output_file)
 
     def command(self):
@@ -586,12 +586,17 @@ if __name__ == '__main__':
 
 
 
-
+    print "all_pmcc_files: {0}".format(all_pmcc_files)
 
     # Optimize all layers to a single 3d image
     create_dir(args.output_dir)
+    sections_outputs = []
+    for i in all_layers:
+        out_section = os.path.join(args.output_dir, "Section{0}.json".format(str(i).zfill(3)))
+        sections_outputs.append(out_section)
+
     dependencies = pmcc_jobs
-    job_optimize = OptimizeLayersElastic(dependencies, all_ts_files, all_pmcc_files, \
+    job_optimize = OptimizeLayersElastic(dependencies, sections_outputs, all_ts_files, all_pmcc_files, \
         imageWidth, imageHeight, [ fixed_layer ], args.output_dir, args.jar_file, conf_fname=args.conf_file_name)
     #optimize_layers_elastic(all_ts_files, all_pmcc_files, imageWidth, imageHeight, [fixed_layer], args.output_dir, args.jar_file, conf)
 

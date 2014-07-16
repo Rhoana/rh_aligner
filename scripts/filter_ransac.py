@@ -15,8 +15,8 @@ def filter_ransac(corr_file, compared_url, out_fname, jar_file, conf=None):
         compared_url,
         out_fname,
         conf_args)
-    print "Executing: {0}".format(java_cmd)
-    call(java_cmd, shell=True) # w/o shell=True it seems that the env-vars are not set
+    utils.execute_shell_command(java_cmd)
+
 
 def main():
     # Command line parser

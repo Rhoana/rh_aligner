@@ -2,6 +2,8 @@
 
 import os
 import urlparse, urllib
+from subprocess import call
+import sys
 
 
 def path2url(path):
@@ -29,4 +31,12 @@ def conf_args_from_file(conf_fname, tool):
                 for tool_key in conf[tool]:
                     res = res + "--{0} {1} ".format(tool_key, conf[tool][tool_key])
     return res
+
+def execute_shell_command(cmd):
+    print "Executing: {0}".format(cmd)
+    res = call(cmd, shell=True) # w/o shell=True it seems that the env-vars are not set
+    if res != 0:
+        print "Error while executing: {0}".format(cmd)
+        print "Exiting"
+        sys.exit(1)
 
