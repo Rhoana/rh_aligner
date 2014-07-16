@@ -33,16 +33,16 @@ def optimize_layers_elastic(tile_files, corr_files, image_width, image_height, f
 def main():
     # Command line parser
     parser = argparse.ArgumentParser(description='Iterates over the tilespecs in a file, computing matches for each overlapping tile.')
-    parser.add_argument('tile_files', metavar='tile_files', type=str, nargs='+',
+    parser.add_argument('--tile_files', metavar='tile_files', type=str, nargs='+', required=True,
                         help='the list of tile spec files to align')
-    parser.add_argument('corr_files', metavar='corr_files', type=str, nargs='+',
+    parser.add_argument('--corr_files', metavar='corr_files', type=str, nargs='+', required=True,
                         help='the list of corr spec files that contain the matched layers')
     parser.add_argument('-o', '--output_dir', type=str, 
                         help='an output directory that will include the aligned sections tiles (default: .)',
                         default='./')
-    parser.add_argument('-w', '--image_width', type=int, 
+    parser.add_argument('-W', '--image_width', type=float, 
                         help='the width of the image (used for creating the mesh)')
-    parser.add_argument('-h', '--image_height', type=int, 
+    parser.add_argument('-H', '--image_height', type=float, 
                         help='the height of the image (used for creating the mesh)')
     parser.add_argument('-f', '--fixed_layers', type=str, nargs='+',
                         help='a space separated list of fixed layer IDs (default: None)',
@@ -56,6 +56,9 @@ def main():
 
 
     args = parser.parse_args()
+
+    print "tile_files: {0}".format(args.tile_files)
+    print "corr_files: {0}".format(args.corr_files)
 
     optimize_layers_elastic(args.tile_files, args.corr_files, \
         args.image_width, args.image_height, args.fixed_layers, args.output_dir, args.jar_file, \
