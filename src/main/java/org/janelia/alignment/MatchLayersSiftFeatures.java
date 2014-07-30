@@ -23,7 +23,6 @@ import java.io.FileWriter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Vector;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -295,9 +294,9 @@ public class MatchLayersSiftFeatures
 		System.out.println( "Searching for matching candidates" );
 		//			final List< PointMatch > candidates = new ArrayList< PointMatch >();
 //			FeatureTransform.matchFeatures( fs1, fs2, candidates, params.rod );
-		//final List< PointMatch > candidates = FloatArray2DSIFT.createMatches( fs2, fs1, params.rod );
+		final List< PointMatch > candidates = FloatArray2DSIFT.createMatches( fs2, fs1, params.rod );
 		// To be consistent with the original matches calculation, we match fs2 -> fs1
-		final List< PointMatch > candidates = createMatches( fs2, fs1, params.rod, params.numThreads );
+		//final List< PointMatch > candidates = createMatches( fs2, fs1, params.rod, params.numThreads );
 
 		System.out.println( "Found " + candidates.size() + " matching candidates, scaling..." );
 
