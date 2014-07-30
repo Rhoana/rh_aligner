@@ -48,6 +48,7 @@ public class TileSpecsImage {
 	private double triangleSize;
 	// The number of threads used to perfrom the rendering and bounding box computation
 	private int threadsNum;
+	private boolean parsed;
 	
 	
 	/* C'tors */
@@ -211,37 +212,45 @@ public class TileSpecsImage {
 				alphaPixels = ( byte[] )target.outside.getPixels();
 
 
-			final int pixelsPerThread = cpPixels.length / threadsNum;
-			final List< Future< ? > > futures = new ArrayList< Future< ? >>();
-
-			for ( int t = 0; t < threadsNum; t++ ) {
-				final int threadIndex = t;
-				final Future< ? > future = threadPool.submit( new Runnable() {
-
-					@Override
-					public void run() {
-						int startIndex = threadIndex * pixelsPerThread;
-						int endIndex = ( threadIndex + 1 ) * pixelsPerThread;
-						if ( threadIndex == threadsNum - 1 )
-							endIndex = cpPixels.length;
-						for ( int i = startIndex; i < endIndex; ++i )
-							cpPixels[ i ] &= 0x00ffffff | ( alphaPixels[ i ] << 24 );
-						
-					}
-				});
-				futures.add( future );
+			if ( threadsNum == 1 )
+			{
+				for ( int i = 0; i < cpPixels.length; ++i )
+					cpPixels[ i ] &= 0x00ffffff | ( alphaPixels[ i ] << 24 );
 			}
-			
-			try {
-				for ( Future< ? > future : futures ) {
-					future.get();
+			else
+			{
+				final int pixelsPerThread = cpPixels.length / threadsNum;
+				final List< Future< ? > > futures = new ArrayList< Future< ? >>();
+	
+				for ( int t = 0; t < threadsNum; t++ ) {
+					final int threadIndex = t;
+					final Future< ? > future = threadPool.submit( new Runnable() {
+	
+						@Override
+						public void run() {
+							int startIndex = threadIndex * pixelsPerThread;
+							int endIndex = ( threadIndex + 1 ) * pixelsPerThread;
+							if ( threadIndex == threadsNum - 1 )
+								endIndex = cpPixels.length;
+							for ( int i = startIndex; i < endIndex; ++i )
+								cpPixels[ i ] &= 0x00ffffff | ( alphaPixels[ i ] << 24 );
+							
+						}
+					});
+					futures.add( future );
 				}
-			} catch ( InterruptedException e ) {
-				e.printStackTrace();
-				throw new RuntimeException( e );
-			} catch ( ExecutionException e ) {
-				e.printStackTrace();
-				throw new RuntimeException( e );
+				
+				try {
+					for ( Future< ? > future : futures ) {
+						future.get();
+					}
+				} catch ( InterruptedException e ) {
+					e.printStackTrace();
+					throw new RuntimeException( e );
+				} catch ( ExecutionException e ) {
+					e.printStackTrace();
+					throw new RuntimeException( e );
+				}
 			}
 		}
 		
@@ -315,6 +324,7 @@ public class TileSpecsImage {
 	private void initialize() {
 		boundingBox = null;
 		threadsNum = Runtime.getRuntime().availableProcessors();
+		parsed = false;
 	}
 	
 
@@ -333,44 +343,56 @@ public class TileSpecsImage {
 	 * Computes the dimensions, the start point of the 3D image, and its bounding box
 	 */
 	private void parseTileSpecs( int mipmapLevel, boolean recomputeBoundingBox ) {
-		// Iterate through the tiles, find the width and height (after applying the transformations),
-		// and the depth of the image
-		int[] minmaxZ = { Integer.MAX_VALUE, Integer.MIN_VALUE };
 		
-		// Create an uninitialized bounding box
-		boundingBox = new BoundingBox();
-		
-		/* Iterate through the tile specs */
-		System.out.println( "Parsing all tilespecs." );
-		for ( TileSpec ts : tileSpecs ) {
-			// Update the Z value
-			if ( ts.layer != -1 ) {
-				minmaxZ[0] = Math.min( minmaxZ[0], ts.layer );
-				minmaxZ[1] = Math.max( minmaxZ[1], ts.layer );
-			}
-			
-			// Get the bounding box of the tilespec
-			BoundingBox bbox;
-			if ( ( ts.bbox == null ) || ( recomputeBoundingBox ) ) {
-				bbox = getTileSpecBoundingBox( ts, mipmapLevel );
-				ts.bbox = bbox.to2DFloatArray();
-			} else {
-				bbox = new BoundingBox( 
-						(int) ts.bbox[0],
-						(int) ts.bbox[1],
-						(int) ts.bbox[2],
-						(int) ts.bbox[3]
-						);
-			}
-			boundingBox.extendByBoundingBox( bbox );
-			boundingBox.extendZ( minmaxZ[0], minmaxZ[1] );
-		}
-		
-		if ( !boundingBox.isInitialized() )
-			throw new RuntimeException( "Error: failed to parse tile specs" );
+		if ( parsed == false )
+		{
+			synchronized( this )
+			{
+				if ( parsed == false )
+				{
+					// Iterate through the tiles, find the width and height (after applying the transformations),
+					// and the depth of the image
+					int[] minmaxZ = { Integer.MAX_VALUE, Integer.MIN_VALUE };
+					
+					// Create an uninitialized bounding box
+					boundingBox = new BoundingBox();
+					
+					/* Iterate through the tile specs */
+					System.out.println( "Parsing all tilespecs." );
+					for ( TileSpec ts : tileSpecs ) {
+						// Update the Z value
+						if ( ts.layer != -1 ) {
+							minmaxZ[0] = Math.min( minmaxZ[0], ts.layer );
+							minmaxZ[1] = Math.max( minmaxZ[1], ts.layer );
+						}
+						
+						// Get the bounding box of the tilespec
+						BoundingBox bbox;
+						if ( ( ts.bbox == null ) || ( recomputeBoundingBox ) ) {
+							bbox = getTileSpecBoundingBox( ts, mipmapLevel );
+							ts.bbox = bbox.to2DFloatArray();
+						} else {
+							bbox = new BoundingBox( 
+									(int) ts.bbox[0],
+									(int) ts.bbox[1],
+									(int) ts.bbox[2],
+									(int) ts.bbox[3]
+									);
+						}
+						boundingBox.extendByBoundingBox( bbox );
+						boundingBox.extendZ( minmaxZ[0], minmaxZ[1] );
+					}
+					
+					if ( !boundingBox.isInitialized() )
+						throw new RuntimeException( "Error: failed to parse tile specs" );
 
-		System.out.println( "Parsing all tilespecs - Done." );
-		System.out.println( "all tilespecs bounding box: " + boundingBox );
+					System.out.println( "Parsing all tilespecs - Done." );
+					System.out.println( "all tilespecs bounding box: " + boundingBox );
+					parsed = true;
+				}
+			}
+		}
+
 
 	}
 	

@@ -7,6 +7,10 @@ import ij.process.ColorProcessor;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
@@ -102,7 +106,7 @@ public class Render3D {
 			new ImageJ();
 
 		// Open all tiles
-		TileSpecsImage entireImage = TileSpecsImage.createImageFromFiles( params.files );
+		final TileSpecsImage entireImage = TileSpecsImage.createImageFromFiles( params.files );
 		
 		// Get the bounding box
 		BoundingBox bbox = entireImage.getBoundingBox();
@@ -113,7 +117,7 @@ public class Render3D {
 		
 		System.out.println( "Scale is: " + scale );
 		System.out.println( "Scaled width: " + (bbox.getWidth() * scale) + ", height: " + (bbox.getHeight() * scale) );
-
+		
 		// Render the first layer
 		int firstLayer = params.layer;
 		if ( firstLayer == -1 )
@@ -122,21 +126,49 @@ public class Render3D {
 		// if no layer is given as input, show all layers
 		if ( params.layer == -1 )
 		{
+			// Set a single thread per image, and render each layer with a different thread 
+			//entireImage.setThreadsNum( 1 );
+			final ExecutorService threadPool = Executors.newFixedThreadPool( params.numThreads );
+			final List< Future< ? > > futures = new ArrayList< Future< ? >>();
+
 			final int lastLayer = bbox.getEndPoint().getZ();
 			for ( int i = firstLayer; i < lastLayer + 1; i++ )
 			{
-				ImagePlus image = renderLayerImage( entireImage, scale, i );
-				if ( !params.hide )
-					image.show();
-				if ( params.targetDir != null )
-				{
-					String outFile = String.format( "%s/Section_%03d.png", params.targetDir, i );
-					saveLayerImage( image, outFile );
-				}
+				final int curLayer = i;
+				final double curScale = scale;
+				final Future< ? > future = threadPool.submit( new Runnable() {
+					
+					@Override
+					public void run() {
+						final ImagePlus image = renderLayerImage( entireImage, curScale, curLayer );
+						if ( !params.hide )
+							image.show();
+						if ( params.targetDir != null )
+						{
+							String outFile = String.format( "%s/Section_%03d.png", params.targetDir, curLayer );
+							saveLayerImage( image, outFile );
+						}
+					}
+				});
+				futures.add( future );				
 			}
+			
+			try {
+				for ( Future< ? > future : futures ) {
+					future.get();
+				}
+			} catch ( InterruptedException e ) {
+				e.printStackTrace();
+				throw new RuntimeException( e );
+			} catch ( ExecutionException e ) {
+				e.printStackTrace();
+				throw new RuntimeException( e );
+			}
+			threadPool.shutdown();
 		}
 		else // Show the wanted layer
 		{
+			entireImage.setThreadsNum( params.numThreads );
 			ImagePlus image = renderLayerImage( entireImage, scale, firstLayer );
 			if ( !params.hide )
 				image.show();

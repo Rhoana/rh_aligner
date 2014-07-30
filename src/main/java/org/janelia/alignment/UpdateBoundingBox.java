@@ -2,6 +2,10 @@ package org.janelia.alignment;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
@@ -57,6 +61,19 @@ public class UpdateBoundingBox {
 		return params;
 	}
 	
+	private static final void updateFileBoundingBox( final String fileName, final String filesSuffix, final int threadsNum )
+	{
+		final TileSpecsImage tsImage = TileSpecsImage.createImageFromFile( fileName );
+		// Set a single thread per image 
+		tsImage.setThreadsNum( threadsNum );
+		
+		tsImage.getBoundingBox( true );
+		
+		// Save the image
+		String outFileName = fileName.replace( ".json", filesSuffix + ".json" );
+		outFileName = outFileName.replace( "file://", "" );
+		tsImage.saveTileSpecs( outFileName );
+	}
 	
 	public static void main( final String[] args )
 	{		
@@ -65,16 +82,45 @@ public class UpdateBoundingBox {
 		if ( params == null )
 			return;
 		
-		for ( String fileName : params.files )
+
+		if ( params.numThreads <= params.files.size() )
 		{
-			TileSpecsImage tsImage = TileSpecsImage.createImageFromFile( fileName );
+			// Each thread updates the bbox of a single json file
+			final ExecutorService threadPool = Executors.newFixedThreadPool( params.numThreads );
+			final List< Future< ? > > futures = new ArrayList< Future< ? >>();
+
+			for ( final String fileName : params.files )
+			{
+				final Future< ? > future = threadPool.submit( new Runnable() {
+					
+					@Override
+					public void run() {
+						updateFileBoundingBox( fileName, params.filesSuffix, 1 );
+					}
+				} );
+				futures.add( future );
+			}
 			
-			tsImage.getBoundingBox( true );
-			
-			// Save the image
-			String outFileName = fileName.replace( ".json", params.filesSuffix + ".json" );
-			outFileName = outFileName.replace( "file://", "" );
-			tsImage.saveTileSpecs( outFileName );
+			try {
+				for ( Future< ? > future : futures ) {
+					future.get();
+				}
+			} catch ( InterruptedException e ) {
+				e.printStackTrace();
+				throw new RuntimeException( e );
+			} catch ( ExecutionException e ) {
+				e.printStackTrace();
+				throw new RuntimeException( e );
+			}
+			threadPool.shutdown();
+		}
+		else
+		{
+			// Each update of json file's bbox is done using multiple threads
+			for ( final String fileName : params.files )
+			{
+				updateFileBoundingBox( fileName, params.filesSuffix, params.numThreads );
+			}
 		}
 	}
 }
