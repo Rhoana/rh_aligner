@@ -194,5 +194,7 @@ print "All pmcc files: {0}".format(all_pmcc_files)
 # Optimize all layers to a single 3d image
 all_ts_files = layer_to_ts_json.values()
 create_dir(args.output_dir)
-optimize_layers_elastic(all_ts_files, all_pmcc_files, imageWidth, imageHeight, [fixed_layer], args.output_dir, args.jar_file, conf)
+# fetch actual pmcc files list (because some sections were not matched, and therefore their pmcc file is missing)
+actual_pmcc_files = glob.glob(os.path.join(matched_pmcc_dir, '*.json'))
+optimize_layers_elastic(all_ts_files, actual_pmcc_files, imageWidth, imageHeight, [fixed_layer], args.output_dir, args.jar_file, conf)
 
