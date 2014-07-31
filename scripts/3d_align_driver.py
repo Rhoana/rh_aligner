@@ -75,6 +75,8 @@ parser.add_argument('-d', '--max_layer_distance', type=int,
 parser.add_argument('-c', '--conf_file_name', type=str, 
                     help='the configuration file with the parameters for each step of the alignment process in json format (uses default parameters, if )',
                     default=None)
+parser.add_argument('--auto_add_model', action="store_true", 
+                    help='automatically add the identity model, if a model is not found')
 
 
 
@@ -186,7 +188,7 @@ for i in all_layers:
         pmcc_fname = os.path.join(matched_pmcc_dir, "{0}_{1}_match_pmcc.json".format(fname1_prefix, fname2_prefix))
         if not os.path.exists(pmcc_fname):
             print "Matching layers by Max PMCC: {0} and {1}".format(i, i + j)
-            match_layers_by_max_pmcc(args.jar_file, layer_to_ts_json[i], layer_to_ts_json[i + j], ransac_fname, imageWidth, imageHeight, [fixed_layer], pmcc_fname, conf)
+            match_layers_by_max_pmcc(args.jar_file, layer_to_ts_json[i], layer_to_ts_json[i + j], ransac_fname, imageWidth, imageHeight, [fixed_layer], pmcc_fname, conf=conf, auto_add_model=args.auto_add_model)
         all_pmcc_files.append(pmcc_fname)
 
 print "All pmcc files: {0}".format(all_pmcc_files)

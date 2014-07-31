@@ -17,6 +17,7 @@ import mpicbg.ij.blockmatching.BlockMatching;
 import mpicbg.models.AbstractModel;
 import mpicbg.models.CoordinateTransform;
 import mpicbg.models.ErrorStatistic;
+import mpicbg.models.IdentityModel;
 import mpicbg.models.InvertibleCoordinateTransform;
 import mpicbg.models.PointMatch;
 import mpicbg.models.SpringMesh;
@@ -54,6 +55,9 @@ public class MatchLayersByMaxPMCC {
 
         @Parameter( names = "--imageHeight", description = "The height of the entire image (all layers), for consistent mesh computation", required = true )
         private int imageHeight;
+
+        @Parameter( names = "--autoAddModel", description = "Automatically add the Identity model in case a model is not found", required = false )
+        private boolean autoAddModel = false;
 
         @Parameter( names = "--fixedLayers", description = "Fixed layer numbers (space separated)", variableArity = true, required = false )
         public List<Integer> fixedLayers = new ArrayList<Integer>();
@@ -513,7 +517,10 @@ public class MatchLayersByMaxPMCC {
 
 			if ( model == null )
 			{
-				throw new RuntimeException( "Error: model between the given two tilespecs was not found. ");
+				if ( params.autoAddModel )
+					model = new IdentityModel();
+				else
+					throw new RuntimeException( "Error: model between the given two tilespecs was not found. ");
 			}
 		}
 		catch ( final MalformedURLException e )

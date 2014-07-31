@@ -10,15 +10,19 @@ import utils
 
 # common functions
 
-def match_layers_by_max_pmcc(jar_file, tiles_file1, tiles_file2, models_file, image_width, image_height, fixed_layers, out_fname, conf=None, threads_num=1):
+def match_layers_by_max_pmcc(jar_file, tiles_file1, tiles_file2, models_file, image_width, image_height, fixed_layers, out_fname, conf=None, threads_num=1, auto_add_model=False):
     conf_args = utils.conf_args(conf, 'MatchLayersByMaxPMCC')
 
     fixed_str = ""
     if fixed_layers != None:
         fixed_str = "--fixedLayers {0}".format(" ".join(map(str, fixed_layers)))
 
+    auto_add_model_str = ""
+    if auto_add_model:
+        auto_add_model_str = "--autoAddModel"
+
     java_cmd = 'java -Xmx6g -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.MatchLayersByMaxPMCC --inputfile1 {1} --inputfile2 {2} \
-            --modelsfile1 {3} --imageWidth {4} --imageHeight {5} --threads {6} --targetPath {7} {8} {9}'.format(
+            --modelsfile1 {3} --imageWidth {4} --imageHeight {5} --threads {6} {7} --targetPath {8} {9} {10}'.format(
         jar_file,
         utils.path2url(tiles_file1),
         utils.path2url(tiles_file2),
@@ -26,6 +30,7 @@ def match_layers_by_max_pmcc(jar_file, tiles_file1, tiles_file2, models_file, im
         int(image_width),
         int(image_height),
         threads_num,
+        auto_add_model_str,
         out_fname,
         fixed_str,
         conf_args)
@@ -60,6 +65,8 @@ def main():
     parser.add_argument('-t', '--threads_num', type=int, 
                         help='the number of threads to use (default: 1)',
                         default=1)
+    parser.add_argument('--auto_add_model', action="store_true", 
+                        help='automatically add the identity model, if a model is not found')
 
 
     args = parser.parse_args()
@@ -68,7 +75,8 @@ def main():
         args.models_file, args.image_width, args.image_height, \
         args.fixed_layers, args.output_file, \
         conf=utils.conf_args_from_file(args.conf_file_name, "MatchLayersByMaxPMCC"), \
-        threads_num=args.threads_num)
+        threads_num=args.threads_num,
+        auto_add_model=args.auto_add_model)
 
 if __name__ == '__main__':
     main()
