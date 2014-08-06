@@ -179,6 +179,7 @@ public class ComputeLayerSiftFeatures {
 	
 		// Create the layer image
 		final TileSpecsImage singleTileImage = TileSpecsImage.createImageFromFile( params.url );
+		singleTileImage.setThreadsNum( params.numThreads );
 		final BoundingBox bbox = singleTileImage.getBoundingBox();
 		final int layerIndex = bbox.getStartPoint().getZ();
 		
