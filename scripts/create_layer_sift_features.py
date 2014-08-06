@@ -19,7 +19,7 @@ def create_layer_sift_features(tiles_fname, out_fname, jar_file, conf=None, thre
     tiles_url = utils.path2url(os.path.abspath(tiles_fname))
     conf_args = utils.conf_args(conf, 'ComputeSiftFeatures')
     # Compute the Sift features `for each tile in the tile spec file
-    java_cmd = 'java -Xmx12g -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.ComputeLayerSiftFeatures --url {1} --targetPath {2} --threads {3} {4}'.format(\
+    java_cmd = 'java -Xmx11g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.ComputeLayerSiftFeatures --url {1} --targetPath {2} --threads {3} {4}'.format(\
         jar_file, tiles_url, out_fname, threads_num, conf_args)
     utils.execute_shell_command(java_cmd)
 

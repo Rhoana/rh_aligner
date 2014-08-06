@@ -17,7 +17,7 @@ def optimize_layers_elastic(tile_files, corr_files, image_width, image_height, f
     if fixed_layers != None:
         fixed_str = "--fixedLayers {0}".format(" ".join(map(str, fixed_layers)))
 
-    java_cmd = 'java -Xmx4g -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.OptimizeLayersElastic --tilespecFiles {1} --corrFiles {2} \
+    java_cmd = 'java -Xmx4g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.OptimizeLayersElastic --tilespecFiles {1} --corrFiles {2} \
             --fixedLayers {3} --imageWidth {4} --imageHeight {5} --targetDir {6} {7}'.format(
         jar_file,
         " ".join(utils.path2url(f) for f in tile_files),
