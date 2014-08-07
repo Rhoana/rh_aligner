@@ -15,7 +15,6 @@ import json
 import glob
 
 #from filter_tiles import filter_tiles
-from update_bbox import update_bbox, read_bbox
 #from create_sift_features import create_sift_features
 from create_layer_sift_features import create_layer_sift_features
 from match_layers_sift_features import match_layers_sift_features
@@ -23,6 +22,7 @@ from filter_ransac import filter_ransac
 from match_layers_by_max_pmcc import match_layers_by_max_pmcc
 from optimize_layers_elastic import optimize_layers_elastic
 from utils import path2url
+from bounding_box import BoundingBox
 
 
 def read_layer_from_file(tiles_spec_fname):
@@ -130,7 +130,7 @@ for tiles_fname in glob.glob(os.path.join(args.input_dir, '*.json')):
     #    print "Updating bounding box of {0}".format(tiles_fname_prefix)
     #    update_bbox(args.jar_file, tiles_fname, out_dir=after_bbox_dir, out_suffix=bbox_suffix)
     #bbox = read_bbox(after_bbox_json)
-    bbox = read_bbox(tiles_fname)
+    bbox = BoundingBox.read_bbox(tiles_fname)
     if imageWidth is None or imageWidth < (bbox[1] - bbox[0]):
         imageWidth = bbox[1] - bbox[0]
     if imageHeight is None or imageHeight < bbox[3] - bbox[2]:

@@ -1,5 +1,6 @@
 
 import sys
+import json
 
 # bounding box - represents a bounding box in an image
 class BoundingBox:
@@ -56,3 +57,24 @@ class BoundingBox:
 	def toArray(self):
 		return [self.from_x, self.to_x, self.from_y, self.to_y]
 
+	@classmethod
+	def load_tiles(cls, tiles_spec_fname):
+	    all_bboxes = []
+	    with open(tiles_spec_fname, 'r') as data_file:
+	        data = json.load(data_file)
+	    for tile in data:
+	        tile_bbox = BoundingBox.fromList(tile['bbox'])
+	        all_bboxes.append(tile_bbox)
+	    return all_bboxes
+
+	@classmethod
+	def read_bbox(cls, tiles_spec_fname):
+	    all_bboxes = BoundingBox.load_tiles(tiles_spec_fname)
+	    # merge the bounding boxes to a single bbox
+	    if len(all_bboxes) > 0:
+	        ret_val = all_bboxes[0]
+	        for bbox in all_bboxes:
+	            ret_val.extend(bbox)
+	        return ret_val.toArray()
+	    return None
+	
