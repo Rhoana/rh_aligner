@@ -674,7 +674,7 @@ class FilterRansac(Job):
 
 
 class MatchLayersByMaxPMCC(Job):
-    def __init__(self, dependencies, tiles_fname1, tiles_fname2, ransac_fname, image_width, image_height, fixed_layers, pmcc_output_file, jar_file, conf_fname=None, threads_num=1):
+    def __init__(self, dependencies, tiles_fname1, tiles_fname2, ransac_fname, image_width, image_height, fixed_layers, pmcc_output_file, jar_file, conf_fname=None, threads_num=1, auto_add_model=False):
         Job.__init__(self)
         self.already_done = False
         self.tiles_fname1 = '"{0}"'.format(tiles_fname1)
@@ -692,11 +692,15 @@ class MatchLayersByMaxPMCC(Job):
             self.fixed_layers = ''
         else:
             self.fixed_layers = '-f {0}'.format(" ".join(str(f) for f in fixed_layers))
+        if auto_add_model:
+            self.auto_add_model = '--auto_add_model'
+        else:
+            self.auto_add_model = ''
         self.threads = threads_num
         self.threads_str = '-t {0}'.format(threads_num)
         self.dependencies = dependencies
         self.memory = 7000
-        self.time = 20
+        self.time = 30
         self.is_java_job = True
         self.output = pmcc_output_file
         #self.already_done = os.path.exists(self.output_file)
@@ -704,7 +708,7 @@ class MatchLayersByMaxPMCC(Job):
     def command(self):
         return ['python',
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'match_layers_by_max_pmcc.py'),
-                self.output_file, self.fixed_layers, self.jar_file, self.conf_fname, self.threads_str, self.image_width, self.image_height,
+                self.output_file, self.fixed_layers, self.jar_file, self.conf_fname, self.threads_str, self.auto_add_model, self.image_width, self.image_height,
                 self.tiles_fname1, self.tiles_fname2, self.ransac_fname]
 
 
@@ -804,6 +808,8 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--max_layer_distance', type=int, 
                         help='the largest distance between two layers to be matched (default: 1)',
                         default=1)
+    parser.add_argument('--auto_add_model', action="store_true", 
+                        help='automatically add the identity model, if a model is not found')
     parser.add_argument('-k', '--keeprunning', action='store_true', 
                         help='Run all jobs and report cluster jobs execution stats')
     parser.add_argument('-m', '--multicore', action='store_true', 
@@ -986,7 +992,7 @@ if __name__ == '__main__':
 
                 job_pmcc = MatchLayersByMaxPMCC(dependencies, layers_data[si]['ts'], layers_data[sij]['ts'], \
                     layers_data[si]['ransac'][sij], imageWidth, imageHeight, \
-                    [ fixed_layer ], pmcc_fname, args.jar_file, conf_fname=args.conf_file_name, threads_num=8)
+                    [ fixed_layer ], pmcc_fname, args.jar_file, conf_fname=args.conf_file_name, threads_num=8, auto_add_model=args.auto_add_model)
                 #match_layers_by_max_pmcc(args.jar_file, layer_to_ts_json[i], layer_to_ts_json[i + j], ransac_fname, imageWidth, imageHeight, [fixed_layer], pmcc_fname, conf)
                 pmcc_jobs.append(job_pmcc)
                 all_running_jobs.append(job_pmcc)
