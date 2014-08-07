@@ -164,7 +164,7 @@ fixed_layer = all_layers[0]
 # Match and optimize each two layers in the required distance
 all_pmcc_files = []
 for i in all_layers:
-    layers_to_process = min(i + args.max_layer_distance, all_layers[-1] + 1) - i
+    layers_to_process = min(i + args.max_layer_distance + 1, all_layers[-1] + 1) - i
     print "layers_to_process {0}".format(layers_to_process)
     for j in range(1, layers_to_process):
         print "j {0}".format(j)
