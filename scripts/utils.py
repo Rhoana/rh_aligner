@@ -40,3 +40,10 @@ def execute_shell_command(cmd):
         print "Exiting"
         sys.exit(1)
 
+
+def create_dir(path):
+    # create a directory if not found
+    if not os.path.exists(path):
+        os.makedirs(path)
+
+

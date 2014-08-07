@@ -1,5 +1,6 @@
 package org.janelia.alignment;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -13,7 +14,7 @@ import com.beust.jcommander.Parameters;
 
 /**
  * Updates the bounding box of each tilespec of the given tilespec files,
- * and outputs the tile spec to a file with a given suffix
+ * and outputs the tile spec to a file with the same name in a given output directory
  * 
  */
 public class UpdateBoundingBox {
@@ -27,12 +28,12 @@ public class UpdateBoundingBox {
 		@Parameter(description = "Json files to update bounding box for")
 		private List<String> files = new ArrayList<String>();
 		        
+        @Parameter( names = "--targetDir", description = "The directory where the output json files will be saved (SectionNNN.json)", required = true )
+        public String targetDir;
+        
         @Parameter( names = "--threads", description = "Number of threads to be used", required = false )
         public int numThreads = Runtime.getRuntime().availableProcessors();
 
-        @Parameter( names = "--suffix", description = "The suffix to add to the out file", required = false )
-        public String filesSuffix = "_bbox";
-        
 	}
 
 	private UpdateBoundingBox() { }
@@ -61,7 +62,7 @@ public class UpdateBoundingBox {
 		return params;
 	}
 	
-	private static final void updateFileBoundingBox( final String fileName, final String filesSuffix, final int threadsNum )
+	private static final void updateFileBoundingBox( final String fileName, final String targetDir, final int threadsNum )
 	{
 		final TileSpecsImage tsImage = TileSpecsImage.createImageFromFile( fileName );
 		// Set a single thread per image 
@@ -69,9 +70,9 @@ public class UpdateBoundingBox {
 		
 		tsImage.getBoundingBox( true );
 		
+		final String outFileName = targetDir + fileName.substring( fileName.lastIndexOf(File.separatorChar) );
+		
 		// Save the image
-		String outFileName = fileName.replace( ".json", filesSuffix + ".json" );
-		outFileName = outFileName.replace( "file://", "" );
 		tsImage.saveTileSpecs( outFileName );
 	}
 	
@@ -95,7 +96,7 @@ public class UpdateBoundingBox {
 					
 					@Override
 					public void run() {
-						updateFileBoundingBox( fileName, params.filesSuffix, 1 );
+						updateFileBoundingBox( fileName, params.targetDir, 1 );
 					}
 				} );
 				futures.add( future );
@@ -119,7 +120,7 @@ public class UpdateBoundingBox {
 			// Each update of json file's bbox is done using multiple threads
 			for ( final String fileName : params.files )
 			{
-				updateFileBoundingBox( fileName, params.filesSuffix, params.numThreads );
+				updateFileBoundingBox( fileName, params.targetDir, params.numThreads );
 			}
 		}
 	}

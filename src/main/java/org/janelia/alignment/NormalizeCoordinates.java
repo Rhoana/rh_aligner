@@ -1,5 +1,6 @@
 package org.janelia.alignment;
 
+import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.Writer;
@@ -16,8 +17,9 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
 /**
- * Normalizes the coordinates of a given 3D tile spec image to
+ * Normalizes (shifts/translates) the coordinates of a given 3D tile spec image to
  * the (0, 0) coordinates.
+ * Outputs the tile spec to a file with the same name in a given output directory
  */
 public class NormalizeCoordinates {
 
@@ -29,13 +31,10 @@ public class NormalizeCoordinates {
 
 		@Parameter(description = "Json files of a single 3D image to normalize coordinates for")
 		private List<String> files = new ArrayList<String>();
-		        
-        @Parameter( names = "--threads", description = "Number of threads to be used", required = false )
-        public int numThreads = Runtime.getRuntime().availableProcessors();
-
-        @Parameter( names = "--suffix", description = "The suffix to add to the out file", required = false )
-        public String filesSuffix = "_normalized";
         
+		@Parameter( names = "--targetDir", description = "The directory where the output json files will be saved (SectionNNN.json)", required = true )
+		public String targetDir;
+		        
 	}
 
 	private NormalizeCoordinates() { }
@@ -115,8 +114,7 @@ public class NormalizeCoordinates {
 				}
 				
 				// Save the output file
-				String outFileName = fileName.replace( ".json", params.filesSuffix + ".json" );
-				outFileName = outFileName.replace( "file://", "" );
+				final String outFileName = params.targetDir + fileName.substring( fileName.lastIndexOf(File.separatorChar) );
 				System.out.println( "Normalizing " + fileName + " to " + outFileName );
 				try {
 					Writer writer = new FileWriter( outFileName );

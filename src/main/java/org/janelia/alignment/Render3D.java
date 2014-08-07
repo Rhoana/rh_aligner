@@ -89,7 +89,7 @@ public class Render3D {
 
 	private static void saveLayerImage( ImagePlus image, String outFile )
 	{
-		IJ.save( image, outFile );
+		IJ.saveAsTiff( image, outFile );
 		System.out.println( "Image " + outFile + " was saved." );
 	}
 
@@ -112,8 +112,14 @@ public class Render3D {
 		BoundingBox bbox = entireImage.getBoundingBox();
 		
 		// Compute the initial scale (initialWidth pixels wide), round with a 2 digits position
-		double scale = Math.round( ( (double)params.width / bbox.getWidth() ) * 100.0 ) / 100.0;
-		scale = Math.min( scale, 1.0 );
+		double scale;
+		if ( params.width == -1 )
+			scale = 1.0;
+		else
+		{
+			scale = Math.round( ( (double)params.width / bbox.getWidth() ) * 100.0 ) / 100.0;
+			scale = Math.min( scale, 1.0 );
+		}
 		
 		System.out.println( "Scale is: " + scale );
 		System.out.println( "Scaled width: " + (bbox.getWidth() * scale) + ", height: " + (bbox.getHeight() * scale) );
@@ -145,7 +151,7 @@ public class Render3D {
 							image.show();
 						if ( params.targetDir != null )
 						{
-							String outFile = String.format( "%s/Section_%03d.png", params.targetDir, curLayer );
+							String outFile = String.format( "%s/Section_%03d.tif", params.targetDir, curLayer );
 							saveLayerImage( image, outFile );
 						}
 					}
