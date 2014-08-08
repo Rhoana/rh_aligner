@@ -131,123 +131,11 @@ class Job(object):
         for j in cls.all_jobs:
             j.run()
 
-    # All given job must have the same number of threads
     @classmethod
-    def run_job_blocks(cls, job_block_list, required_cores, required_memory, required_full_time, required_threads):
-        block_name = 'JobBlock{0}.'.format(cls.block_count) + job_block_list[0][0].name
-        cls.block_count += 1
-        print "RUNNING JOB BLOCK: " + block_name
-        print "{0} blocks, {1} jobs, {2} cores, {3}MB memory, {4}m time, {5} threads per task.".format(
-            len(job_block_list), [len(jb) for jb in job_block_list], required_cores, required_memory, required_full_time, required_threads)
-        full_command = "#!/bin/bash\n"
-        dependency_set = set()
-
-        # Find all dependencies for all jobs
-        for job_block in job_block_list:
-            for j in job_block:
-                for d in j.dependencies:
-                    if not d.get_done() and d.jobid is not None:
-                        if USE_SBATCH or USE_QSUB:
-                            dependency_set.add(d.jobid)
-                        # else:
-                        #     dependency_set.add(d.name)
-
-        work_queue = "serial_requeue"
-        if required_threads > 1:
-            work_queue = "general"
-
-
-        if USE_SBATCH:
-            command_list = ["sbatch",
-                "-J", block_name,                   # Job name
-                "-p", work_queue,            # Work queue (partition) = general / unrestricted / interactive / serial_requeue
-                "--requeue",
-                #"--exclude=holy2b05105,hp1301,hp0403",           # Exclude some bad nodes - holy2b05105 did not have scratch2 mapped.
-                "--ntasks", str(required_cores),        # Number of processes
-                "--cpus-per-task", str(required_threads),        # Number of threads
-#                "-n", str(required_cores),        # Number of processors
-                "-t", str(required_full_time),              # Time in munites 1440 = 24 hours
-                "--mem-per-cpu", str(required_memory), # Max memory in MB (strict - attempts to allocate more memory will fail)
-                "--open-mode=append",              # Append to log files
-                "-o", "logs/out." + block_name,     # Standard out file
-                "-e", "logs/error." + block_name]   # Error out file
-
-        elif USE_QSUB:
-            command_list = ["qsub"]#,
-                # "-N", block_name,                   # Job name
-                # "-A", 'hvd113',                    # XSEDE Allocation
-                # "-q", QSUB_WORK_QUEUE,                    # Work queue (partition) = general / unrestricted / interactive / serial_requeue
-                # "-l", 'nodes=1:ppn={0},walltime={1}:00'.format(str(required_cores), required_full_time),  # Number of processors
-                # #"-l", 'walltime={0}:00'.format(self.time),             # Time in munites 1440 = 24 hours
-                # #"-l", '-mppmem={0}'.format(self.memory),               # Max memory per cpu in MB (strict - attempts to allocate more memory will fail)
-                # "-e", "logs/outerror." + block_name('_')[0],      # Error out file
-                # "-j", "eo"]                                            # Join standard out file to error file
-
-            # Better to use file input rather than command line inputs (according to XSEDE helpdesk)
-            # Request MAX_CORES so that memory requirement is also met
-            full_command += (
-               "#PBS -N {0}\n".format(block_name) +
-               "#PBS -A hvd113\n" +
-               "#PBS -q {0}\n".format(QSUB_WORK_QUEUE) +
-               "#PBS -l nodes=1:ppn={0}:native,walltime={1}:00\n".format(str(MAX_CORES), required_full_time) +
-               "#PBS -e logs/outerror.{0}\n".format(block_name.split('_')[0]) +
-               "#PBS -j eo\n")
-
-        if len(dependency_set) > 0:
-            if USE_SBATCH:
-                dependency_string = ":".join(d for d in dependency_set)
-                if len(dependency_string) > 0:
-                    print "depends on jobs:" + dependency_string
-                    command_list += ["-d", "afterok:" + dependency_string]
-            elif USE_QSUB:
-                dependency_string = ":".join(d for d in dependency_set)
-                if len(dependency_string) > 0:
-                    print "depends on jobs:" + dependency_string
-                    full_command += "#PBS -W depend=afterok:" + dependency_string + "\n"
-            else:
-                command_list += " && ".join("done(%s)" % d for d in dependency_set)
-
-        if USE_SBATCH:
-            full_command += "date\n"
-        elif USE_QSUB:
-            full_command += "cd $PBS_O_WORKDIR\ndate\n"
-
-        # Generate job block commands
-        for job_block in job_block_list:
-            block_commands = ''
-            for j in job_block:
-                block_commands += '{0} &\n'.format(' '.join(j.command()))
-                print j.name
-            full_command += '{0}wait\ndate\n'.format(block_commands)
-
-        # # Test job ids
-        # for job_block in job_block_list:
-        #     for j in job_block:
-        #         j.jobid = str(cls.block_count - 1)
-
-        # print command_list
-        # print full_command
-
-        # Submit job
-        process = subprocess.Popen(command_list, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        submit_out, submit_err = process.communicate(full_command)
-
-        # Process output
-        if len(submit_err) == 0:
-            if USE_SBATCH:
-                new_jobid = submit_out.split()[3]
-            elif USE_QSUB:
-                new_jobid = submit_out.split('.')[0]
-            print 'jobid={0}'.format(new_jobid)
-            for job_block in job_block_list:
-                for j in job_block:
-                    j.jobid = new_jobid
-
-    @classmethod
-    def multicore_run_all(cls):
+    def multicore_run_list(cls, jobs):
         all_jobs_optimizer = JobBlockOrganizer()
 
-        for j in cls.all_jobs:
+        for j in jobs:
 
             # Make sure output directories exist
             out = j.output
@@ -262,7 +150,135 @@ class Job(object):
 
             all_jobs_optimizer.add_job(j)
 
-        all_jobs_optimizer.run_all()
+        submitted_job_blocks = all_jobs_optimizer.run_all()
+        return submitted_job_blocks
+
+    @classmethod
+    def multicore_run_all(cls):
+        multicore_run_list(cls.all_jobs)
+
+    @classmethod
+    def multicore_keep_running(cls):
+        all_jobs_complete = False
+        cancelled_jobs = {}
+        cancelled_requeue_iters = 5
+        submitted_job_blocks = {}
+
+        while not all_jobs_complete:
+
+            # Find running job blocks
+            sacct_output = subprocess.check_output(['sacct', '-n', '-o', 'JobID,JobName%100,State%20'])
+
+            pending_running_complete_job_blocks = {}
+            pending = 0
+            running = 0
+            complete = 0
+            failed = 0
+            cancelled = 0
+            timeout = 0
+            other_status = 0
+            non_matching = 0
+
+            for job_line in sacct_output.split('\n'):
+
+                job_split = job_line.split()
+                if len(job_split) == 0:
+                    continue
+
+                job_id = job_split[0]
+                job_name = job_split[1]
+                job_status = ' '.join(job_split[2:])
+                
+                if job_name in submitted_job_blocks:
+                    if job_status in ['PENDING', 'RUNNING', 'COMPLETED']:
+                        if job_name in pending_running_complete_job_blocks:
+                            print 'Found duplicate job: ' + job_name
+                            dup_job_id, dup_job_status = pending_running_complete_job_blocks[job_name]
+                            print job_id, job_status, dup_job_id, dup_job_status
+
+                            job_to_kill = None
+                            if job_status == 'PENDING':
+                                job_to_kill = job_id
+                            elif dup_job_status == 'PENDING':
+                                job_to_kill = dup_job_id
+                                pending_running_complete_job_blocks[job_name] = (job_id, job_status)    
+
+                            if job_to_kill is not None:
+                                print 'Canceling job ' + job_to_kill
+                                try:
+                                    scancel_output = subprocess.check_output(['scancel', '{0}'.format(job_to_kill)])
+                                    print scancel_output
+                                except:
+                                    print "Error canceling job:", sys.exc_info()[0]
+                        else:
+                            pending_running_complete_job_blocks[job_name] = (job_id, job_status)
+                            if job_status == 'PENDING':
+                                pending += 1
+                            elif job_status == 'RUNNING':
+                                running += 1
+                            elif job_status == 'COMPLETED':
+                                complete += 1
+                    elif job_status in ['FAILED', 'NODE_FAIL']:
+                        failed += 1
+                    elif job_status in ['CANCELLED', 'CANCELLED+'] or job_status.startswith('CANCELLED'):
+                        cancelled += 1
+
+                        # This job could requeued after preemption
+                        # Wait cancelled_requeue_iters before requeueing
+                        cancelled_iters = 0
+                        if job_id in cancelled_jobs:
+                            cancelled_iters = cancelled_jobs[job_id]
+
+                        if cancelled_iters < cancelled_requeue_iters:
+                            pending_running_complete_job_blocks[job_name] = (job_id, job_status)
+                            cancelled_jobs[job_id] = cancelled_iters + 1
+
+                    elif job_status in ['TIMEOUT']:
+                        timeout += 1
+                    else:
+                        print "Unexpected status: {0}".format(job_status)
+                        other_status += 1
+                elif job_name not in ['batch', 'true', 'prolog']:
+                    non_matching += 1
+
+            #print 'Found {0} running job blocks.'.format(len(pending_running_complete_job_blocks))
+
+            # Find running jobs
+            pending_running_complete_jobs = {}
+            for job_block_name in pending_running_complete_job_blocks:
+                job_id, job_status = pending_running_complete_job_blocks[job_block_name]
+                job_block_list = submitted_job_blocks[job_block_name]
+                for job_list in job_block_list:
+                    for job in job_list:
+                        pending_running_complete_jobs[job.name] = (job_id, job_status)
+
+            #print '== {0} running jobs.'.format(len(pending_running_complete_jobs))
+
+            # Make a list of runnable jobs
+            run_count = 0
+            block_count = 0
+            runnable_jobs = []
+            for j in cls.all_jobs:
+                if j.name not in pending_running_complete_jobs and not j.get_done() and j.dependendencies_done():
+                    runnable_jobs.append(j)
+                    run_count += 1
+
+            new_job_blocks = Job.multicore_run_list(runnable_jobs)
+            block_count += len(new_job_blocks)
+            submitted_job_blocks.update(new_job_blocks)
+
+            print 'Found {0} pending, {1} running, {2} complete, {3} failed, {4} cancelled, {5} timeout, {6} unknown status and {7} non-matching job blocks.'.format(
+                pending, running, complete, failed, cancelled, timeout, other_status, non_matching)
+
+            print "Queued {0} job{1} in {2} block{3}.".format(
+                run_count, '' if run_count == 1 else 's',
+                block_count, '' if block_count == 1 else 's')
+
+            if pending > 0 or running > 0 or run_count > 0:
+                time.sleep(60)
+            else:
+                all_jobs_complete = True
+
 
     @classmethod
     def keep_running(cls):
@@ -545,11 +561,11 @@ class JobBlock(object):
                 j.jobid = new_jobid
 
 
-    @classmethod
-    def run_all_job_blocks(cls):
-        print "Running all job blocks ({0} blocks)".format(len(cls.all_job_blocks))
-        for job_block in cls.all_job_blocks:
-            job_block.submit_block()
+    # @classmethod
+    # def run_all_job_blocks(cls):
+    #     print "Running all job blocks ({0} blocks)".format(len(cls.all_job_blocks))
+    #     for job_block in cls.all_job_blocks:
+    #         job_block.submit_block()
 
 
 
@@ -576,4 +592,10 @@ class JobBlockOrganizer(object):
         new_job_block.add_job(job)
 
     def run_all(self):
-        JobBlock.run_all_job_blocks()
+        submitted_job_blocks = []
+        for threads in self.job_blocks_per_thread_lists.keys():
+            for job_block in self.job_blocks_per_thread_lists[threads]:
+                job_block.submit_block()
+                submitted_job_blocks.add(job_block)
+        #JobBlock.run_all_job_blocks()
+        return submitted_job_blocks

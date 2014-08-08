@@ -37,7 +37,7 @@ class CreateLayerSiftFeatures(Job):
         self.threads = threads_num
         self.threads_str = "-t {0}".format(threads_num)
         self.memory = 12000
-        self.time = 20
+        self.time = 30
         self.is_java_job = True
         self.output = output_file
         #self.already_done = os.path.exists(self.output_file)
@@ -251,6 +251,8 @@ if __name__ == '__main__':
                         help='Run all jobs and report cluster jobs execution stats')
     parser.add_argument('-m', '--multicore', action='store_true', 
                         help='Run all jobs in blocks on multiple cores')
+    parser.add_argument('-mk', '--multicore_keeprunning', action='store_true', 
+                        help='Run all jobs in blocks on multiple cores and report cluster jobs execution stats')
 
     args = parser.parse_args() 
 
@@ -459,6 +461,9 @@ if __name__ == '__main__':
         #     print "ERROR: --local cannot be used with --multicore (not yet implemented)."
         #     sys.exit(1)
         Job.multicore_run_all()
+    elif args.multicore_keepruning:
+        # Bundle jobs for multicore nodes
+        Job.multicore_keep_running()
     else:
         Job.run_all()
 
