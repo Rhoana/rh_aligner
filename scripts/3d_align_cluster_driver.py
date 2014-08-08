@@ -461,7 +461,7 @@ if __name__ == '__main__':
         #     print "ERROR: --local cannot be used with --multicore (not yet implemented)."
         #     sys.exit(1)
         Job.multicore_run_all()
-    elif args.multicore_keepruning:
+    elif args.multicore_keeprunning:
         # Bundle jobs for multicore nodes
         Job.multicore_keep_running()
     else:

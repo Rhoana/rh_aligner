@@ -248,9 +248,8 @@ class Job(object):
             for job_block_name in pending_running_complete_job_blocks:
                 job_id, job_status = pending_running_complete_job_blocks[job_block_name]
                 job_block_list = submitted_job_blocks[job_block_name]
-                for job_list in job_block_list:
-                    for job in job_list:
-                        pending_running_complete_jobs[job.name] = (job_id, job_status)
+                for job in job_block_list:
+                    pending_running_complete_jobs[job.name] = (job_id, job_status)
 
             #print '== {0} running jobs.'.format(len(pending_running_complete_jobs))
 
@@ -436,20 +435,21 @@ class JobBlock(object):
         return self.pending
 
     def submit_block(self):
+        submitted_job_blocks = {}
         # If there are no jobs, do nothing
         if self.jobs_count == 0:
-            return
+            return submitted_job_blocks
 
         # If th ejob block was already submitted, do nothing
         if not self.pending:
-            return
+            return submitted_job_blocks
 
         self.pending = False
 
         # receursively execute all the dependencies
         for other_job_block in self.job_block_dependencies:
             if other_job_block.is_pending():
-                other_job_block.submit_block()
+                submitted_job_blocks.update(other_job_block.submit_block())
 
         block_name = 'JobBlock{0}.'.format(self.block_num) + self.job_block_list[0].name
         print "RUNNING JOB BLOCK: " + block_name
@@ -560,6 +560,8 @@ class JobBlock(object):
             for j in self.job_block_list:
                 j.jobid = new_jobid
 
+        submitted_job_blocks[block_name] = self.job_block_list
+        return submitted_job_blocks
 
     # @classmethod
     # def run_all_job_blocks(cls):
@@ -592,10 +594,9 @@ class JobBlockOrganizer(object):
         new_job_block.add_job(job)
 
     def run_all(self):
-        submitted_job_blocks = []
+        submitted_job_blocks = {}
         for threads in self.job_blocks_per_thread_lists.keys():
             for job_block in self.job_blocks_per_thread_lists[threads]:
-                job_block.submit_block()
-                submitted_job_blocks.add(job_block)
+                submitted_job_blocks.update(job_block.submit_block())
         #JobBlock.run_all_job_blocks()
         return submitted_job_blocks
