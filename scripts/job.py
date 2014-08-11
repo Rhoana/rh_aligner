@@ -179,6 +179,8 @@ class Job(object):
             other_status = 0
             non_matching = 0
 
+            timed_out_jobs = set()
+
             for job_line in sacct_output.split('\n'):
 
                 job_split = job_line.split()
@@ -235,6 +237,9 @@ class Job(object):
 
                     elif job_status in ['TIMEOUT']:
                         timeout += 1
+                        # in case of a timeout, add all jobs to the timed_out_jobs set
+                        job_block_list = submitted_job_blocks[job_block_name]
+                        timed_out_jobs.update(job_block_list)
                     else:
                         print "Unexpected status: {0}".format(job_status)
                         other_status += 1
@@ -259,6 +264,10 @@ class Job(object):
             runnable_jobs = []
             for j in cls.all_jobs:
                 if j.name not in pending_running_complete_jobs and not j.get_done() and j.dependendencies_done():
+                    # if the job is now available to run, and was previously timed out, then increase its time
+                    if j in timed_out_jobs:
+                        j.time *= 2
+                        print "Extending the time of job: {0} to {1} minutes".format(j.name, j.time)
                     runnable_jobs.append(j)
                     run_count += 1
 
