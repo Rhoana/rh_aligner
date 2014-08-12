@@ -46,4 +46,8 @@ def create_dir(path):
     if not os.path.exists(path):
         os.makedirs(path)
 
+def write_list_to_file(file_name, lst):
+    with open(file_name, 'w') as out_file:
+        for item in lst:
+            out_file.write("%s\n" % path2url(item))
 

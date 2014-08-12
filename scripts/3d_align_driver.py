@@ -21,7 +21,7 @@ from match_layers_sift_features import match_layers_sift_features
 from filter_ransac import filter_ransac
 from match_layers_by_max_pmcc import match_layers_by_max_pmcc
 from optimize_layers_elastic import optimize_layers_elastic
-from utils import path2url
+from utils import path2url, write_list_to_file
 from bounding_box import BoundingBox
 
 
@@ -198,5 +198,12 @@ all_ts_files = layer_to_ts_json.values()
 create_dir(args.output_dir)
 # fetch actual pmcc files list (because some sections were not matched, and therefore their pmcc file is missing)
 actual_pmcc_files = glob.glob(os.path.join(matched_pmcc_dir, '*.json'))
-optimize_layers_elastic(all_ts_files, actual_pmcc_files, imageWidth, imageHeight, [fixed_layer], args.output_dir, args.jar_file, conf)
+
+ts_list_file = os.path.join(args.workspace_dir, "all_ts_files.txt")
+write_list_to_file(ts_list_file, all_ts_files)
+pmcc_list_file = os.path.join(args.workspace_dir, "all_pmcc_files.txt")
+write_list_to_file(pmcc_list_file, actual_pmcc_files)
+
+#optimize_layers_elastic(all_ts_files, actual_pmcc_files, imageWidth, imageHeight, [fixed_layer], args.output_dir, args.jar_file, conf)
+optimize_layers_elastic([ ts_list_file ], [ pmcc_list_file ], imageWidth, imageHeight, [fixed_layer], args.output_dir, args.jar_file, conf)
 

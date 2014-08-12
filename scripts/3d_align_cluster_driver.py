@@ -17,7 +17,7 @@ from collections import defaultdict
 import argparse
 import glob
 import json
-from utils import path2url
+from utils import path2url, write_list_to_file
 from job import Job
 from bounding_box import BoundingBox
 
@@ -439,6 +439,13 @@ if __name__ == '__main__':
 
     print "all_pmcc_files: {0}".format(all_pmcc_files)
 
+    # Create a single file that lists all tilespecs and a single file that lists all pmcc matches (the os doesn't support a very long list)
+    ts_list_file = os.path.join(args.workspace_dir, "all_ts_files.txt")
+    write_list_to_file(ts_list_file, all_ts_files)
+    pmcc_list_file = os.path.join(args.workspace_dir, "all_pmcc_files.txt")
+    write_list_to_file(pmcc_list_file, all_pmcc_files)
+
+
     # Optimize all layers to a single 3d image
     create_dir(args.output_dir)
     sections_outputs = []
@@ -447,7 +454,7 @@ if __name__ == '__main__':
         sections_outputs.append(out_section)
 
     dependencies = all_running_jobs
-    job_optimize = OptimizeLayersElastic(dependencies, sections_outputs, all_ts_files, all_pmcc_files, \
+    job_optimize = OptimizeLayersElastic(dependencies, sections_outputs, [ ts_list_file ], [ pmcc_list_file ], \
         imageWidth, imageHeight, [ fixed_layer ], args.output_dir, args.jar_file, conf_fname=args.conf_file_name)
     #optimize_layers_elastic(all_ts_files, all_pmcc_files, imageWidth, imageHeight, [fixed_layer], args.output_dir, args.jar_file, conf)
 

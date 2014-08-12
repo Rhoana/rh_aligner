@@ -1,6 +1,8 @@
 package org.janelia.alignment;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -33,6 +35,8 @@ import com.beust.jcommander.Parameter;
 import com.beust.jcommander.Parameters;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonParseException;
+import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
 
 public class OptimizeLayersElastic {
@@ -42,10 +46,10 @@ public class OptimizeLayersElastic {
 		@Parameter( names = "--help", description = "Display this note", help = true )
         private final boolean help = false;
 
-        @Parameter( names = "--corrFiles", description = "Correspondence json files  (space separated)", variableArity = true, required = true )
+        @Parameter( names = "--corrFiles", description = "Correspondence json files  (space separated) or a single file containing a line-separated list of json files", variableArity = true, required = true )
         public List<String> corrFiles = new ArrayList<String>();
         
-        @Parameter( names = "--tilespecFiles", description = "Tilespec json files  (space separated)", variableArity = true, required = true )
+        @Parameter( names = "--tilespecFiles", description = "Tilespec json files  (space separated) or a single file containing a line-separated list of json files", variableArity = true, required = true )
         public List<String> tileSpecFiles = new ArrayList<String>();
         
         @Parameter( names = "--fixedLayers", description = "Fixed layer numbers (space separated)", variableArity = true, required = true )
@@ -687,6 +691,74 @@ public class OptimizeLayersElastic {
 		
 	}
 	
+	
+	/**
+	 * Receives a file name of either a json file or a file name that contains
+	 * a line-separated list of files.
+	 * 
+	 * @param listFileOrJsonFile
+	 * @return
+	 */
+	private static List<String> getListFromFile( String listFileOrJsonFile )
+	{
+		List< String > result = new ArrayList<String>();
+		
+		if ( ! listFileOrJsonFile.contains( "://" ) )
+			listFileOrJsonFile = "file://" + listFileOrJsonFile;
+		
+		// Try parsing the file as JSON file, if it is successful, return a single element list,
+		// otherwise (if it fails) then read the list from the file
+		final URL url;
+		try
+		{
+			url = new URL( listFileOrJsonFile );
+		}
+		catch ( final MalformedURLException e )
+		{
+			System.err.println( "URL malformed." );
+			e.printStackTrace( System.err );
+			throw new RuntimeException( e );
+		}
+
+		try
+		{
+			new JsonParser().parse( new InputStreamReader( url.openStream() ) );
+			result.add( listFileOrJsonFile );
+			return result;
+		}
+		catch ( final JsonParseException e )
+		{
+			// The file includes a list of files
+		}
+		catch ( final Exception e )
+		{
+			e.printStackTrace( System.err );
+			throw new RuntimeException( e );
+		}
+		
+		try
+		{
+			// Read the file
+			BufferedReader br = new BufferedReader( new InputStreamReader( url.openStream() ) );
+			String line;
+			while ( ( line = br.readLine() ) != null ) {
+				if ( ! line.contains( "://" ) )
+					line = "file://" + line;
+				result.add( line );
+			}
+			br.close();
+		
+		}
+		catch ( final Exception e )
+		{
+			e.printStackTrace( System.err );
+			throw new RuntimeException( e );
+		}
+		
+		return result;
+	}
+	
+
 	public static void main( final String[] args )
 	{
 		
@@ -710,10 +782,17 @@ public class OptimizeLayersElastic {
         	return;
         }
 		
+		List< String > actualTileSpecFiles;
+		if ( params.tileSpecFiles.size() == 1 )
+			// It might be a non-json file that contains a list of
+			actualTileSpecFiles = getListFromFile( params.tileSpecFiles.get( 0 ) );
+		else
+			actualTileSpecFiles = params.tileSpecFiles;
+		
 		// Load and parse tile spec files
 		final HashMap< Integer, List< TileSpec > > layersTs = new HashMap<Integer, List<TileSpec>>();
 		final HashMap< String, Integer > tsUrlToLayerIds = new HashMap<String, Integer>();
-		for ( final String tsUrl : params.tileSpecFiles )
+		for ( final String tsUrl : actualTileSpecFiles )
 		{
 			final TileSpec[] tileSpecs = TileSpecUtils.readTileSpecFile( tsUrl );
 			int layer = tileSpecs[0].layer;
@@ -724,12 +803,19 @@ public class OptimizeLayersElastic {
 			tsUrlToLayerIds.put( tsUrl, layer );
 		}
 
+		List< String > actualCorrFiles;
+		if ( params.corrFiles.size() == 1 )
+			// It might be a non-json file that contains a list of
+			actualCorrFiles = getListFromFile( params.corrFiles.get( 0 ) );
+		else
+			actualCorrFiles = params.corrFiles;
+
 		// Load and parse correspondence spec files
 		final HashMap< Integer, HashMap< Integer, CorrespondenceSpec > > layersCorrs;
-		layersCorrs = parseCorrespondenceFiles( params.corrFiles, tsUrlToLayerIds );
+		layersCorrs = parseCorrespondenceFiles( actualCorrFiles, tsUrlToLayerIds );
 
 		// Find bounding box
-		final TileSpecsImage entireImage = TileSpecsImage.createImageFromFiles( params.tileSpecFiles );
+		final TileSpecsImage entireImage = TileSpecsImage.createImageFromFiles( actualTileSpecFiles );
 		final BoundingBox bbox = entireImage.getBoundingBox();
 		
 		
@@ -768,5 +854,5 @@ public class OptimizeLayersElastic {
 
 		System.out.println( "Done." );
 	}
-	
+
 }
