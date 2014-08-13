@@ -2,7 +2,6 @@ package org.janelia.alignment;
 
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -13,7 +12,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Set;
 
 import mpicbg.models.AffineModel2D;
 import mpicbg.models.HomographyModel2D;
@@ -25,7 +23,6 @@ import mpicbg.models.SimilarityModel2D;
 import mpicbg.models.Spring;
 import mpicbg.models.SpringMesh;
 import mpicbg.models.Tile;
-import mpicbg.models.TileConfiguration;
 import mpicbg.models.TranslationModel2D;
 import mpicbg.models.Vertex;
 import mpicbg.trakem2.transform.MovingLeastSquaresTransform;
@@ -103,6 +100,12 @@ public class OptimizeLayersElastic {
         @Parameter( names = "--threads", description = "Number of threads to be used", required = false )
         public int numThreads = Runtime.getRuntime().availableProcessors();
         
+        @Parameter( names = "--fromLayer", description = "The layer to start the optimization from (default: first layer in the tile specs data)", required = false )
+        private int fromLayer = -1;
+
+        @Parameter( names = "--toLayer", description = "The last layer to include in the optimization (default: last layer in the tile specs data)", required = false )
+        private int toLayer = -1;
+
 	}
 	
 	private OptimizeLayersElastic() {}
@@ -300,6 +303,7 @@ public class OptimizeLayersElastic {
 		
 		/* Initialization */
 		final TileConfiguration initMeshes = new TileConfiguration();
+		initMeshes.setThreadsNum( param.numThreads );
 				
 		final ArrayList< SpringMesh > meshes = fixAllPointMatchVertices(
 				param, layersCorrs, startLayer, endLayer );
@@ -346,8 +350,8 @@ public class OptimizeLayersElastic {
 
 				
 				
-				System.out.println( "Comparing layer " + layerA + " (fixed=" + layer1Fixed + ") to layer " +
-						layerB + " (fixed=" + layer2Fixed + ")" );
+//				System.out.println( "Comparing layer " + layerA + " (fixed=" + layer1Fixed + ") to layer " +
+//						layerB + " (fixed=" + layer2Fixed + ")" );
 				
 				if ( ( layer1Fixed && layer2Fixed ) )
 					continue;
@@ -367,7 +371,7 @@ public class OptimizeLayersElastic {
 					initMeshes.fixTile( t1 );
 				else
 				{
-					if ( pm12 != null )
+					if ( ( pm12 != null ) && ( pm12.size() > 1 ) )
 					{
 						//final List< PointMatch > pm12Fixed = fixPointMatchVertices( pm12, m1.getVertices() );
 						
@@ -399,7 +403,7 @@ public class OptimizeLayersElastic {
 					initMeshes.fixTile( t2 );
 				else
 				{
-					if ( pm21 != null )
+					if ( ( pm21 != null ) && ( pm21.size() > 1 ) )
 					{
 						//final List< PointMatch > pm21Fixed = fixPointMatchVertices( pm21, m2.getVertices() );
 
@@ -818,19 +822,25 @@ public class OptimizeLayersElastic {
 		final TileSpecsImage entireImage = TileSpecsImage.createImageFromFiles( actualTileSpecFiles );
 		final BoundingBox bbox = entireImage.getBoundingBox();
 		
+		int firstLayer = bbox.getStartPoint().getZ();
+		if (( params.fromLayer != -1 ) && ( params.fromLayer >= firstLayer ))
+			firstLayer = params.fromLayer;
+		int lastLayer = bbox.getEndPoint().getZ();
+		if (( params.toLayer != -1 ) && ( params.toLayer <= lastLayer ))
+			lastLayer = params.toLayer;
 		
 		// Optimze
 		optimizeElastic(
 			params, layersTs, layersCorrs,
 			params.fixedLayers,
-			bbox.getStartPoint().getZ(), bbox.getEndPoint().getZ(),
+			firstLayer, lastLayer,
 			bbox.getStartPoint().getX(), bbox.getEndPoint().getY() );
 
 		// Save new tilespecs
 		System.out.println( "Optimization complete. Generating tile transforms.");
 
 		// Iterate through the layers and output the new tile specs
-		for ( int layer = bbox.getStartPoint().getZ(); layer <= bbox.getEndPoint().getZ(); layer++ )
+		for ( int layer = firstLayer; layer <= lastLayer; layer++ )
 		{
 			String layerString = String.format( "%03d", layer );
 			System.out.println( "Writing layer " + layerString );

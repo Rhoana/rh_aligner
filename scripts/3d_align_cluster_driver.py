@@ -156,7 +156,7 @@ class MatchLayersByMaxPMCC(Job):
 
 
 class OptimizeLayersElastic(Job):
-    def __init__(self, dependencies, outputs, tiles_fnames, corr_fnames, image_width, image_height, fixed_layers, output_dir, jar_file, conf_fname=None):
+    def __init__(self, dependencies, outputs, tiles_fnames, corr_fnames, image_width, image_height, fixed_layers, output_dir, jar_file, conf_fname=None, threads_num=1):
         Job.__init__(self)
         self.already_done = False
         self.tiles_fnames = '--tile_files {0}'.format(" ".join(tiles_fnames))
@@ -173,6 +173,8 @@ class OptimizeLayersElastic(Job):
             self.conf_fname = ''
         else:
             self.conf_fname = '-c "{0}"'.format(conf_fname)
+        self.threads = threads_num
+        self.threads_str = '-t {0}'.format(threads_num)
         self.dependencies = dependencies
         self.memory = 4000
         self.time = 30
@@ -455,7 +457,7 @@ if __name__ == '__main__':
 
     dependencies = all_running_jobs
     job_optimize = OptimizeLayersElastic(dependencies, sections_outputs, [ ts_list_file ], [ pmcc_list_file ], \
-        imageWidth, imageHeight, [ fixed_layer ], args.output_dir, args.jar_file, conf_fname=args.conf_file_name)
+        imageWidth, imageHeight, [ fixed_layer ], args.output_dir, args.jar_file, conf_fname=args.conf_file_name, threads_num=16)
     #optimize_layers_elastic(all_ts_files, all_pmcc_files, imageWidth, imageHeight, [fixed_layer], args.output_dir, args.jar_file, conf)
 
 
