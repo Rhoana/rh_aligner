@@ -238,7 +238,7 @@ class Job(object):
                     elif job_status in ['TIMEOUT']:
                         timeout += 1
                         # in case of a timeout, add all jobs to the timed_out_jobs set
-                        job_block_list = submitted_job_blocks[job_block_name]
+                        job_block_list = submitted_job_blocks[job_name]
                         timed_out_jobs.update(job_block_list)
                     else:
                         print "Unexpected status: {0}".format(job_status)
