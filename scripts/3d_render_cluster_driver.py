@@ -75,7 +75,7 @@ class Render3D(Job):
         self.threads = threads_num
         self.threads_str = "-t {0}".format(threads_num)
         self.memory = 5000
-        self.time = 35
+        self.time = 60
         self.is_java_job = True
         self.output = output_file
         #self.already_done = os.path.exists(self.output_file)
@@ -178,6 +178,7 @@ if __name__ == '__main__':
         render_out_file = os.path.join(args.output_dir, tiles_fname_prefix + ".tif")
 
         if not os.path.exists(render_out_file):
+            # print "Adding job for output file: {0}".format(render_out_file)
             render_job = Render3D(bbox_and_norm_jobs, norm_file, args.output_dir, args.jar_file, render_out_file, threads_num=1)
             jobs['render'].append(render_job)
 

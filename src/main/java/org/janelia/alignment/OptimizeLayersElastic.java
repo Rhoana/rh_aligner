@@ -844,7 +844,7 @@ public class OptimizeLayersElastic {
 		{
 			String layerString = String.format( "%03d", layer );
 			System.out.println( "Writing layer " + layerString );
-			final File targetFile = new File( params.targetDir, "Section" + layerString + ".json" );
+			final File targetFile = new File( params.targetDir, "Section_" + layerString + ".json" );
 			final List< TileSpec > layerOutTiles = layersTs.get( layer );
 			try {
 				Writer writer = new FileWriter(targetFile);

@@ -204,7 +204,7 @@ public class Render3D {
 				image.show();
 			if ( params.targetDir != null )
 			{
-				String outFile = String.format( "%s/Section_%03d.png", params.targetDir, firstLayer  );
+				String outFile = String.format( "%s/Section_%03d.tif", params.targetDir, firstLayer  );
 				saveLayerImage( image, outFile );
 			}
 		}
