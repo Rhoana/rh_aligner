@@ -409,7 +409,19 @@ public class TileSpecsImage {
 		final String imgUrl = mipmapEntry.imageUrl;
 		final ImagePlus imp = Utils.openImagePlusUrl( imgUrl );
 		if ( imp == null )
-			throw new RuntimeException( "Failed to load image '" + imgUrl + "'." );
+		{
+			//throw new RuntimeException( "Failed to load image '" + imgUrl + "'." );
+			System.err.println("Failed to load image '" + imgUrl + "', skipping to the next tile...");
+			BoundingBox defaultBBox = new BoundingBox(
+					(int) ts.bbox[0],
+					(int) ts.bbox[1],
+					(int) ts.bbox[2],
+					(int) ts.bbox[3],
+					ts.layer,
+					ts.layer
+				);
+			return defaultBBox;
+		}
 		final ImageProcessor ip = imp.getProcessor();
 		final int origWidth = imp.getWidth();
 		//final int origHeight = imp.getHeight();
