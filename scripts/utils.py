@@ -4,6 +4,7 @@ import os
 import urlparse, urllib
 from subprocess import call
 import sys
+import json
 
 
 def path2url(path):
@@ -50,4 +51,22 @@ def write_list_to_file(file_name, lst):
     with open(file_name, 'w') as out_file:
         for item in lst:
             out_file.write("%s\n" % path2url(item))
+
+def read_layer_from_file(tiles_spec_fname):
+    layer = None
+    with open(tiles_spec_fname, 'r') as data_file:
+        data = json.load(data_file)
+    for tile in data:
+        if tile['layer'] is None:
+            print "Error reading layer in one of the tiles in: {0}".format(tiles_spec_fname)
+            sys.exit(1)
+        if layer is None:
+            layer = tile['layer']
+        if layer != tile['layer']:
+            print "Error when reading tiles from {0} found inconsistent layers numbers: {1} and {2}".format(tiles_spec_fname, layer, tile['layer'])
+            sys.exit(1)
+    if layer is None:
+        print "Error reading layers file: {0}. No layers found.".format(tiles_spec_fname)
+        sys.exit(1)
+    return int(layer)
 

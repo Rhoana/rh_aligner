@@ -17,7 +17,7 @@ from collections import defaultdict
 import argparse
 import glob
 import json
-from utils import path2url, write_list_to_file
+from utils import path2url, write_list_to_file, create_dir, read_layer_from_file
 from job import Job
 from bounding_box import BoundingBox
 
@@ -195,30 +195,6 @@ class OptimizeLayersElastic(Job):
 
 
 
-
-def read_layer_from_file(tiles_spec_fname):
-    layer = None
-    with open(tiles_spec_fname, 'r') as data_file:
-        data = json.load(data_file)
-    for tile in data:
-        if tile['layer'] is None:
-            print "Error reading layer in one of the tiles in: {0}".format(tiles_spec_fname)
-            sys.exit(1)
-        if layer is None:
-            layer = tile['layer']
-        if layer != tile['layer']:
-            print "Error when reading tiles from {0} found inconsistent layers numbers: {1} and {2}".format(tiles_spec_fname, layer, tile['layer'])
-            sys.exit(1)
-    if layer is None:
-        print "Error reading layers file: {0}. No layers found.".format(tiles_spec_fname)
-        sys.exit(1)
-    return int(layer)
-
-
-def create_dir(path):
-    # create a directory if not found
-    if not os.path.exists(path):
-        os.makedirs(path)
 
 
 ###############################

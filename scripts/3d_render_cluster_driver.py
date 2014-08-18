@@ -17,7 +17,7 @@ from collections import defaultdict
 import argparse
 import glob
 import json
-from utils import path2url, create_dir
+from utils import path2url, create_dir, read_layer_from_file, write_list_to_file
 from job import Job
 
 
@@ -65,12 +65,16 @@ class NormalizeCoordinates(Job):
 
 
 class Render3D(Job):
-    def __init__(self, dependencies, tiles_fname, output_dir, jar_file, output_file, threads_num=1):
+    def __init__(self, dependencies, tiles_fname, output_dir, layer, quality_width, jar_file, output_file, threads_num=1):
         Job.__init__(self)
         self.already_done = False
         self.tiles_fname = '"{0}"'.format(tiles_fname)
         self.output_dir = '-o "{0}"'.format(output_dir)
         self.jar_file = '-j "{0}"'.format(jar_file)
+        # Make the from-layer and to-layer the same layer
+        self.from_layer = '--from_layer {0}'.format(layer)
+        self.to_layer = '--to_layer {0}'.format(layer)
+        self.quality_width = quality_width
         self.dependencies = dependencies
         self.threads = threads_num
         self.threads_str = "-t {0}".format(threads_num)
@@ -81,9 +85,9 @@ class Render3D(Job):
         #self.already_done = os.path.exists(self.output_file)
 
     def command(self):
-        return ['python',
+        return ['python -u',
                 os.path.join(os.environ['RENDERER'], 'scripts', 'render_3d.py'),
-                self.output_dir, self.jar_file, self.threads_str, self.tiles_fname]
+                self.output_dir, self.jar_file, self.from_layer, self.to_layer, self.quality_width, self.threads_str, self.tiles_fname]
 
 
 
@@ -108,6 +112,11 @@ if __name__ == '__main__':
     parser.add_argument('-j', '--jar_file', type=str, 
                         help='the jar file that includes the render (default: ../target/render-0.0.1-SNAPSHOT.jar)',
                         default='../target/render-0.0.1-SNAPSHOT.jar')
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--quality', type=str, choices=['full', 'default', 'fast', 'veryfast'],
+                        help='sets the output quality and resoultion')
+    group.add_argument('--width', type=int, 
+                        help='set the width of the rendered images')
     parser.add_argument('-k', '--keeprunning', action='store_true', 
                         help='Run all jobs and report cluster jobs execution stats')
     parser.add_argument('-m', '--multicore', action='store_true', 
@@ -119,6 +128,12 @@ if __name__ == '__main__':
 
     assert 'RENDERER' in os.environ
     #assert 'VIRTUAL_ENV' in os.environ
+
+    quality_width = ''
+    if not args.width is None:
+        quality_width = '--width {0}'.format(args.width)
+    elif not args.quality is None:
+        quality_width = '--quality {0}'.format(args.quality)
 
 
     # create a workspace directory if not found
@@ -170,16 +185,24 @@ if __name__ == '__main__':
         norm_job = NormalizeCoordinates(jobs['bbox'], bbox_files, norm_dir, args.jar_file, norm_files)
         bbox_and_norm_jobs.append(norm_job)
 
+    norm_list_file = os.path.join(args.workspace_dir, "all_norm_files.txt")
+    write_list_to_file(norm_list_file, norm_files)
+
     # Perform the rendering
     for f in json_files.keys():
         tiles_fname = os.path.basename(f)
-        norm_file = os.path.join(norm_dir, tiles_fname)
+        # norm_file = os.path.join(norm_dir, tiles_fname)
+
+        # read the layer from the file
+        layer = read_layer_from_file(f)
+        print "read layer {0} out of file {1}".format(layer, f)
+
         tiles_fname_prefix = os.path.splitext(tiles_fname)[0]
         render_out_file = os.path.join(args.output_dir, tiles_fname_prefix + ".tif")
 
         if not os.path.exists(render_out_file):
             # print "Adding job for output file: {0}".format(render_out_file)
-            render_job = Render3D(bbox_and_norm_jobs, norm_file, args.output_dir, args.jar_file, render_out_file, threads_num=1)
+            render_job = Render3D(bbox_and_norm_jobs, norm_list_file, args.output_dir, layer, quality_width, args.jar_file, render_out_file, threads_num=1)
             jobs['render'].append(render_job)
 
 

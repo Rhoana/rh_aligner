@@ -19,7 +19,7 @@ import com.beust.jcommander.Parameters;
 /**
  * Renders a given list of tile specs (each representing a layer) on the screen.
  * Scales the output image to fit some width.
- * TODO: allow outputting the image to a movie.
+ * It must receive all sections (all json files) in order to compute the entire image bounding box.
  */
 public class Render3D {
 
@@ -29,6 +29,7 @@ public class Render3D {
 		@Parameter( names = "--help", description = "Display this note", help = true )
         private final boolean help = false;
 
+		// It must receive all sections (all json files) in order to compute the entire image bounding box.
 		@Parameter(description = "Json files to render")
 		private List<String> files = new ArrayList<String>();
 		        
@@ -38,8 +39,11 @@ public class Render3D {
         @Parameter( names = "--width", description = "The width of the output image (considering all sections)", required = false )
         public int width = 2500;
 
-        @Parameter( names = "--layer", description = "The layer to render first (default: the first layer)", required = false )
-        public int layer = -1;
+        @Parameter( names = "--fromLayer", description = "The layer to start the optimization from (default: first layer in the tile specs data)", required = false )
+        private int fromLayer = -1;
+
+        @Parameter( names = "--toLayer", description = "The last layer to include in the optimization (default: last layer in the tile specs data)", required = false )
+        private int toLayer = -1;
 
         @Parameter( names = "--hide", description = "Hide the output and do not show on screen (default: false)", required = false )
         public boolean hide = false;
@@ -50,9 +54,7 @@ public class Render3D {
 	}
 	
 	private Render3D() {}
-	
-	private static final int DEFAULT_LAYERS_NUM_TO_SHOW = 5;
-	
+		
 	final static Params parseParams( final String[] args )
 	{
 		final Params params = new Params();
@@ -78,11 +80,11 @@ public class Render3D {
 	}
 	
 
-	private static ImagePlus renderLayerImage( TileSpecsImage image, double scale, int layer )
+	private static ImagePlus renderLayerImage( TileSpecsImage image, double scale, int layer, int entireWidth, int entireHeight )
 	{
 		System.out.println( "Showing layer: " + layer );
 		
-		ColorProcessor cp = image.render( layer, 0, (float) scale );
+		ColorProcessor cp = image.render( layer, 0, (float) scale, entireWidth, entireHeight );
 		ImagePlus curLayer = new ImagePlus( "Layer " + layer, cp );
 		return curLayer;
 	}
@@ -105,13 +107,31 @@ public class Render3D {
 		if ( !params.hide )
 			new ImageJ();
 
+		List< String > actualTileSpecFiles;
+		if ( params.files.size() == 1 )
+			// It might be a non-json file that contains a list of
+			actualTileSpecFiles = Utils.getListFromFile( params.files.get( 0 ) );
+		else
+			actualTileSpecFiles = params.files;
+
+		
 		// Open all tiles
-		final TileSpecsImage entireImage = TileSpecsImage.createImageFromFiles( params.files );
+		final TileSpecsImage entireImage = TileSpecsImage.createImageFromFiles( actualTileSpecFiles );
 		// Set a single thread per image, and render each layer with a different thread 
 		entireImage.setThreadsNum( 1 );
 		
 		// Get the bounding box
 		BoundingBox bbox = entireImage.getBoundingBox();
+		
+		// Get the entire image width and height (in case the
+		// image starts in a place which is not (0,0), but (X, Y),
+		// where X and Y are non-negative numbers)
+		int entireImageWidth = bbox.getWidth();
+		int entireImageHeight = bbox.getHeight();
+		if ( bbox.getStartPoint().getX() > 0 )
+			entireImageWidth += bbox.getStartPoint().getX();
+		if ( bbox.getStartPoint().getY() > 0 )
+			entireImageHeight += bbox.getStartPoint().getY();
 		
 		// Compute the initial scale (initialWidth pixels wide), round with a 2 digits position
 		double scale;
@@ -119,105 +139,83 @@ public class Render3D {
 			scale = 1.0;
 		else
 		{
-			scale = Math.round( ( (double)params.width / bbox.getWidth() ) * 100.0 ) / 100.0;
+			scale = Math.round( ( (double)params.width / entireImageWidth ) * 100.0 ) / 100.0;
 			scale = Math.min( scale, 1.0 );
 		}
 		
 		System.out.println( "Scale is: " + scale );
-		System.out.println( "Scaled width: " + (bbox.getWidth() * scale) + ", height: " + (bbox.getHeight() * scale) );
+		System.out.println( "Scaled width: " + (entireImageWidth * scale) + ", height: " + (entireImageHeight * scale) );
 		
 		// Render the first layer
-		int firstLayer = params.layer;
+		int firstLayer = params.fromLayer;
 		if ( firstLayer == -1 )
 			firstLayer = bbox.getStartPoint().getZ();
 
-		// if no layer is given as input, show all layers
-		if ( params.layer == -1 )
+		int lastLayer = params.toLayer;
+		if ( lastLayer == -1 )
+			lastLayer = bbox.getEndPoint().getZ();
+
+		// Render all needed layers
+		if ( params.numThreads == 1 )
 		{
-			final int lastLayer = bbox.getEndPoint().getZ();
-
-			if ( params.numThreads == 1 )
+			// Single thread execution
+			for ( int i = firstLayer; i <= lastLayer; i++ )
 			{
-				// Single thread execution
-				for ( int i = firstLayer; i <= lastLayer; i++ )
-				{
-					final int curLayer = i;
-					final double curScale = scale;
+				final int curLayer = i;
+				final double curScale = scale;
 
-					final ImagePlus image = renderLayerImage( entireImage, curScale, curLayer );
-					if ( !params.hide )
-						image.show();
-					if ( params.targetDir != null )
-					{
-						String outFile = String.format( "%s/Section_%03d.tif", params.targetDir, curLayer );
-						saveLayerImage( image, outFile );
-					}
+				final ImagePlus image = renderLayerImage( entireImage, curScale, curLayer, entireImageWidth, entireImageHeight );
+				if ( !params.hide )
+					image.show();
+				if ( params.targetDir != null )
+				{
+					String outFile = String.format( "%s/Section_%03d.tif", params.targetDir, curLayer );
+					saveLayerImage( image, outFile );
 				}
 			}
-			else
+		}
+		else
+		{
+			final ExecutorService threadPool = Executors.newFixedThreadPool( params.numThreads );
+			final List< Future< ? > > futures = new ArrayList< Future< ? >>();
+			final int eImageWidth = entireImageWidth;
+			final int eImageHeight = entireImageHeight;
+			final double curScale = scale;
+
+			for ( int i = firstLayer; i <= lastLayer; i++ )
 			{
-				final ExecutorService threadPool = Executors.newFixedThreadPool( params.numThreads );
-				final List< Future< ? > > futures = new ArrayList< Future< ? >>();
-	
-				for ( int i = firstLayer; i <= lastLayer; i++ )
-				{
-					final int curLayer = i;
-					final double curScale = scale;
-					
-					final Future< ? > future = threadPool.submit( new Runnable() {
-						
-						@Override
-						public void run() {
-							final ImagePlus image = renderLayerImage( entireImage, curScale, curLayer );
-							if ( !params.hide )
-								image.show();
-							if ( params.targetDir != null )
-							{
-								String outFile = String.format( "%s/Section_%03d.tif", params.targetDir, curLayer );
-								saveLayerImage( image, outFile );
-							}
-						}
-					});
-					futures.add( future );				
-				}
+				final int curLayer = i;
 				
-				try {
-					for ( Future< ? > future : futures ) {
-						future.get();
+				final Future< ? > future = threadPool.submit( new Runnable() {
+					
+					@Override
+					public void run() {
+						final ImagePlus image = renderLayerImage( entireImage, curScale, curLayer, eImageWidth, eImageHeight );
+						if ( !params.hide )
+							image.show();
+						if ( params.targetDir != null )
+						{
+							String outFile = String.format( "%s/Section_%03d.tif", params.targetDir, curLayer );
+							saveLayerImage( image, outFile );
+						}
 					}
-				} catch ( InterruptedException e ) {
-					e.printStackTrace();
-					throw new RuntimeException( e );
-				} catch ( ExecutionException e ) {
-					e.printStackTrace();
-					throw new RuntimeException( e );
+				});
+				futures.add( future );				
+			}
+			
+			try {
+				for ( Future< ? > future : futures ) {
+					future.get();
 				}
-				threadPool.shutdown();
+			} catch ( InterruptedException e ) {
+				e.printStackTrace();
+				throw new RuntimeException( e );
+			} catch ( ExecutionException e ) {
+				e.printStackTrace();
+				throw new RuntimeException( e );
+			}
+			threadPool.shutdown();
 
-			}
 		}
-		else // Show the wanted layer
-		{
-			entireImage.setThreadsNum( params.numThreads );
-			ImagePlus image = renderLayerImage( entireImage, scale, firstLayer );
-			if ( !params.hide )
-				image.show();
-			if ( params.targetDir != null )
-			{
-				String outFile = String.format( "%s/Section_%03d.tif", params.targetDir, firstLayer  );
-				saveLayerImage( image, outFile );
-			}
-		}
-		
-		/* save the modified image */
-		/*
-		if (params.out != null)
-		{
-			System.out.print("Saving output image to disk...   ");
-			Utils.saveImage( targetImage, params.out, params.out.substring( params.out.lastIndexOf( '.' ) + 1 ), params.quality );
-			System.out.println("Done.");
-			//new ImagePlus( params.out ).show();
-		}
-		*/
 	}
 }

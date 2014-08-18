@@ -98,15 +98,23 @@ public class TileSpecsImage {
 	public ColorProcessor render( int layer, int mipmapLevel ) {
 		return render( layer, mipmapLevel, 1.0f );
 	}
-	
+
 	public ColorProcessor render( int layer, int mipmapLevel, float scale ) {
-		
 		// Get image width and height
 		parseTileSpecs();
 		
+		int width = boundingBox.getWidth();
+		int height = boundingBox.getHeight();
+		
+		return render( layer, mipmapLevel, scale, width, height );
+
+	}
+	
+	public ColorProcessor render( int layer, int mipmapLevel, float scale, int width, int height ) {
+		
 		/* create a target */
-		ByteProcessor tp = new ByteProcessor( (int) (boundingBox.getWidth() * scale),
-				(int) (boundingBox.getHeight() * scale) );
+		ByteProcessor tp = new ByteProcessor( (int) ( width * scale ),
+				(int) ( height * scale ) );
 		ColorProcessor cp = null;
 		
 		// Create an offset according to the bounding box

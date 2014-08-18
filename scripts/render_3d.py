@@ -6,7 +6,7 @@ from subprocess import call
 import utils
 
 
-def render_3d(tile_fnames_or_dir, output_dir, width, jar_file, threads_num=1):
+def render_3d(tile_fnames_or_dir, output_dir, from_layer, to_layer, width, jar_file, threads_num=1):
 
     all_files = []
 
@@ -32,8 +32,9 @@ def render_3d(tile_fnames_or_dir, output_dir, width, jar_file, threads_num=1):
         tiles_url = utils.path2url(file_name)
         files_urls.append(tiles_url)
 
-    java_cmd = 'java -Xmx4g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.Render3D --targetDir {1} --width {2} --threads {3} --hide {4}'.format(\
-            jar_file, output_dir, width, threads_num, ' '.join(files_urls))
+    java_cmd = 'java -Xmx4g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.Render3D --targetDir {1} --width {2} \
+        --threads {3} --fromLayer {4} --toLayer {5} --hide {6}'.format(\
+            jar_file, output_dir, width, threads_num, from_layer, to_layer, ' '.join(files_urls))
     utils.execute_shell_command(java_cmd)
 
 
@@ -51,8 +52,14 @@ def main():
     parser.add_argument('-t', '--threads_num', type=int, 
                         help='the number of threads to use (default: 1)',
                         default=1)
+    parser.add_argument('--from_layer', type=int, 
+                        help='the layer to start from (inclusive, default: the first layer in the data)',
+                        default=-1)
+    parser.add_argument('--to_layer', type=int, 
+                        help='the last layer to render (inclusive, default: the last layer in the data)',
+                        default=-1)
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('-q', '--quality', type=str, choices=['full', 'default', 'fast'],
+    group.add_argument('-q', '--quality', type=str, choices=['full', 'default', 'fast', 'veryfast'],
                         help='sets the output quality and resoultion')
     group.add_argument('-w', '--width', type=int, 
                         help='set the width of the rendered images')
@@ -69,8 +76,11 @@ def main():
             width = -1 # full image width
         elif args.quality == 'fast':
             width = 1000
+        elif args.quality == 'veryfast':
+            width = 100
 
-    render_3d(args.tile_files_or_dirs, args.output_dir, width, args.jar_file, args.threads_num)
+    print "args: from_layer {0}, to_layer {1}".format(args.from_layer, args.to_layer)
+    render_3d(args.tile_files_or_dirs, args.output_dir, args.from_layer, args.to_layer, width, args.jar_file, args.threads_num)
 
 if __name__ == '__main__':
     main()

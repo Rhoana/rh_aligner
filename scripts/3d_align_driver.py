@@ -21,33 +21,10 @@ from match_layers_sift_features import match_layers_sift_features
 from filter_ransac import filter_ransac
 from match_layers_by_max_pmcc import match_layers_by_max_pmcc
 from optimize_layers_elastic import optimize_layers_elastic
-from utils import path2url, write_list_to_file
+from utils import path2url, write_list_to_file, create_dir, read_layer_from_file
 from bounding_box import BoundingBox
 
 
-def read_layer_from_file(tiles_spec_fname):
-    layer = None
-    with open(tiles_spec_fname, 'r') as data_file:
-        data = json.load(data_file)
-    for tile in data:
-        if tile['layer'] is None:
-            print "Error reading layer in one of the tiles in: {0}".format(tiles_spec_fname)
-            sys.exit(1)
-        if layer is None:
-            layer = tile['layer']
-        if layer != tile['layer']:
-            print "Error when reading tiles from {0} found inconsistent layers numbers: {1} and {2}".format(tiles_spec_fname, layer, tile['layer'])
-            sys.exit(1)
-    if layer is None:
-        print "Error reading layers file: {0}. No layers found.".format(tiles_spec_fname)
-        sys.exit(1)
-    return int(layer)
-
-
-def create_dir(path):
-    # create a directory if not found
-    if not os.path.exists(path):
-        os.makedirs(path)
 
 
 # Command line parser

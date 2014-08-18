@@ -696,72 +696,6 @@ public class OptimizeLayersElastic {
 	}
 	
 	
-	/**
-	 * Receives a file name of either a json file or a file name that contains
-	 * a line-separated list of files.
-	 * 
-	 * @param listFileOrJsonFile
-	 * @return
-	 */
-	private static List<String> getListFromFile( String listFileOrJsonFile )
-	{
-		List< String > result = new ArrayList<String>();
-		
-		if ( ! listFileOrJsonFile.contains( "://" ) )
-			listFileOrJsonFile = "file://" + listFileOrJsonFile;
-		
-		// Try parsing the file as JSON file, if it is successful, return a single element list,
-		// otherwise (if it fails) then read the list from the file
-		final URL url;
-		try
-		{
-			url = new URL( listFileOrJsonFile );
-		}
-		catch ( final MalformedURLException e )
-		{
-			System.err.println( "URL malformed." );
-			e.printStackTrace( System.err );
-			throw new RuntimeException( e );
-		}
-
-		try
-		{
-			new JsonParser().parse( new InputStreamReader( url.openStream() ) );
-			result.add( listFileOrJsonFile );
-			return result;
-		}
-		catch ( final JsonParseException e )
-		{
-			// The file includes a list of files
-		}
-		catch ( final Exception e )
-		{
-			e.printStackTrace( System.err );
-			throw new RuntimeException( e );
-		}
-		
-		try
-		{
-			// Read the file
-			BufferedReader br = new BufferedReader( new InputStreamReader( url.openStream() ) );
-			String line;
-			while ( ( line = br.readLine() ) != null ) {
-				if ( ! line.contains( "://" ) )
-					line = "file://" + line;
-				result.add( line );
-			}
-			br.close();
-		
-		}
-		catch ( final Exception e )
-		{
-			e.printStackTrace( System.err );
-			throw new RuntimeException( e );
-		}
-		
-		return result;
-	}
-	
 
 	public static void main( final String[] args )
 	{
@@ -789,7 +723,7 @@ public class OptimizeLayersElastic {
 		List< String > actualTileSpecFiles;
 		if ( params.tileSpecFiles.size() == 1 )
 			// It might be a non-json file that contains a list of
-			actualTileSpecFiles = getListFromFile( params.tileSpecFiles.get( 0 ) );
+			actualTileSpecFiles = Utils.getListFromFile( params.tileSpecFiles.get( 0 ) );
 		else
 			actualTileSpecFiles = params.tileSpecFiles;
 		
@@ -810,7 +744,7 @@ public class OptimizeLayersElastic {
 		List< String > actualCorrFiles;
 		if ( params.corrFiles.size() == 1 )
 			// It might be a non-json file that contains a list of
-			actualCorrFiles = getListFromFile( params.corrFiles.get( 0 ) );
+			actualCorrFiles = Utils.getListFromFile( params.corrFiles.get( 0 ) );
 		else
 			actualCorrFiles = params.corrFiles;
 
