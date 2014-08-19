@@ -78,8 +78,8 @@ class Render3D(Job):
         self.dependencies = dependencies
         self.threads = threads_num
         self.threads_str = "-t {0}".format(threads_num)
-        self.memory = 5000
-        self.time = 60
+        self.memory = 15000
+        self.time = 90
         self.is_java_job = True
         self.output = output_file
         #self.already_done = os.path.exists(self.output_file)
@@ -117,6 +117,12 @@ if __name__ == '__main__':
                         help='sets the output quality and resoultion')
     group.add_argument('--width', type=int, 
                         help='set the width of the rendered images')
+    parser.add_argument('--from_layer', type=int, 
+                        help='the layer to start from (inclusive, default: the first layer in the data)',
+                        default=-1)
+    parser.add_argument('--to_layer', type=int, 
+                        help='the last layer to render (inclusive, default: the last layer in the data)',
+                        default=-1)
     parser.add_argument('-k', '--keeprunning', action='store_true', 
                         help='Run all jobs and report cluster jobs execution stats')
     parser.add_argument('-m', '--multicore', action='store_true', 
@@ -190,12 +196,19 @@ if __name__ == '__main__':
 
     # Perform the rendering
     for f in json_files.keys():
-        tiles_fname = os.path.basename(f)
-        # norm_file = os.path.join(norm_dir, tiles_fname)
-
         # read the layer from the file
         layer = read_layer_from_file(f)
-        print "read layer {0} out of file {1}".format(layer, f)
+
+        # If the layer in the file is not in the required range, continue to the next file
+        if args.from_layer != -1:
+            if layer < args.from_layer:
+                continue
+        if args.to_layer != -1:
+            if layer > args.to_layer:
+                continue
+
+        tiles_fname = os.path.basename(f)
+        # norm_file = os.path.join(norm_dir, tiles_fname)
 
         tiles_fname_prefix = os.path.splitext(tiles_fname)[0]
         render_out_file = os.path.join(args.output_dir, tiles_fname_prefix + ".tif")

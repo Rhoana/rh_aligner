@@ -32,7 +32,7 @@ def render_3d(tile_fnames_or_dir, output_dir, from_layer, to_layer, width, jar_f
         tiles_url = utils.path2url(file_name)
         files_urls.append(tiles_url)
 
-    java_cmd = 'java -Xmx4g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.Render3D --targetDir {1} --width {2} \
+    java_cmd = 'java -Xmx14g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.Render3D --targetDir {1} --width {2} \
         --threads {3} --fromLayer {4} --toLayer {5} --hide {6}'.format(\
             jar_file, output_dir, width, threads_num, from_layer, to_layer, ' '.join(files_urls))
     utils.execute_shell_command(java_cmd)
