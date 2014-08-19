@@ -18,8 +18,11 @@ package org.janelia.alignment;
 
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.Reader;
 import java.io.Writer;
 import java.io.FileWriter;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Vector;
@@ -270,9 +273,11 @@ public class MatchLayersSiftFeatures
 		{
 			final Gson gson = new Gson();
 			System.out.println( "Reading features from " + params.featurefile1 );
-			featureSpecs1 = gson.fromJson( new FileReader( params.featurefile1.replace("file://", "").replace("file:/", "") ), FeatureSpec[].class );
+			final URL url1 = new URL( params.featurefile1 );
+			featureSpecs1 = gson.fromJson( new InputStreamReader( url1.openStream() ), FeatureSpec[].class );
 			System.out.println( "Reading features from " + params.featurefile2 );
-			featureSpecs2 = gson.fromJson( new FileReader( params.featurefile2.replace("file://", "").replace("file:/", "") ), FeatureSpec[].class );
+			final URL url2 = new URL( params.featurefile2 );
+			featureSpecs2 = gson.fromJson( new InputStreamReader( url2.openStream() ), FeatureSpec[].class );
 		}
 		catch ( final JsonSyntaxException e )
 		{
