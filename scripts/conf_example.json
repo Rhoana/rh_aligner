@@ -1,29 +1,52 @@
 {
     "ComputeSiftFeatures" : {
+        "initialSigma" : 1.6,
         "steps" : 3,
         "minOctaveSize" : 64,
         "maxOctaveSize" : 1024,
-        "res" : 64
+        "fdSize" : 8,
+        "fdBins" : 8
     },
     "MatchSiftFeatures" : {
-        "rod" : 0.5
+        "rod" : 0.92,
+        "layerScale" : 0.1
     },
-    "OptimizeMontageTransform" : {
+    "FilterRansac" : {
+        "layerScale" : 0.1,
         "modelIndex" : 3,
-        "maxIterations" : 2000
+        "maxEpsilon" : 200.0,
+        "minInlierRatio" : 0.0,
+        "minNumInliers" : 12,
+        "identityTolerance" : 5.0,
+        "maxNumFailures" : 3
     },
-    "MatchByMaxPMCC" : {
-        "layerScale" : 0.5,
-        "searchRadius" : 20,
-        "blockRadius" : 50
+    "MatchLayersByMaxPMCC" : {
+        "layerScale" : 0.1,
+        "searchRadius" : 200,
+        "blockRadius" : -1,
+        "minR": 0.6,
+        "maxCurvatureR": 10.0,
+        "rodR": 0.9,
+        "localModelIndex": 1,
+        "localRegionSigma": 200.0,
+        "maxLocalEpsilon": 100.0,
+        "maxLocalTrust": 3,
+        "resolutionSpringMesh": 16,
+        "stiffnessSpringMesh": 0.1,
+        "dampSpringMesh": 0.9,
+        "maxStretchSpringMesh": 2000.0,
+        "useLocalSmoothnessFilter": ""
     },
-    "OptimizeMontageElastic" : {
-        
-    },
-    "OptimizeSeriesTransform" : {
-        
-    },
-    "OptimizeSeriesElastic" : {
-        
+    "OptimizeLayersElastic" : {
+        "layerScale" : 0.1,
+        "modelIndex" : 1,
+        "resolutionSpringMesh": 16,
+        "stiffnessSpringMesh": 0.1,
+        "dampSpringMesh": 0.9,
+        "maxStretchSpringMesh": 2000.0,
+        "maxEpsilon" : 200.0,
+        "maxIterationsSpringMesh" : 1000,
+        "maxPlateauwidthSpringMesh" : 200,
+        "useLegacyOptimizer" : ""
     }
 }

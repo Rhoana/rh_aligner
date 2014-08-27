@@ -10,26 +10,30 @@ import utils
 
 # common functions
 
-def match_layers_by_max_pmcc(jar_file, tiles_file1, tiles_file2, models_file, image_width, image_height, fixed_layers, out_fname, conf=None, threads_num=1, auto_add_model=False):
+def match_layers_by_max_pmcc(jar_file, tiles_file1, tiles_file2, models_file, image_width, image_height, fixed_layers, out_fname, conf=None, threads_num=None, auto_add_model=False):
     conf_args = utils.conf_args(conf, 'MatchLayersByMaxPMCC')
 
     fixed_str = ""
     if fixed_layers != None:
         fixed_str = "--fixedLayers {0}".format(" ".join(map(str, fixed_layers)))
 
+    threads_str = ""
+    if threads_num != None:
+        threads_str = "--threads {0}".format(threads_num)
+
     auto_add_model_str = ""
     if auto_add_model:
         auto_add_model_str = "--autoAddModel"
 
     java_cmd = 'java -Xmx6g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.MatchLayersByMaxPMCC --inputfile1 {1} --inputfile2 {2} \
-            --modelsfile1 {3} --imageWidth {4} --imageHeight {5} --threads {6} {7} --targetPath {8} {9} {10}'.format(
+            --modelsfile1 {3} --imageWidth {4} --imageHeight {5} {6} {7} --targetPath {8} {9} {10}'.format(
         jar_file,
         utils.path2url(tiles_file1),
         utils.path2url(tiles_file2),
         utils.path2url(models_file),
         int(image_width),
         int(image_height),
-        threads_num,
+        threads_str,
         auto_add_model_str,
         out_fname,
         fixed_str,
@@ -63,8 +67,8 @@ def main():
                         help='the configuration file with the parameters for each step of the alignment process in json format (uses default parameters, if not supplied)',
                         default=None)
     parser.add_argument('-t', '--threads_num', type=int, 
-                        help='the number of threads to use (default: 1)',
-                        default=1)
+                        help='the number of threads to use (default: the number of cores in the system)',
+                        default=None)
     parser.add_argument('--auto_add_model', action="store_true", 
                         help='automatically add the identity model, if a model is not found')
 

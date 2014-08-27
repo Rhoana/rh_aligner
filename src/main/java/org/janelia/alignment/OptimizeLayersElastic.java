@@ -95,7 +95,7 @@ public class OptimizeLayersElastic {
         //private int resolutionOutput = 128;
         
         @Parameter( names = "--useLegacyOptimizer", description = "Use legacy optimizer", required = false )
-        private boolean useLegacyOptimizer = true;
+        private boolean useLegacyOptimizer = false;
 
         @Parameter( names = "--threads", description = "Number of threads to be used", required = false )
         public int numThreads = Runtime.getRuntime().availableProcessors();
@@ -204,7 +204,8 @@ public class OptimizeLayersElastic {
 			return false;
 		
 		for ( int i = 0; i < a.length; i++ )
-			if ( a[i] != b[i] )
+			// if ( a[i] != b[i] )
+			if ( Math.abs( a[i] - b[i] ) > 2 * Math.ulp( b[i] ) )
 				return false;
 		
 		return true;
@@ -223,8 +224,12 @@ public class OptimizeLayersElastic {
 			// and if found, link the vertex instead of that point
 			for ( final Vertex v : vertices )
 			{
-				if ( compareArrays( pm.getP1().getL(), v.getL() ) && compareArrays( pm.getP1().getW(), v.getW() ) )
+				if ( compareArrays( pm.getP1().getL(), v.getL() )  )
 				{
+					// Copy the new world values, in case there was a slight drift 
+					for ( int i = 0; i < v.getW().length; i++ )
+						v.getW()[ i ] = pm.getP1().getW()[ i ];
+					
 					PointMatch newPm = new PointMatch( v, pm.getP2(), pm.getWeights() );
 					newPms.add( newPm );
 				}

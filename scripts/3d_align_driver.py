@@ -65,12 +65,12 @@ print args
 create_dir(args.workspace_dir)
 
 conf = None
-#if not args.conf_file_name is None:
-#    with open(args.conf_file_name, 'r') as conf_file:
-#        conf = json.load(conf_file)
+if not args.conf_file_name is None:
+    with open(args.conf_file_name, 'r') as conf_file:
+        conf = json.load(conf_file)
 
-after_bbox_dir = os.path.join(args.workspace_dir, "after_bbox")
-create_dir(after_bbox_dir)
+#after_bbox_dir = os.path.join(args.workspace_dir, "after_bbox")
+#create_dir(after_bbox_dir)
 sifts_dir = os.path.join(args.workspace_dir, "sifts")
 create_dir(sifts_dir)
 matched_sifts_dir = os.path.join(args.workspace_dir, "matched_sifts")
@@ -79,8 +79,6 @@ after_ransac_dir = os.path.join(args.workspace_dir, "after_ransac")
 create_dir(after_ransac_dir)
 matched_pmcc_dir = os.path.join(args.workspace_dir, "matched_pmcc")
 create_dir(matched_pmcc_dir)
-after_elastic_dir = os.path.join(args.workspace_dir, "after_elastic")
-create_dir(after_elastic_dir)
 
 all_layers = []
 layer_to_sifts = {}

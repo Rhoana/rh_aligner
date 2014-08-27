@@ -69,10 +69,10 @@ public class MatchLayersByMaxPMCC {
         public int searchRadius = 200;
         
         @Parameter( names = "--blockRadius", description = "Matching block radius", required = false )
-        public int blockRadius = 579;
+        public int blockRadius = -1;
                 
-        @Parameter( names = "--resolution", description = "Resolution", required = false )
-        public int resolution = 16;
+//        @Parameter( names = "--resolution", description = "Resolution", required = false )
+//        public int resolution = 16;
         
         @Parameter( names = "--minR", description = "minR", required = false )
         public float minR = 0.6f;
@@ -232,7 +232,13 @@ public class MatchLayersByMaxPMCC {
 					param.dampSpringMesh );
 
 		//final int blockRadius = Math.max( 32, meshWidth / p.resolutionSpringMesh / 2 );
-		final int param_blockRadius = param.imageWidth / param.resolution / 2;
+//		final int param_blockRadius = param.imageWidth / param.resolution / 2;
+		final int orig_param_resolution = 16;
+		final int param_blockRadius;
+		if ( param.blockRadius < 0 )
+			param_blockRadius = param.imageWidth / orig_param_resolution / 2;
+		else
+			param_blockRadius = param.blockRadius;
 		final int blockRadius = Math.max( 16, mpicbg.util.Util.roundPos( param.layerScale * param_blockRadius ) );
 		
 		System.out.println( "effective block radius = " + blockRadius );
