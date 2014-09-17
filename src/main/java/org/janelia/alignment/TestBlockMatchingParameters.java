@@ -513,6 +513,10 @@ public class TestBlockMatchingParameters {
 		
 		final int mipmapLevel = 0;
 		
+		/* Set default block radius if not set by user */
+		if ( params.blockRadius == -1 )
+			params.blockRadius = params.searchRadius;
+		
 		/* Load all tilespecs into a 3d image stack */
 		List< String > actualTileSpecFiles;
 		if ( params.tileSpecFiles.size() == 1 )
