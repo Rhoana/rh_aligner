@@ -13,14 +13,14 @@ import utils
 # common functions
 
 def block_matching_test_params(tile_files, jar_file, conf=None, threads_num=4):
-    conf_args = utils.conf_args(conf, 'MatchLayersByMaxPMCC')
+    #conf_args = utils.conf_args(conf, 'MatchLayersByMaxPMCC')
 
-    java_cmd = 'java -Xmx4g -XX:ParallelGCThreads=1 -cp "{0}" org.janelia.alignment.TestBlockMatchingParameters --tilespecFiles {1} \
+    java_cmd = 'java -Xmx16g -XX:ParallelGCThreads=1 -cp "{0}" org.janelia.alignment.TestBlockMatchingParameters --tilespecFiles {1} \
             --threads {2} {3}'.format(
         jar_file,
         " ".join(utils.path2url(f) for f in tile_files),
         threads_num,
-        conf_args)
+        conf)
     utils.execute_shell_command(java_cmd)
 
 

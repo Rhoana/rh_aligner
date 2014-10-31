@@ -54,6 +54,12 @@ parser.add_argument('-c', '--conf_file_name', type=str,
                     default=None)
 parser.add_argument('--auto_add_model', action="store_true", 
                     help='automatically add the identity model, if a model is not found')
+parser.add_argument('--from_layer', type=int, 
+                    help='the layer to start from (inclusive, default: the first layer in the data)',
+                    default=-1)
+parser.add_argument('--to_layer', type=int, 
+                    help='the last layer to render (inclusive, default: the last layer in the data)',
+                    default=-1)
 
 
 
@@ -96,6 +102,14 @@ for tiles_fname in glob.glob(os.path.join(args.input_dir, '*.json')):
 
     # read the layer from the file
     layer = read_layer_from_file(tiles_fname)
+
+    if args.from_layer != -1:
+        if layer < args.from_layer:
+            continue
+    if args.to_layer != -1:
+        if layer > args.to_layer:
+            continue
+
 
     all_layers.append(layer)
 
@@ -172,7 +186,8 @@ print "All pmcc files: {0}".format(all_pmcc_files)
 all_ts_files = layer_to_ts_json.values()
 create_dir(args.output_dir)
 # fetch actual pmcc files list (because some sections were not matched, and therefore their pmcc file is missing)
-actual_pmcc_files = glob.glob(os.path.join(matched_pmcc_dir, '*.json'))
+#actual_pmcc_files = glob.glob(os.path.join(matched_pmcc_dir, '*.json'))
+actual_pmcc_files = all_pmcc_files
 
 ts_list_file = os.path.join(args.workspace_dir, "all_ts_files.txt")
 write_list_to_file(ts_list_file, all_ts_files)

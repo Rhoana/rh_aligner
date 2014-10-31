@@ -98,14 +98,17 @@ public class TestBlockMatchingParameters {
         @Parameter( names = "--resolutionSpringMesh", description = "resolutionSpringMesh", required = false )
         private int resolutionSpringMesh = 24;
         
-//        @Parameter( names = "--stiffnessSpringMesh", description = "stiffnessSpringMesh", required = false )
-//        public float stiffnessSpringMesh = 0.1f;
-//		
-//        @Parameter( names = "--dampSpringMesh", description = "dampSpringMesh", required = false )
-//        public float dampSpringMesh = 0.9f;
-//		
-//        @Parameter( names = "--maxStretchSpringMesh", description = "maxStretchSpringMesh", required = false )
-//        public float maxStretchSpringMesh = 2000.0f;
+        // Although not used, this needs to be here to comply with the MatchLayersByMaxPMCC parameters
+        @Parameter( names = "--stiffnessSpringMesh", description = "stiffnessSpringMesh", required = false )
+        public float stiffnessSpringMesh = 0.1f;
+		
+        // Although not used, this needs to be here to comply with the MatchLayersByMaxPMCC parameters
+        @Parameter( names = "--dampSpringMesh", description = "dampSpringMesh", required = false )
+        public float dampSpringMesh = 0.9f;
+		
+        // Although not used, this needs to be here to comply with the MatchLayersByMaxPMCC parameters
+        @Parameter( names = "--maxStretchSpringMesh", description = "maxStretchSpringMesh", required = false )
+        public float maxStretchSpringMesh = 2000.0f;
         
         @Parameter( names = "--threads", description = "Number of threads to be used", required = false )
         public int numThreads = Runtime.getRuntime().availableProcessors();
@@ -422,7 +425,7 @@ public class TestBlockMatchingParameters {
 
 			for ( int i = 0; i < bbox.getDepth(); ++i )
 			{
-				renderedImages[ i ] = entireImg.render( i + bbox.getStartPoint().getZ(), mipmapLevel );
+				renderedImages[ i ] = entireImg.render( i + bbox.getStartPoint().getZ(), mipmapLevel, param.layerScale );
 				ColorProcessor ip = ( ColorProcessor )renderedImages[ i ].convertToRGB();
 				while ( ip.getWidth() > w )
 					ip = Downsampler.downsampleColorProcessor( ip );
