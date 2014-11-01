@@ -25,7 +25,7 @@ import mpicbg.models.SpringMesh;
 import mpicbg.models.Tile;
 import mpicbg.models.TranslationModel2D;
 import mpicbg.models.Vertex;
-import mpicbg.trakem2.transform.MovingLeastSquaresTransform;
+import mpicbg.trakem2.transform.MovingLeastSquaresTransform2;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
@@ -615,39 +615,6 @@ public class OptimizeLayersElastic {
 		}
 
 		
-		/* translate coordinate system to 0,0 */
-		final float[] minXY = { Float.MAX_VALUE, Float.MAX_VALUE };
-		for ( final SpringMesh mesh : meshes )
-		{
-			final float[] meshMin = new float[ 2 ];
-			final float[] meshMax = new float[ 2 ];
-
-			mesh.bounds( meshMin, meshMax );
-			
-			Utils.min( minXY, meshMin );
-		}
-
-		if ( ( minXY[0] != 0 ) || ( minXY[1] != 0 ) )
-		{
-			for ( final SpringMesh mesh : meshes )
-			{
-	
-				for ( final PointMatch pm : mesh.getVA().keySet() )
-				{
-					final Point p1 = pm.getP1();
-					final Point p2 = pm.getP2();
-					final float[] l = p1.getL();
-					final float[] w = p2.getW();
-					l[ 0 ] = l[ 0 ] - minXY[0];
-					l[ 1 ] = l[ 1 ] - minXY[1];
-					w[ 0 ] = w[ 0 ] - minXY[0];
-					w[ 1 ] = w[ 1 ] - minXY[1];
-				}
-			}
-		}
-
-		
-		
 		// Iterate the layers, and add the mesh transform for each tile
 		for ( int i = startLayer; i <= endLayer; ++i )
 		{
@@ -676,7 +643,7 @@ public class OptimizeLayersElastic {
 
 				try
 				{
-					final MovingLeastSquaresTransform mlt = new MovingLeastSquaresTransform();
+					final MovingLeastSquaresTransform2 mlt = new MovingLeastSquaresTransform2();
 					mlt.setModel( AffineModel2D.class );
 					mlt.setAlpha( 2.0f );
 					mlt.setMatches( mesh.getVA().keySet() );
@@ -773,7 +740,7 @@ public class OptimizeLayersElastic {
 			params, layersTs, layersCorrs,
 			params.fixedLayers,
 			firstLayer, lastLayer,
-			bbox.getStartPoint().getX(), bbox.getEndPoint().getY() );
+			bbox.getStartPoint().getX(), bbox.getStartPoint().getY() );
 
 		// Save new tilespecs
 		System.out.println( "Optimization complete. Generating tile transforms.");
