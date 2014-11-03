@@ -169,7 +169,7 @@ public class Render3D {
 					image.show();
 				if ( params.targetDir != null )
 				{
-					String outFile = String.format( "%s/Section_%03d.tif", params.targetDir, curLayer );
+					String outFile = String.format( "%s/Section_%04d.tif", params.targetDir, curLayer );
 					saveLayerImage( image, outFile );
 				}
 			}
@@ -195,7 +195,7 @@ public class Render3D {
 							image.show();
 						if ( params.targetDir != null )
 						{
-							String outFile = String.format( "%s/Section_%03d.tif", params.targetDir, curLayer );
+							String outFile = String.format( "%s/Section_%04d.tif", params.targetDir, curLayer );
 							saveLayerImage( image, outFile );
 						}
 					}

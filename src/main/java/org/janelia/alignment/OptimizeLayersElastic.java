@@ -748,7 +748,7 @@ public class OptimizeLayersElastic {
 		// Iterate through the layers and output the new tile specs
 		for ( int layer = firstLayer; layer <= lastLayer; layer++ )
 		{
-			String layerString = String.format( "%03d", layer );
+			String layerString = String.format( "%04d", layer );
 			System.out.println( "Writing layer " + layerString );
 			final File targetFile = new File( params.targetDir, "Section_" + layerString + ".json" );
 			final List< TileSpec > layerOutTiles = layersTs.get( layer );
