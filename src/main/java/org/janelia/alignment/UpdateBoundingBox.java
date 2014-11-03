@@ -70,7 +70,7 @@ public class UpdateBoundingBox {
 		
 		tsImage.getBoundingBox( true );
 		
-		final String outFileName = targetDir + fileName.substring( fileName.lastIndexOf(File.separatorChar) );
+		final String outFileName = targetDir + fileName.substring( fileName.lastIndexOf( '/' ) );
 		
 		// Save the image
 		tsImage.saveTileSpecs( outFileName );

@@ -92,6 +92,7 @@ public class Render3D {
 	private static void saveLayerImage( ImagePlus image, String outFile )
 	{
 		IJ.saveAsTiff( image, outFile );
+		//IJ.save( image, outFile );
 		System.out.println( "Image " + outFile + " was saved." );
 	}
 
