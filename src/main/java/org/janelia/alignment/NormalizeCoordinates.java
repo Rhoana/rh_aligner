@@ -114,7 +114,7 @@ public class NormalizeCoordinates {
 				}
 				
 				// Save the output file
-				final String outFileName = params.targetDir + fileName.substring( fileName.lastIndexOf(File.separatorChar) );
+				final String outFileName = params.targetDir + fileName.substring( fileName.lastIndexOf( '/' ) );
 				System.out.println( "Normalizing " + fileName + " to " + outFileName );
 				try {
 					Writer writer = new FileWriter( outFileName );
