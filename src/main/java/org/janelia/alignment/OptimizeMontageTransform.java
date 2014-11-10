@@ -193,7 +193,6 @@ public class OptimizeMontageTransform
 		// A map between a imageUrl and the Tile
 		final Map< String, Tile< ? > > tilesMap = new HashMap< String, Tile< ? > >();
 //		final List< Tile< ? > > tiles = new ArrayList< Tile< ? > >();
-		final List< Tile< ? > > fixedTiles = new ArrayList< Tile< ? > >();
 //		final List< Tile< ? >[] > tilePairs = new ArrayList< Tile< ? >[] >();
 		
 		for (CorrespondenceSpec corr : corr_data)
@@ -225,9 +224,13 @@ public class OptimizeMontageTransform
 					tilesMap.put(corr.url2, tile2);
 					//tiles.add(tile2);
 				}
+	
+				tile1.connect( tile2, corr.correspondencePointPairs );
+				
+				/*
 				tile1.addConnectedTile(tile2);
 				tile2.addConnectedTile(tile1);
-	
+
 				// Forward Point Matches
 				tile1.addMatches( corr.correspondencePointPairs );
 				
@@ -238,6 +241,13 @@ public class OptimizeMontageTransform
 					System.out.println("p1 " + pm.getP1().getW()[0] + ", " + pm.getP1().getW()[1]);
 					System.out.println("p2 " + pm.getP2().getW()[0] + ", " + pm.getP2().getW()[1]);
 				}
+				*/
+				for ( PointMatch pm : corr.correspondencePointPairs )
+				{
+					System.out.println("p1 " + pm.getP1().getW()[0] + ", " + pm.getP1().getW()[1]);
+					System.out.println("p2 " + pm.getP2().getW()[0] + ", " + pm.getP2().getW()[1]);
+				}
+
 			}
 		}
 		
@@ -299,18 +309,11 @@ public class OptimizeMontageTransform
 		
 		ArrayList< TileSpec > out_tiles = new ArrayList< TileSpec >();
 				
-		// Export new transforms, TODO: append to existing tilespec files
-		for(Entry<String, Tile< ? > > entry : tilesMap.entrySet()) {
-		    String tileUrl = entry.getKey();
-		    Tile< ? > tileValue = entry.getValue();
-		    
-		    TileSpec ts = tileSpecMap.get(tileUrl);
-		    if (ts == null)
-		    {
-		    	System.out.println("Warning: Could not find input tilespec for image " + tileUrl + ". Generating new tilespec.");
-		    	ts = new TileSpec();
-		    	ts.setMipmapLevelImageUrl( String.valueOf( mipmapLevel ), tileUrl);
-		    }
+		// Export new transforms
+		for ( int i = 0; i < tileSpecs.length; i++ ) {
+			String tileUrl = tileSpecs[ i ].getMipmapLevels().get( String.valueOf( mipmapLevel ) ).imageUrl;
+			Tile< ? > tileValue = tilesMap.get( tileUrl );
+			TileSpec ts = tileSpecs[ i ];
 		    
 		    @SuppressWarnings("rawtypes")
 			Model genericModel = tileValue.getModel();
@@ -340,7 +343,9 @@ public class OptimizeMontageTransform
 			}		    
 		    
 			//Apply to the corresponding tilespec transforms
-			ArrayList< Transform > outTransforms = new ArrayList< Transform >(Arrays.asList(ts.transforms));
+			//ArrayList< Transform > outTransforms = new ArrayList< Transform >(Arrays.asList(ts.transforms));
+			// (override previous transformations)
+			ArrayList< Transform > outTransforms = new ArrayList< Transform >( );
 			outTransforms.add(addedTransform);
 			ts.transforms = outTransforms.toArray(ts.transforms);
 		    

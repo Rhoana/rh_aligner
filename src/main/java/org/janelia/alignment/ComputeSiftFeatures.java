@@ -17,6 +17,7 @@
 package org.janelia.alignment;
 
 import ij.ImagePlus;
+import ij.process.ByteProcessor;
 import ij.process.ImageProcessor;
 
 import java.io.IOException;
@@ -95,8 +96,10 @@ public class ComputeSiftFeatures
         @Parameter( names = "--res", description = " Mesh resolution, specified by the desired size of a triangle in pixels", required = false )
         public int res = 64;
 
+        /*
         @Parameter( names = "--avoidTileScale", description = "Avoid automatic scale of all tiles according to the bounding box width and height", required = false )
         private boolean avoidTileScale = false;
+        */
 	}
 	
 	private ComputeSiftFeatures() {}
@@ -112,6 +115,70 @@ public class ComputeSiftFeatures
 	}
 */
 	
+	
+	private static ByteProcessor createMaskedByteImage( ImageProcessor imgP )
+	{
+		
+		/*
+		final ByteProcessor mask;
+		final Patch.PatchImage pai = patch.createTransformedImage();
+		
+		if ( pai.mask == null )
+			mask = pai.outside;
+		else
+			mask = pai.mask;
+
+		pai.target.setMinAndMax( patch.getMin(), patch.getMax() );
+		*/
+		
+		//final ByteProcessor target = ( ByteProcessor )pai.target.convertToByte( true );
+		final ByteProcessor target = ( ByteProcessor )imgP.convertToByte( true );
+
+		/* Other than any other ImageProcessor, ByteProcessors ignore scaling, so ... */
+		if ( ByteProcessor.class.isInstance( target ) )
+		{
+			final float s = 255.0f / ( float )( imgP.getMax() - imgP.getMin() );
+			final int m = ( int )imgP.getMin();
+			final byte[] targetBytes = ( byte[] )target.getPixels();
+			for ( int i = 0; i < targetBytes.length; ++i )
+			{
+				targetBytes[ i ] = ( byte )( Math.max( 0, Math.min( 255, ( ( targetBytes[ i ] & 0xff ) - m ) * s ) ) );
+			}
+			target.setMinAndMax( 0, 255 );
+		}
+
+		/*
+		if ( mask != null )
+		{
+			final byte[] targetBytes = ( byte[] )target.getPixels();
+			final byte[] maskBytes = (byte[])mask.getPixels();
+
+			if ( pai.outside != null )
+			{
+				final byte[] outsideBytes = (byte[])pai.outside.getPixels();
+				for ( int i = 0; i < outsideBytes.length; ++i )
+				{
+					if ( ( outsideBytes[ i ]&0xff ) != 255 ) maskBytes[ i ] = 0;
+					final float a = ( float )( maskBytes[ i ] & 0xff ) / 255f;
+					final int t = ( targetBytes[ i ] & 0xff );
+					targetBytes[ i ] = ( byte )( t * a + 127 * ( 1 - a ) );
+				}
+			}
+			else
+			{
+				for ( int i = 0; i < targetBytes.length; ++i )
+				{
+					final float a = ( float )( maskBytes[ i ] & 0xff ) / 255f;
+					final int t = ( targetBytes[ i ] & 0xff );
+					targetBytes[ i ] = ( byte )( t * a + 127 * ( 1 - a ) );
+				}
+			}
+		}
+		*/
+		
+		return target;
+	}
+	
 	public static List< Feature > computeImageSiftFeatures( ImageProcessor ip, FloatArray2DSIFT.Param siftParam )
 	{
 		FloatArray2DSIFT sift = new FloatArray2DSIFT(siftParam);
@@ -119,7 +186,7 @@ public class ComputeSiftFeatures
 
 
 		final List< Feature > fs = new ArrayList< Feature >();
-		ijSIFT.extractFeatures( ip, fs );
+		ijSIFT.extractFeatures( createMaskedByteImage( ip ), fs );
 
 		return fs;
 	}
@@ -200,11 +267,14 @@ public class ComputeSiftFeatures
 		}
 		
         final double scale;
+        /*
         if ( params.avoidTileScale )
                 scale = 1.0f;
         else
                 scale = Math.min( 1.0, Math.min( ( double )params.maxOctaveSize / ( double )maxWidth, ( double )params.maxOctaveSize / ( double )maxHeight ) );
-
+		*/
+        scale = 1.0f;
+        
 		for (int idx = start_index; idx < end_index; idx = idx + 1) {
 			TileSpec ts = tileSpecs[idx];
 		
@@ -224,8 +294,8 @@ public class ComputeSiftFeatures
 				siftParam.maxOctaveSize = params.maxOctaveSize;
 				siftParam.fdSize = params.fdSize;
 				siftParam.fdBins = params.fdBins;
-				FloatArray2DSIFT sift = new FloatArray2DSIFT(siftParam);
-				SIFT ijSIFT = new SIFT(sift);
+				//FloatArray2DSIFT sift = new FloatArray2DSIFT(siftParam);
+				//SIFT ijSIFT = new SIFT(sift);
 		
 //			/* Apply transformations on the image, and only then get the sift features
 //			 * (transformations may have an impact on the sift features)
@@ -258,11 +328,11 @@ public class ComputeSiftFeatures
 				//ijSIFT.extractFeatures( imp.getProcessor(), fs );
 		
 				/* Apply the transformations on the location of every feature */
-				final CoordinateTransformList< CoordinateTransform > ctl = ts.createTransformList();
+/*				final CoordinateTransformList< CoordinateTransform > ctl = ts.createTransformList();
 				for (Feature feature : fs)
 				{
 					ctl.applyInPlace(feature.location);				
-				}
+				}*/
 		
 				feature_data.add(new FeatureSpec( String.valueOf( mipmapLevel ), imageUrl, scale, fs));
 			}

@@ -15,6 +15,7 @@ import json
 from filter_tiles import filter_tiles
 from create_sift_features import create_sift_features
 from match_sift_features import match_sift_features
+from match_sift_features_and_filter import match_sift_features_and_filter
 from json_concat import json_concat
 from optimize_montage_transform import optimize_montage_transform
 
@@ -73,7 +74,8 @@ create_sift_features(filter_json, sifts_json, args.jar_file, conf)
 
 # match the features of overlapping tiles
 match_json = os.path.join(args.workspace_dir, "{0}_sift_matches.json".format(tiles_fname_prefix))
-match_sift_features(filter_json, sifts_json, match_json, args.jar_file, conf)
+#match_sift_features(filter_json, sifts_json, match_json, args.jar_file, conf)
+match_sift_features_and_filter(filter_json, sifts_json, match_json, args.jar_file, conf)
 
 # optimize the 2d layer montage
 optmon_fname = os.path.join(args.workspace_dir, "{0}_optimized_montage.json".format(tiles_fname_prefix))

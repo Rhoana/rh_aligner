@@ -13,8 +13,10 @@ import utils
 
 
 def match_multiple_sift_features(tiles_file, features_file, index_pairs, jar, out_fname, conf_args):
-    java_cmd = 'java -Xmx4g -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.MatchSiftFeatures --featurefile {1} {2} --targetPath {3} {4}'.format(
+    tiles_url = utils.path2url(os.path.abspath(tiles_file))
+    java_cmd = 'java -Xmx4g -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.MatchSiftFeatures --tilespecfile {1} --featurefile {2} {3} --targetPath {4} {5}'.format(
         jar,
+        tiles_url,
         features_file,
         " ".join("--indices {}:{}".format(a, b) for a, b in index_pairs),
         out_fname,
