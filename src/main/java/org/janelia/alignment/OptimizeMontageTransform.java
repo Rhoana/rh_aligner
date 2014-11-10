@@ -64,7 +64,10 @@ public class OptimizeMontageTransform
                         
         @Parameter( names = "--tilespecfile", description = "Tilespec file containing all tiles for this montage and current transforms", required = true )
         private String tilespecfile;
-        
+
+        @Parameter( names = "--fixedTiles", description = "Fixed tiles indices (space separated)", variableArity = true, required = true )
+        public List<Integer> fixedTiles = new ArrayList<Integer>();
+
         @Parameter( names = "--modelIndex", description = "Model Index: 0=Translation, 1=Rigid, 2=Similarity, 3=Affine, 4=Homography", required = false )
         private int modelIndex = 1;
                         
@@ -272,8 +275,12 @@ public class OptimizeMontageTransform
 			if ( t.getConnectedTiles().size() > 0 )
 				tc.addTile( t );
 
-		for ( final Tile< ? > t : fixedTiles )
-			tc.fixTile( t );
+		for ( Integer fixedTileIndex : params.fixedTiles )
+		{
+			String imageUrl = tileSpecs[fixedTileIndex].getMipmapLevels().get( String.valueOf( mipmapLevel ) ).imageUrl;
+			final Tile< ? > tile = tilesMap.get( imageUrl );
+			tc.fixTile( tile );
+		}
 
 		try
 		{

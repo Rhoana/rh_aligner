@@ -31,6 +31,9 @@ parser.add_argument('-r', '--render', action='store_true',
 parser.add_argument('-o', '--output_file_name', type=str, 
                     help='the file that includes the output to be rendered in json format (default: output.json)',
                     default='output.json')
+parser.add_argument('-f', '--fixed_tiles', type=str, nargs='+',
+                    help='a space separated list of fixed tile indices (default: 0)',
+                    default="0")
 parser.add_argument('-j', '--jar_file', type=str, 
                     help='the jar file that includes the render (default: ../target/render-0.0.1-SNAPSHOT.jar)',
                     default='../target/render-0.0.1-SNAPSHOT.jar')
@@ -74,6 +77,6 @@ match_sift_features(filter_json, sifts_json, match_json, args.jar_file, conf)
 
 # optimize the 2d layer montage
 optmon_fname = os.path.join(args.workspace_dir, "{0}_optimized_montage.json".format(tiles_fname_prefix))
-optimize_montage_transform(match_json, filter_json, optmon_fname, args.jar_file, conf)
+optimize_montage_transform(match_json, filter_json, args.fixed_tiles, optmon_fname, args.jar_file, conf)
 
 
