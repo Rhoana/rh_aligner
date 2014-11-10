@@ -95,6 +95,8 @@ public class ComputeSiftFeatures
         @Parameter( names = "--res", description = " Mesh resolution, specified by the desired size of a triangle in pixels", required = false )
         public int res = 64;
 
+        @Parameter( names = "--avoidTileScale", description = "Avoid automatic scale of all tiles according to the bounding box width and height", required = false )
+        private boolean avoidTileScale = false;
 	}
 	
 	private ComputeSiftFeatures() {}
@@ -109,6 +111,18 @@ public class ComputeSiftFeatures
 	
 	}
 */
+	
+	public static List< Feature > computeImageSiftFeatures( ImageProcessor ip, FloatArray2DSIFT.Param siftParam )
+	{
+		FloatArray2DSIFT sift = new FloatArray2DSIFT(siftParam);
+		SIFT ijSIFT = new SIFT(sift);
+
+
+		final List< Feature > fs = new ArrayList< Feature >();
+		ijSIFT.extractFeatures( ip, fs );
+
+		return fs;
+	}
 	
 	public static void main( final String[] args )
 	{
@@ -168,7 +182,29 @@ public class ComputeSiftFeatures
 
 		int start_index = params.all_tiles ? 0 : params.index;
 		int end_index = params.all_tiles ? tileSpecs.length : params.index + 1;
+
+		// Get the maximal width and height of all tiles
+		double maxWidth = 0.0;
+		double maxHeight = 0.0;
+		for (int idx = start_index; idx < end_index; idx = idx + 1) {
+			TileSpec ts = tileSpecs[idx];
+
+			String imageUrl = ts.getMipmapLevels().get( String.valueOf( mipmapLevel ) ).imageUrl;
+			final ImagePlus imp = Utils.openImagePlus( imageUrl.replaceFirst("file://", "").replaceFirst("file:/", "") );
+			if ( imp == null )
+				System.err.println( "Failed to load image '" + imageUrl + "'." );
+			else {
+				maxWidth = Math.max( maxWidth, imp.getWidth() );
+				maxHeight = Math.max( maxHeight, imp.getHeight() );
+			}
+		}
 		
+        final double scale;
+        if ( params.avoidTileScale )
+                scale = 1.0f;
+        else
+                scale = Math.min( 1.0, Math.min( ( double )params.maxOctaveSize / ( double )maxWidth, ( double )params.maxOctaveSize / ( double )maxHeight ) );
+
 		for (int idx = start_index; idx < end_index; idx = idx + 1) {
 			TileSpec ts = tileSpecs[idx];
 		
@@ -215,8 +251,11 @@ public class ComputeSiftFeatures
 //			/* create mesh */
 		
 		
-				final List< Feature > fs = new ArrayList< Feature >();
-				ijSIFT.extractFeatures( imp.getProcessor(), fs );
+                System.out.println( "Sift Features computation: layer scale: " + scale );
+                ImageProcessor scaledImp = imp.getProcessor().resize( (int)(maxWidth * scale), (int)(maxHeight * scale) );
+                final List< Feature > fs = ComputeSiftFeatures.computeImageSiftFeatures( scaledImp, siftParam );
+                System.out.println( "Found " + fs.size() + " features in the layer" );
+				//ijSIFT.extractFeatures( imp.getProcessor(), fs );
 		
 				/* Apply the transformations on the location of every feature */
 				final CoordinateTransformList< CoordinateTransform > ctl = ts.createTransformList();
@@ -225,7 +264,7 @@ public class ComputeSiftFeatures
 					ctl.applyInPlace(feature.location);				
 				}
 		
-				feature_data.add(new FeatureSpec( String.valueOf( mipmapLevel ), imageUrl, fs));
+				feature_data.add(new FeatureSpec( String.valueOf( mipmapLevel ), imageUrl, scale, fs));
 			}
 		}
 		try {
