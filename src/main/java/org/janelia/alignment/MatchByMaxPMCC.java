@@ -26,6 +26,7 @@ import java.io.FileWriter;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 import mpicbg.models.AbstractModel;
@@ -37,6 +38,7 @@ import mpicbg.models.PointMatch;
 import mpicbg.models.SpringMesh;
 import mpicbg.models.TranslationModel2D;
 import mpicbg.models.Vertex;
+import mpicbg.util.Util;
 import mpicbg.ij.blockmatching.BlockMatching;
 
 import com.beust.jcommander.JCommander;
@@ -63,6 +65,14 @@ public class MatchByMaxPMCC
 
         @Parameter( names = "--inputfile", description = "Tilespec file", required = true )
         private String inputfile;
+        
+        /*
+        @Parameter( names = "--corrfile", description = "Correspondence file from the sift features matching (includes models between tiles)", required = true )
+        private String corrfile;
+        */
+
+        @Parameter( names = "--fixedTiles", description = "Fixed tiles indices (space separated)", variableArity = true, required = true )
+        public List<Integer> fixedTiles = new ArrayList<Integer>();
         
         @Parameter( names = "--targetPath", description = "Path for the output correspondences", required = true )
         public String targetPath;
@@ -118,9 +128,13 @@ public class MatchByMaxPMCC
 		
         @Parameter( names = "--maxStretchSpringMesh", description = "maxStretchSpringMesh", required = false )
         public float maxStretchSpringMesh = 2000.0f;
-        
+
+        @Parameter( names = "--springLengthSpringMesh", description = "spring_length", required = false )
+        public float springLengthSpringMesh = 100.0f;
+
         @Parameter( names = "--threads", description = "Number of threads to be used", required = false )
         public int numThreads = Runtime.getRuntime().availableProcessors();
+
         
 	}
 	
@@ -175,6 +189,33 @@ public class MatchByMaxPMCC
 			return;
 		}
 		
+		/*
+		final CorrespondenceSpec[] sift_matches_corr_data;
+		try
+		{
+			final Gson gson = new Gson();
+			URL url = new URL( params.corrfile );
+			sift_matches_corr_data = gson.fromJson( new InputStreamReader( url.openStream() ), CorrespondenceSpec[].class );
+		}
+		catch ( final MalformedURLException e )
+		{
+			System.err.println( "URL malformed." );
+			e.printStackTrace( System.err );
+			return;
+		}
+		catch ( final JsonSyntaxException e )
+		{
+			System.err.println( "JSON syntax malformed." );
+			e.printStackTrace( System.err );
+			return;
+		}
+		catch ( final Exception e )
+		{
+			e.printStackTrace( System.err );
+			return;
+		}
+		*/
+		
 		// The mipmap level to work on
 		// TODO: Should be a parameter from the user,
 		//       and decide whether or not to create the mipmaps if they are missing
@@ -182,6 +223,11 @@ public class MatchByMaxPMCC
 
 		List< CorrespondenceSpec > corr_data = new ArrayList< CorrespondenceSpec >();
 
+		// Create the meshes for the tiles
+        final List< SpringMesh > meshes = Utils.createMeshes( 
+        		tileSpecs, params.springLengthSpringMesh, params.stiffnessSpringMesh,
+        		params.maxStretchSpringMesh, params.layerScale, params.dampSpringMesh);
+        
 		for (String idx_pair : params.indices) {
 			String[] vals = idx_pair.split(":");
 			if (vals.length != 2)
@@ -191,7 +237,7 @@ public class MatchByMaxPMCC
 
 			TileSpec ts1 = tileSpecs[idx1];
 			TileSpec ts2 = tileSpecs[idx2];
-		
+			
 			final ArrayList< PointMatch > pm12 = new ArrayList< PointMatch >();
 			final ArrayList< PointMatch > pm21 = new ArrayList< PointMatch >();
 	
@@ -201,8 +247,10 @@ public class MatchByMaxPMCC
 			final ImagePlus imp1 = Utils.openImagePlus( imageUrl1.replaceFirst("file://", "").replaceFirst("file:/", "") );
 			final ImagePlus imp2 = Utils.openImagePlus( imageUrl2.replaceFirst("file://", "").replaceFirst("file:/", "") );
 	
-			final SpringMesh m1 = Utils.getMesh( imp1.getWidth(), imp1.getHeight(), 1.0f, params.resolutionSpringMesh, params.stiffnessSpringMesh, params.dampSpringMesh, params.maxStretchSpringMesh );
-			final SpringMesh m2 = Utils.getMesh( imp2.getWidth(), imp2.getHeight(), 1.0f, params.resolutionSpringMesh, params.stiffnessSpringMesh, params.dampSpringMesh, params.maxStretchSpringMesh );
+			//final SpringMesh m1 = Utils.getMesh( imp1.getWidth(), imp1.getHeight(), 1.0f, params.resolutionSpringMesh, params.stiffnessSpringMesh, params.dampSpringMesh, params.maxStretchSpringMesh );
+			//final SpringMesh m2 = Utils.getMesh( imp2.getWidth(), imp2.getHeight(), 1.0f, params.resolutionSpringMesh, params.stiffnessSpringMesh, params.dampSpringMesh, params.maxStretchSpringMesh );
+			final SpringMesh m1 = meshes.get( idx1 );
+			final SpringMesh m2 = meshes.get( idx2 );
 	
 			final ArrayList< Vertex > v1 = m1.getVertices();
 			final ArrayList< Vertex > v2 = m2.getVertices();
@@ -215,23 +263,80 @@ public class MatchByMaxPMCC
 	
 			final AbstractModel< ? > localSmoothnessFilterModel = Utils.createModel( params.localModelIndex );
 	
-			final FloatProcessor ip1 = ( FloatProcessor )imp1.getProcessor().convertToFloat().duplicate();
-			final FloatProcessor ip2 = ( FloatProcessor )imp2.getProcessor().convertToFloat().duplicate();
+			//final FloatProcessor ip1 = ( FloatProcessor )imp1.getProcessor().convertToFloat().duplicate();
+			//final FloatProcessor ip2 = ( FloatProcessor )imp2.getProcessor().convertToFloat().duplicate();
+			final FloatProcessor ip1 = ( FloatProcessor )imp1.getProcessor().convertToFloat();
+			final FloatProcessor ip2 = ( FloatProcessor )imp2.getProcessor().convertToFloat();
 			
-			final int blockRadius = Math.max( 16, mpicbg.util.Util.roundPos( params.layerScale * params.blockRadius ) );
-	        final int searchRadius = Math.round( params.layerScale * params.searchRadius );
+			
+			//final int blockRadius = Math.max( 16, mpicbg.util.Util.roundPos( params.layerScale * params.blockRadius ) );
+	        //final int searchRadius = Math.round( params.layerScale * params.searchRadius );
+			final int blockRadius = Math.max( Util.roundPos( 16 / params.layerScale ), params.blockRadius );
+			final int searchRadius = params.searchRadius;
 	
-			final TranslationModel2D transform12 = (( TranslationModel2D )ctl1.get(0)).createInverse();
-			transform12.concatenate( (( TranslationModel2D )( Object )ctl2.get(0)) );
+			final CoordinateTransformList< CoordinateTransform > transform12 = Utils.getInverseModel( ctl1 );
+			transform12.add( ctl2 );
 			
-			try{
+			final CoordinateTransformList< CoordinateTransform > transform21 = Utils.getInverseModel( ctl2 );
+			transform21.add( ctl1 );
+
+//			final TranslationModel2D transform12 = (( TranslationModel2D )ctl1.get(0)).createInverse();
+//			transform12.concatenate( (( TranslationModel2D )( Object )ctl2.get(0)) );
+			
+			if ( !params.fixedTiles.contains( idx1 ) )
+			{
+				try{
+					BlockMatching.matchByMaximalPMCC(
+							ip1,
+							ip2,
+							null, //mask1
+							null, //mask2
+							params.layerScale, //Math.min( 1.0f, ( float )params.maxImageSize / ip1.getWidth() ),
+							transform21,
+							blockRadius,
+							blockRadius,
+							searchRadius,
+							searchRadius,
+							params.minR,
+							params.rodR,
+							params.maxCurvatureR,
+							v1,
+							pm12,
+							new ErrorStatistic( 1 ) );
+				}
+				catch ( final Exception e )
+				{
+					e.printStackTrace( System.err );
+					return;
+				}
+		
+				if ( params.useLocalSmoothnessFilter )
+				{
+					System.out.println( imageUrl1 + " > " + imageUrl2 + ": found " + pm12.size() + " correspondence candidates." );
+					localSmoothnessFilterModel.localSmoothnessFilter( pm12, pm12, params.localRegionSigma, params.maxLocalEpsilon, params.maxLocalTrust );
+					System.out.println( imageUrl1 + " > " + imageUrl2 + ": " + pm12.size() + " candidates passed local smoothness filter." );
+				}
+				else
+				{
+					System.out.println( imageUrl1 + " > " + imageUrl2 + ": found " + pm12.size() + " correspondences." );
+				}
+
+			}
+			else
+            {
+				System.out.println( "Skipping fixed tile " + idx1 );
+            }
+	
+			if ( !params.fixedTiles.contains( idx2 ) )
+			{
+				try{
 				BlockMatching.matchByMaximalPMCC(
-						ip1,
 						ip2,
-						null, //mask1
+						ip1,
 						null, //mask2
-						params.layerScale, //Math.min( 1.0f, ( float )params.maxImageSize / ip1.getWidth() ),
-						transform12.createInverse(),
+						null, //mask1
+						params.layerScale, //Math.min( 1.0f, ( float )p.maxImageSize / ip2.getWidth() ),
+						transform12,
 						blockRadius,
 						blockRadius,
 						searchRadius,
@@ -239,65 +344,34 @@ public class MatchByMaxPMCC
 						params.minR,
 						params.rodR,
 						params.maxCurvatureR,
-						v1,
-						pm12,
+						v2,
+						pm21,
 						new ErrorStatistic( 1 ) );
-			}
-			catch ( final Exception e )
-			{
-				e.printStackTrace( System.err );
-				return;
-			}
-	
-			if ( params.useLocalSmoothnessFilter )
-			{
-				System.out.println( imageUrl1 + " > " + imageUrl2 + ": found " + pm12.size() + " correspondence candidates." );
-				localSmoothnessFilterModel.localSmoothnessFilter( pm12, pm12, params.localRegionSigma, params.maxLocalEpsilon, params.maxLocalTrust );
-				System.out.println( imageUrl1 + " > " + imageUrl2 + ": " + pm12.size() + " candidates passed local smoothness filter." );
-			}
-			else
-			{
-				System.out.println( imageUrl1 + " > " + imageUrl2 + ": found " + pm12.size() + " correspondences." );
-			}
-	
-	
-			try{
-			BlockMatching.matchByMaximalPMCC(
-					ip2,
-					ip1,
-					null, //mask2
-					null, //mask1
-					params.layerScale, //Math.min( 1.0f, ( float )p.maxImageSize / ip2.getWidth() ),
-					transform12,
-					blockRadius,
-					blockRadius,
-					searchRadius,
-					searchRadius,
-					params.minR,
-					params.rodR,
-					params.maxCurvatureR,
-					v2,
-					pm21,
-					new ErrorStatistic( 1 ) );
-			}
-			catch ( final Exception e )
-			{
-				e.printStackTrace( System.err );
-				return;
-			}
-	
-	
-			if ( params.useLocalSmoothnessFilter )
-			{
-				System.out.println( imageUrl2 + " > " + imageUrl1 + ": found " + pm21.size() + " correspondence candidates." );
-				localSmoothnessFilterModel.localSmoothnessFilter( pm21, pm21, params.localRegionSigma, params.maxLocalEpsilon, params.maxLocalTrust );
-				System.out.println( imageUrl2 + " > " + imageUrl1 + ": " + pm21.size() + " candidates passed local smoothness filter." );
+				}
+				catch ( final Exception e )
+				{
+					e.printStackTrace( System.err );
+					return;
+				}
+		
+		
+				if ( params.useLocalSmoothnessFilter )
+				{
+					System.out.println( imageUrl1 + " < " + imageUrl2 + ": found " + pm21.size() + " correspondence candidates." );
+					localSmoothnessFilterModel.localSmoothnessFilter( pm21, pm21, params.localRegionSigma, params.maxLocalEpsilon, params.maxLocalTrust );
+					System.out.println( imageUrl1 + " < " + imageUrl2 + ": " + pm21.size() + " candidates passed local smoothness filter." );
+				}
+				else
+				{
+					System.out.println( imageUrl1 + " < " + imageUrl2 + ": found " + pm21.size() + " correspondences." );
+				}
+
 			}
 			else
-			{
-				System.out.println( imageUrl2 + " > " + imageUrl1 + ": found " + pm21.size() + " correspondences." );
-			}
-			
+            {
+				System.out.println( "Skipping fixed tile " + idx2 );
+            }
+
 			// Remove Vertex (spring mesh) details from points
 			final ArrayList< PointMatch > pm12_strip = new ArrayList< PointMatch >();
 			final ArrayList< PointMatch > pm21_strip = new ArrayList< PointMatch >();
@@ -311,8 +385,8 @@ public class MatchByMaxPMCC
 			}
 			for (PointMatch pm: pm21)
 			{
-				ctl1.applyInPlace(pm.getP1().getW());
-				ctl2.applyInPlace(pm.getP2().getW());
+				ctl2.applyInPlace(pm.getP1().getW());
+				ctl1.applyInPlace(pm.getP2().getW());
 				pm21_strip.add(new PointMatch(
 						new Point(pm.getP1().getL(), pm.getP1().getW()),
 						new Point(pm.getP2().getL(), pm.getP2().getW())));

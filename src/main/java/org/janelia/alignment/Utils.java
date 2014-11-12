@@ -25,6 +25,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.List;
 
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
@@ -37,10 +38,12 @@ import mpicbg.trakem2.transform.RigidModel2D;
 import mpicbg.trakem2.transform.SimilarityModel2D;
 import mpicbg.trakem2.transform.AffineModel2D;
 import mpicbg.trakem2.transform.HomographyModel2D;
-
+import mpicbg.models.AbstractAffineModel2D;
 import mpicbg.models.AbstractModel;
 import mpicbg.models.CoordinateTransform;
+import mpicbg.models.CoordinateTransformList;
 import mpicbg.models.InterpolatedAffineModel2D;
+import mpicbg.models.InvertibleCoordinateTransform;
 import mpicbg.models.NotEnoughDataPointsException;
 import mpicbg.models.Point;
 import mpicbg.models.PointMatch;
@@ -170,6 +173,36 @@ public class Utils
 		return mesh;
 	}
 
+	public static List< SpringMesh > createMeshes( TileSpec[] tileSpecs,
+			float springLengthSpringMesh, float stiffnessSpringMesh, float maxStretchSpringMesh,
+			float layerScale, float dampSpringMesh )
+	{
+        final float springTriangleHeightTwice = 2 * ( float )Math.sqrt( 0.75f * springLengthSpringMesh * springLengthSpringMesh );
+
+        final ArrayList< SpringMesh > meshes = new ArrayList< SpringMesh >( tileSpecs.length );
+        for ( int i = 0; i < tileSpecs.length; i++ )
+        {
+        	final double w = tileSpecs[ i ].bbox[1] - tileSpecs[ i ].bbox[0];
+        	final double h = tileSpecs[ i ].bbox[3] - tileSpecs[ i ].bbox[2];
+        	final int numX = Math.max( 2, ( int )Math.ceil( w / springLengthSpringMesh ) + 1 );
+        	final int numY = Math.max( 2, ( int )Math.ceil( h / springTriangleHeightTwice ) + 1 );
+        	final float wMesh = ( numX - 1 ) * springLengthSpringMesh;
+        	final float hMesh = ( numY - 1 ) * springTriangleHeightTwice;
+
+        	final SpringMesh mesh = new SpringMesh(
+        			numX,
+        			numY,
+        			wMesh,
+        			hMesh,
+        			stiffnessSpringMesh,
+        			maxStretchSpringMesh * layerScale,
+        			dampSpringMesh );
+        	meshes.add( mesh );
+        }
+
+        return meshes;
+	}
+	
 	final static private double LOG2 = Math.log( 2.0 );
 	
 	/**
@@ -475,5 +508,18 @@ public class Utils
 		final float t = ( float )( ( scale - 1 ) * 0.5 );
 		a.set( ( float )scale, 0, 0, ( float )scale, t, t );
 		return a;
+	}
+	
+	public static final CoordinateTransformList< CoordinateTransform > getInverseModel( final CoordinateTransformList< CoordinateTransform > ctl )
+	{
+		CoordinateTransformList< CoordinateTransform > res = new CoordinateTransformList<CoordinateTransform>();
+		
+		List< CoordinateTransform > list = ctl.getList( new ArrayList< CoordinateTransform >() );
+		for ( CoordinateTransform ct : list )
+		{
+			res.add( ((InvertibleCoordinateTransform)ct).createInverse() );
+		}
+		
+		return res;
 	}
 }

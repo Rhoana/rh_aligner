@@ -25,6 +25,7 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -56,11 +57,14 @@ public class OptimizeMontageElastic
 		@Parameter( names = "--help", description = "Display this note", help = true )
         private final boolean help = false;
 
-        @Parameter( names = "--inputfile", description = "Correspondence list file (correspondences are in world space, after application of any existing transformations)", required = true )
-        private String inputfile;
+        @Parameter( names = "--corrfile", description = "Correspondence list file (correspondences are in world space, after application of any existing transformations)", required = true )
+        private String corrfile;
         
         @Parameter( names = "--tilespecfile", description = "Tilespec file containing all tiles for this montage and current transforms", required = true )
         private String tilespecfile;
+
+        @Parameter( names = "--fixedTiles", description = "Fixed tiles indices (space separated)", variableArity = true, required = true )
+        public List<Integer> fixedTiles = new ArrayList<Integer>();
         
         @Parameter( names = "--modelIndex", description = "Model Index: 0=Translation, 1=Rigid, 2=Similarity, 3=Affine, 4=Homography", required = false )
         private int modelIndex = 3;
@@ -98,6 +102,9 @@ public class OptimizeMontageElastic
         @Parameter( names = "--maxPlateauwidthSpringMesh", description = "maxPlateauwidthSpringMesh", required = false )
         private int maxPlateauwidthSpringMesh = 200;
         
+        @Parameter( names = "--useLegacyOptimizer", description = "Use legacy optimizer", required = false )
+        private boolean useLegacyOptimizer = false;
+
 		@Parameter( names = "--targetPath", description = "Path for the output correspondences", required = true )
         public String targetPath;
         
@@ -108,6 +115,132 @@ public class OptimizeMontageElastic
 	
 	private OptimizeMontageElastic() {}
 	
+	/* Returns a map between a tile idx -> map of another tile index and the correspondece points between them */
+	private static HashMap< Integer, HashMap< Integer, CorrespondenceSpec > > parseCorrespondenceFile(
+			final String corrFileUrl,
+			final HashMap< String, Integer > imgUrlToTileIdxs )
+	{
+		HashMap< Integer, HashMap< Integer, CorrespondenceSpec > > tilesCorrs = new HashMap<Integer, HashMap<Integer,CorrespondenceSpec>>();
+
+		// Open and parse the json file
+		final CorrespondenceSpec[] corr_data;
+		try
+		{
+			final Gson gson = new Gson();
+			URL url = new URL( corrFileUrl );
+			corr_data = gson.fromJson( new InputStreamReader( url.openStream() ), CorrespondenceSpec[].class );
+		}
+		catch ( final MalformedURLException e )
+		{
+			System.err.println( "URL malformed." );
+			e.printStackTrace( System.err );
+			throw new RuntimeException( e );
+		}
+		catch ( final JsonSyntaxException e )
+		{
+			System.err.println( "JSON syntax malformed." );
+			e.printStackTrace( System.err );
+			throw new RuntimeException( e );
+		}
+		catch ( final Exception e )
+		{
+			e.printStackTrace( System.err );
+			throw new RuntimeException( e );
+		}
+		for ( final CorrespondenceSpec corr : corr_data )
+		{
+			final int tile1Idx = imgUrlToTileIdxs.get( corr.url1 );
+			final int tile2Idx = imgUrlToTileIdxs.get( corr.url2 );
+			final HashMap< Integer, CorrespondenceSpec > innerMapping;
+
+			if ( tilesCorrs.containsKey( tile1Idx ) )
+			{
+				innerMapping = tilesCorrs.get( tile1Idx );
+			}
+			else
+			{
+				innerMapping = new HashMap<Integer, CorrespondenceSpec>();
+				tilesCorrs.put( tile1Idx, innerMapping );
+			}
+			// Assuming that no two files have the same correspondence spec url values
+			innerMapping.put( tile2Idx,  corr );
+		}
+
+		return tilesCorrs;
+	}
+
+	private static boolean compareArrays( float[] a, float[] b )
+	{
+		if ( a.length != b.length )
+			return false;
+
+		for ( int i = 0; i < a.length; i++ )
+			// if ( a[i] != b[i] )
+			if ( Math.abs( a[i] - b[i] ) > 2 * Math.ulp( b[i] ) )
+				return false;
+
+		return true;
+	}
+	
+	/* Fixes the point match P1 vertices to point to the given vertices (same objects) */
+	private static List< PointMatch > fixPointMatchVertices(
+			List< PointMatch > pms,
+			ArrayList< Vertex > vertices )
+	{
+		List< PointMatch > newPms = new ArrayList<PointMatch>( pms.size() );
+
+		for ( final PointMatch pm : pms )
+		{
+			// Search for the given point match p1 point in the vertices list,
+			// and if found, link the vertex instead of that point
+			for ( final Vertex v : vertices )
+			{
+				if ( compareArrays( pm.getP1().getL(), v.getL() )  )
+				{
+					// Copy the new world values, in case there was a slight drift
+					for ( int i = 0; i < v.getW().length; i++ )
+						v.getW()[ i ] = pm.getP1().getW()[ i ];
+
+					PointMatch newPm = new PointMatch( v, pm.getP2(), pm.getWeights() );
+					newPms.add( newPm );
+				}
+			}
+		}
+
+		return newPms;
+	}
+
+	private static List< SpringMesh > fixAllPointMatchVertices(
+			final Params param,
+			final TileSpec[] tileSpecs,
+			final HashMap< Integer, HashMap< Integer, CorrespondenceSpec > > tilesCorrs )
+	{
+
+		final List< SpringMesh > meshes = Utils.createMeshes( tileSpecs, 
+				param.springLengthSpringMesh, param.stiffnessSpringMesh, param.maxStretchSpringMesh,
+				param.layerScale, param.dampSpringMesh );
+		for ( int i = 0; i < meshes.size(); ++i )
+		{
+			if ( tilesCorrs.containsKey( i ) )
+			{
+				final SpringMesh singleMesh = meshes.get( i );
+
+				HashMap< Integer, CorrespondenceSpec > tileICorrs = tilesCorrs.get( i );
+				for ( CorrespondenceSpec corrspec : tileICorrs.values() )
+				{
+					final List< PointMatch > pms = corrspec.correspondencePointPairs;
+					if ( pms != null )
+					{
+						final List< PointMatch > pmsFixed = fixPointMatchVertices( pms, singleMesh.getVertices() );
+						corrspec.correspondencePointPairs = pmsFixed;
+					}
+				}
+			}
+		}
+
+		return meshes;
+	}
+                    
 	public static void main( final String[] args )
 	{
 		
@@ -131,31 +264,6 @@ public class OptimizeMontageElastic
         	return;
         }
 		
-		final CorrespondenceSpec[] corr_data;
-		try
-		{
-			final Gson gson = new Gson();
-			URL url = new URL( params.inputfile );
-			corr_data = gson.fromJson( new InputStreamReader( url.openStream() ), CorrespondenceSpec[].class );
-		}
-		catch ( final MalformedURLException e )
-		{
-			System.err.println( "URL malformed." );
-			e.printStackTrace( System.err );
-			return;
-		}
-		catch ( final JsonSyntaxException e )
-		{
-			System.err.println( "JSON syntax malformed." );
-			e.printStackTrace( System.err );
-			return;
-		}
-		catch ( final Exception e )
-		{
-			e.printStackTrace( System.err );
-			return;
-		}
-		
 		// The mipmap level to work on
 		// TODO: Should be a parameter from the user,
 		//       and decide whether or not to create the mipmaps if they are missing
@@ -163,7 +271,6 @@ public class OptimizeMontageElastic
 		
 		/* Initialization */
 		/* read all tilespecs */
-		final HashMap< String, TileSpec > tileSpecMap = new HashMap< String, TileSpec >();
 		final URL url;
 		final TileSpec[] tileSpecs;
 		try
@@ -190,80 +297,85 @@ public class OptimizeMontageElastic
 			return;
 		}
 		
-		for (TileSpec ts : tileSpecs)
+		final HashMap< String, Integer > imgUrlToTileIdxs = new HashMap<String, Integer>();
+		for ( int i = 0; i < tileSpecs.length; i++ )
 		{
+			TileSpec ts = tileSpecs[ i ];
 			String imageUrl = ts.getMipmapLevels().get("" + mipmapLevel).imageUrl;
-			tileSpecMap.put(imageUrl, ts);
+			imgUrlToTileIdxs.put(imageUrl, i);
 		}
-		
-		/* create tiles and models for all patches */
-		//final HashMap< String, Tile< ? > > tilesMap = new HashMap< String, Tile< ? > >();
-		//final ArrayList< Tile< ? > > fixedTiles = new ArrayList< Tile< ? > > ();
-		
-		final HashMap< String, TileSpec > fixedTilesMap = new HashMap< String, TileSpec > ();
-		
-//		/* make pairwise global models local */
-//		final ArrayList< Triple< Tile< ? >, Tile< ? >, InvertibleCoordinateTransform > > pairs =
-//			new ArrayList< Triple< Tile< ? >, Tile< ? >, InvertibleCoordinateTransform > >();
 
-		final HashMap< String, SpringMesh > tileMeshMap = new HashMap< String, SpringMesh >();
+		HashMap< Integer, HashMap< Integer, CorrespondenceSpec > > tilesCorrs = 
+				parseCorrespondenceFile( params.corrfile, imgUrlToTileIdxs );
 		
-		/*
-		 * The following casting madness is necessary to get this code compiled
-		 * with Sun/Oracle Java 6 which otherwise generates an inconvertible
-		 * type exception.
-		 * 
-		 * TODO Remove as soon as this bug is fixed in Sun/Oracle javac.
-		 */
-		for ( final CorrespondenceSpec corr : corr_data )
+		final List< SpringMesh > meshes = 
+				fixAllPointMatchVertices( params, tileSpecs, tilesCorrs );
+		
+		
+		// Iterate over all pairs of tile corrs, and create the appropriate matches
+		for ( int tile1Idx = 0; tile1Idx < tileSpecs.length; tile1Idx++ )
 		{
-			// Here we generate a new mesh based on the tile width / height (fixed or read from tilespec).
-			if (!tileMeshMap.containsKey( corr.url1 ))
+			for ( int tile2Idx = 0; tile2Idx < tileSpecs.length; tile2Idx++ )
 			{
-				final TileSpec ts = tileSpecMap.get(corr.url1);
-				final CoordinateTransformList< CoordinateTransform > ctl = (CoordinateTransformList< CoordinateTransform >) ts.createTransformList();
-				final SpringMesh mesh = Utils.getMesh( ts.width, ts.height, params.layerScale, params.resolutionSpringMesh, params.stiffnessSpringMesh, params.dampSpringMesh, params.maxStretchSpringMesh );
-
-				// Apply the tilespec transform to the mesh
-				mesh.init(ctl);
+				final boolean tile1Fixed = params.fixedTiles.contains( tile1Idx );
+				final boolean tile2Fixed = params.fixedTiles.contains( tile2Idx );
 				
-				tileMeshMap.put( corr.url1, mesh );
-			}
-			if (!tileMeshMap.containsKey( corr.url2 ))
-			{
-				final TileSpec ts = tileSpecMap.get(corr.url2);
-				final CoordinateTransformList< CoordinateTransform > ctl = ts.createTransformList();
-				final SpringMesh mesh = Utils.getMesh( ts.width, ts.height, params.layerScale, params.resolutionSpringMesh, params.stiffnessSpringMesh, params.dampSpringMesh, params.maxStretchSpringMesh );
+                final CorrespondenceSpec corrspec12;
+                final List< PointMatch > pm12;
+                final CorrespondenceSpec corrspec21;
+                final List< PointMatch > pm21;
 
-				// Apply the tilespec transform to the mesh
-				mesh.init(ctl);
-				
-				tileMeshMap.put( corr.url2, mesh );
-			}
-			
-			SpringMesh meshA = tileMeshMap.get(corr.url1);
-			SpringMesh meshB = tileMeshMap.get(corr.url2);
-			
-			// Link meshes
-			for (PointMatch pm : corr.correspondencePointPairs)
-			{
-				Vertex closestVertexA = meshA.findClosestTargetVertex(pm.getP1().getW());
-				float dx = closestVertexA.getW()[0] - pm.getP1().getW()[0]; 
-				float dy = closestVertexA.getW()[1] - pm.getP1().getW()[1];
+                final SpringMesh m1 = meshes.get( tile1Idx );
+                final SpringMesh m2 = meshes.get( tile1Idx );
+                
+                if ( !tilesCorrs.containsKey( tile1Idx ) || !tilesCorrs.get( tile1Idx ).containsKey( tile2Idx ) )
+                {
+                	corrspec12 = null;
+                	pm12 = new ArrayList< PointMatch >();
+                }
+                else
+                {
+                	corrspec12 = tilesCorrs.get( tile1Idx ).get( tile2Idx );
+                	pm12 = corrspec12.correspondencePointPairs;
+                }
 
-				float p2x = pm.getP2().getW()[0] + dx;
-				float p2y = pm.getP2().getW()[1] + dy;
-				final Vertex p2 = new Vertex( new float[]{p2x, p2y} );
-				closestVertexA.addSpring( p2, new Spring( 0, 1.0f ) );
-				meshB.addPassiveVertex( p2 );
+                if ( !tilesCorrs.containsKey( tile2Idx ) || !tilesCorrs.get( tile2Idx ).containsKey( tile1Idx ) )
+                {
+                	corrspec21 = null;
+                	pm21 = new ArrayList< PointMatch >();
+                }
+                else
+                {
+                	corrspec21 = tilesCorrs.get( tile2Idx ).get( tile1Idx );
+                	pm21 = corrspec21.correspondencePointPairs;
+                }
+
+                for ( final PointMatch pm : pm12 )
+                {
+                	final Vertex p1 = ( Vertex )pm.getP1();
+                	final Vertex p2 = new Vertex( pm.getP2() );
+                	p1.addSpring( p2, new Spring( 0, 1.0f ) );
+                	m2.addPassiveVertex( p2 );
+                }
+
+                for ( final PointMatch pm : pm21 )
+                {
+                	final Vertex p1 = ( Vertex )pm.getP1();
+                	final Vertex p2 = new Vertex( pm.getP2() );
+                	p1.addSpring( p2, new Spring( 0, 1.0f ) );
+                	m1.addPassiveVertex( p2 );
+                }
 				
 			}
-			
-			System.out.println(corr.url1 + " -> " + corr.url2 + ": added " + corr.correspondencePointPairs.size() + " links.");
-			
 		}
-
-		final ArrayList< SpringMesh > meshes = new ArrayList< SpringMesh >(tileMeshMap.values());
+		
+		
+		/* initialize */
+		for ( int i = 0; i < tileSpecs.length; i++ )
+		{
+			SpringMesh m = meshes.get( i );
+			m.init( tileSpecs[i].createTransformList() );
+		}
 		
 		/* optimize the meshes */
 		try
@@ -271,13 +383,23 @@ public class OptimizeMontageElastic
 			final long t0 = System.currentTimeMillis();
 			System.out.println( "Optimizing spring meshes..." );
 
-			SpringMesh.optimizeMeshes(
-					meshes,
-					params.maxEpsilon,
-					params.maxIterationsSpringMesh,
-					params.maxPlateauwidthSpringMesh,
-					false );
-
+			if ( params.useLegacyOptimizer )
+			{
+				System.out.println( "  ...using legacy optimizer...");
+				SpringMesh.optimizeMeshes2(
+						meshes,
+						params.maxEpsilon,
+						params.maxIterationsSpringMesh,
+						params.maxPlateauwidthSpringMesh );
+			}
+			else
+			{
+				SpringMesh.optimizeMeshes(
+						meshes,
+						params.maxEpsilon,
+						params.maxIterationsSpringMesh,
+						params.maxPlateauwidthSpringMesh );
+			}
 			System.out.println( "Done optimizing spring meshes. Took " + ( System.currentTimeMillis() - t0 ) + " ms" );
 
 		}
@@ -289,20 +411,20 @@ public class OptimizeMontageElastic
 		}
 
 		System.out.println( "Optimization complete. Generating tile transforms.");
-		
+
 		ArrayList< TileSpec > out_tiles = new ArrayList< TileSpec >();
-		
+
 		/* apply */
-		for ( final Map.Entry< String, SpringMesh > entry : tileMeshMap.entrySet() ) 
+		for ( int i = 0; i < tileSpecs.length; i++ )
 		{
-			final String tileUrl = entry.getKey();
-			final SpringMesh mesh = entry.getValue();
-			final TileSpec ts = tileSpecMap.get(tileUrl);
-			if ( !fixedTilesMap.containsKey( tileUrl ) )
+			if ( !params.fixedTiles.contains( i ) )
 			{
+				final SpringMesh mesh = meshes.get( i );
+				final TileSpec ts = tileSpecs[ i ];
+				
 				if (mesh.getVA() == null)
 				{
-					System.out.println( "Error generating transform for tile " + tileUrl + "." );
+					System.out.println( "Error generating transform for tile " + i + "." );
 					continue;
 				}
 				final Set< PointMatch > matches = mesh.getVA().keySet();
@@ -336,25 +458,18 @@ public class OptimizeMontageElastic
 				}
 				catch ( final Exception e )
 				{
-					System.out.println( "Error applying transform to tile " + tileUrl + "." );
+					System.out.println( "Error applying transform to tile " + i + "." );
 					e.printStackTrace();
 				}
-				
-//				patch.appendCoordinateTransform( mlt );
-//				box = patch.getCoordinateTransformBoundingBox();
-//
-//				patch.getAffineTransform().setToTranslation( box.x, box.y );
-//				patch.updateInDatabase( "transform" );
-//				patch.updateBucket();
-//
-//				patch.updateMipMaps();
+
 			}
 		}
+		
 
 		System.out.println( "Exporting " + out_tiles.size() + " tiles.");
 		
 		try {
-			Writer writer = new FileWriter(params.targetPath);
+			Writer writer = new FileWriter( params.targetPath );
 	        //Gson gson = new GsonBuilder().create();
 	        Gson gson = new GsonBuilder().setPrettyPrinting().create();
 	        gson.toJson(out_tiles, writer);

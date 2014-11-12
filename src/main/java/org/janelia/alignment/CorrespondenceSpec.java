@@ -31,12 +31,20 @@ public class CorrespondenceSpec
 	public String url1;
 	public String url2;
 	public List< PointMatch > correspondencePointPairs ;
+	public Transform model; // the coordinate transformation model
 	
 	public CorrespondenceSpec(int mipmapLevel, String url1, String url2, List< PointMatch > corr_data)
+	{
+		this( mipmapLevel, url1, url2, corr_data, null );
+	}
+	
+	public CorrespondenceSpec(int mipmapLevel, String url1, String url2, List< PointMatch > corr_data, Transform model)
 	{
 		this.mipmapLevel = "" + mipmapLevel;
 		this.url1 = url1;
 		this.url2 = url2;
 		correspondencePointPairs = corr_data;
+		this.model = model;
 	}
+
 }

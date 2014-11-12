@@ -18,13 +18,19 @@ package org.janelia.alignment;
 
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.Writer;
 import java.io.FileWriter;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 
 import org.janelia.alignment.FeatureSpec.ImageAndFeatures;
 
+import mpicbg.models.CoordinateTransform;
+import mpicbg.models.CoordinateTransformList;
+import mpicbg.models.Point;
 import mpicbg.models.PointMatch;
 import mpicbg.imagefeatures.Feature;
 import mpicbg.ij.FeatureTransform;
@@ -48,6 +54,9 @@ public class MatchSiftFeatures
 		@Parameter( names = "--help", description = "Display this note", help = true )
         private final boolean help = false;
 
+        @Parameter( names = "--tilespecfile", description = "TileSpec file", required = true )
+        private String tilespecfile;
+
         @Parameter( names = "--featurefile", description = "Feature file", required = true )
         private String featurefile;
 
@@ -62,10 +71,14 @@ public class MatchSiftFeatures
 
         @Parameter( names = "--rod", description = "ROD", required = false )
         public float rod = 0.5f;
+        
+        @Parameter( names = "--tileScale", description = "Tile scale (to search for matches)", required = false )
+        private float tileScale = 1.0f;
 	}
 
 	private MatchSiftFeatures() {}
 
+		
 	public static void main( final String[] args )
 	{
 
@@ -92,6 +105,33 @@ public class MatchSiftFeatures
 		// TODO: Should be a parameter from the user,
 		//       and decide whether or not to create the mipmaps if they are missing
 		int mipmapLevel = 0;
+
+		/* open tilespec */
+		final TileSpec[] tileSpecs;
+		try
+		{
+			final URL url;
+			final Gson gson = new Gson();
+			url = new URL( params.tilespecfile );
+			tileSpecs = gson.fromJson( new InputStreamReader( url.openStream() ), TileSpec[].class );
+		}
+		catch ( final MalformedURLException e )
+		{
+			System.err.println( "URL malformed." );
+			e.printStackTrace( System.err );
+			return;
+		}
+		catch ( final JsonSyntaxException e )
+		{
+			System.err.println( "JSON syntax malformed." );
+			e.printStackTrace( System.err );
+			return;
+		}
+		catch ( final Exception e )
+		{
+			e.printStackTrace( System.err );
+			return;
+		}
 
 		/* open featurespec */
 		final FeatureSpec[] featureSpecs;
@@ -127,8 +167,56 @@ public class MatchSiftFeatures
 			final List< Feature > fs1 = iaf1.featureList;
 			final List< Feature > fs2 = iaf2.featureList;
 
+			/* Apply transformations on feature locations */
+			final CoordinateTransformList< CoordinateTransform > ctl1 = tileSpecs[idx1].createTransformList();
+			for ( Feature feature : fs1 )
+			{
+				float[] l = feature.location;
+				l[ 0 ] *= iaf1.scale;
+				l[ 1 ] *= iaf1.scale;
+
+				ctl1.applyInPlace( feature.location );
+			}
+			final CoordinateTransformList< CoordinateTransform > ctl2 = tileSpecs[idx2].createTransformList();
+			for ( Feature feature : fs2 )
+			{
+				float[] l = feature.location;
+				l[ 0 ] *= iaf2.scale;
+				l[ 1 ] *= iaf2.scale;
+
+				ctl2.applyInPlace( feature.location );
+			}
+
+
 			final List< PointMatch > candidates = new ArrayList< PointMatch >();
-			FeatureTransform.matchFeatures( fs1, fs2, candidates, params.rod );
+			FeatureTransform.matchFeatures( fs2, fs1, candidates, params.rod );
+			//FeatureTransform.matchFeatures( fs1, fs2, candidates, params.rod );
+
+			
+			/* scale the candidates */
+			for ( final PointMatch pm : candidates )
+			{
+				final Point p1 = pm.getP1();
+				final Point p2 = pm.getP2();
+				final float[] l1 = p1.getL();
+				final float[] w1 = p1.getW();
+				final float[] l2 = p2.getL();
+				final float[] w2 = p2.getW();
+
+				l1[ 0 ] *= params.tileScale;
+				l1[ 1 ] *= params.tileScale;
+				w1[ 0 ] *= params.tileScale;
+				w1[ 1 ] *= params.tileScale;
+				l2[ 0 ] *= params.tileScale;
+				l2[ 1 ] *= params.tileScale;
+				w2[ 0 ] *= params.tileScale;
+				w2[ 1 ] *= params.tileScale;
+
+				ctl1.applyInPlace( p1.getW() );
+				ctl2.applyInPlace( p2.getW() );
+				System.out.println( "* Candidate: L(" + l1[0] + "," + l1[1] + ") -> L(" + l2[0] + "," + l2[1] + ")" );
+			}
+
 
 			corr_data.add(new CorrespondenceSpec(mipmapLevel,
 					iaf1.imageUrl,

@@ -307,11 +307,11 @@ public class MatchSiftFeaturesAndFilter {
 			else
 				System.out.println( "No model found for tiles at indices: " + idx1 + " and " + idx2 + "\":\n  correspondence candidates  " + candidates.size() );
 			
-			
 			corr_data.add(new CorrespondenceSpec(mipmapLevel,
 					iaf1.imageUrl,
 					iaf2.imageUrl,
-					inliers));
+					inliers,
+					Transform.createTransform( model ) ));
 		}
 
 		if (corr_data.size() > 0) {
