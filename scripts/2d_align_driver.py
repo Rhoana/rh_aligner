@@ -72,20 +72,20 @@ filter_tiles(args.tiles_fname, filter_json, args.bounding_box)
 
 # create the sift features of these tiles
 sifts_json = os.path.join(args.workspace_dir, "{0}_sifts.json".format(tiles_fname_prefix))
-##create_sift_features(filter_json, sifts_json, args.jar_file, conf)
+create_sift_features(filter_json, sifts_json, args.jar_file, conf)
 
 # match the features of overlapping tiles
 match_json = os.path.join(args.workspace_dir, "{0}_sift_matches.json".format(tiles_fname_prefix))
 #match_sift_features(filter_json, sifts_json, match_json, args.jar_file, conf)
-##match_sift_features_and_filter(filter_json, sifts_json, match_json, args.jar_file, conf)
+match_sift_features_and_filter(filter_json, sifts_json, match_json, args.jar_file, conf)
 
 # optimize the 2d layer montage
 optmon_fname = os.path.join(args.workspace_dir, "{0}_optimized_montage.json".format(tiles_fname_prefix))
-##optimize_montage_transform(match_json, filter_json, args.fixed_tiles, optmon_fname, args.jar_file, conf)
+optimize_montage_transform(match_json, filter_json, args.fixed_tiles, optmon_fname, args.jar_file, conf)
 
 # template matching by max PMCC
 pmcc_json = os.path.join(args.workspace_dir, "{0}_pmcc_matches.json".format(tiles_fname_prefix))
-##match_by_max_pmcc(optmon_fname, args.fixed_tiles, pmcc_json, args.jar_file, conf)
+match_by_max_pmcc(optmon_fname, args.fixed_tiles, pmcc_json, args.jar_file, conf)
 
 # optimize the 2d layer elastically
 optmon_elastic_fname = os.path.join(args.workspace_dir, "{0}_opt_elastic_montage.json".format(tiles_fname_prefix))
