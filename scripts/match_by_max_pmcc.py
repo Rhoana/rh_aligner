@@ -19,7 +19,7 @@ def match_multiple_pmcc(tiles_file, index_pairs, fixed_tiles, jar, out_fname, co
     if fixed_tiles != None:
         fixed_str = "--fixedTiles {0}".format(" ".join(map(str, fixed_tiles)))
 
-    java_cmd = 'java -Xmx14g -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.MatchByMaxPMCC --inputfile {1} {2} {3} --targetPath {4} {5}'.format(
+    java_cmd = 'java -Xmx16g -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.MatchByMaxPMCC --inputfile {1} {2} {3} --targetPath {4} {5}'.format(
         jar,
         tiles_url,
         fixed_str,

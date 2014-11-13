@@ -90,16 +90,16 @@ public class MatchByMaxPMCC
         public int blockRadius = 50;
                 
         @Parameter( names = "--resolutionSpringMesh", description = "resolutionSpringMesh", required = false )
-        public int resolutionSpringMesh = 64;
+        public int resolutionSpringMesh = 32;
         
         @Parameter( names = "--minR", description = "minR", required = false )
         public float minR = 0.5f;
         
         @Parameter( names = "--maxCurvatureR", description = "maxCurvatureR", required = false )
-        public float maxCurvatureR = 100f;
+        public float maxCurvatureR = 10f;
         
         @Parameter( names = "--rodR", description = "rodR", required = false )
-        public float rodR = 1.0f;
+        public float rodR = 0.9f;
         
         @Parameter( names = "--useLocalSmoothnessFilter", description = "useLocalSmoothnessFilter", required = false )
         public boolean useLocalSmoothnessFilter = false;
@@ -109,17 +109,14 @@ public class MatchByMaxPMCC
         // 0 = "Translation", 1 = "Rigid", 2 = "Similarity", 3 = "Affine"
         
         @Parameter( names = "--localRegionSigma", description = "localRegionSigma", required = false )
-        public float localRegionSigma = 200f;
+        public float localRegionSigma = 25f;
         
         @Parameter( names = "--maxLocalEpsilon", description = "maxLocalEpsilon", required = false )
-        public float maxLocalEpsilon = 100f;
+        public float maxLocalEpsilon = 12f;
         
         @Parameter( names = "--maxLocalTrust", description = "maxLocalTrust", required = false )
         public int maxLocalTrust = 3;
         
-        @Parameter( names = "--maxNumNeighbors", description = "maxNumNeighbors", required = false )
-        public float maxNumNeighbors = 3f;
-        		
         @Parameter( names = "--stiffnessSpringMesh", description = "stiffnessSpringMesh", required = false )
         public float stiffnessSpringMesh = 0.1f;
 		
@@ -282,9 +279,12 @@ public class MatchByMaxPMCC
 
 //			final TranslationModel2D transform12 = (( TranslationModel2D )ctl1.get(0)).createInverse();
 //			transform12.concatenate( (( TranslationModel2D )( Object )ctl2.get(0)) );
-			
+
+
 			if ( !params.fixedTiles.contains( idx1 ) )
 			{
+				System.out.println( "Matching: " + imageUrl1 + " > " + imageUrl2 );
+
 				try{
 					BlockMatching.matchByMaximalPMCC(
 							ip1,
@@ -329,6 +329,8 @@ public class MatchByMaxPMCC
 	
 			if ( !params.fixedTiles.contains( idx2 ) )
 			{
+				System.out.println( "Matching: " + imageUrl1 + " < " + imageUrl2 );
+
 				try{
 				BlockMatching.matchByMaximalPMCC(
 						ip2,
@@ -377,19 +379,19 @@ public class MatchByMaxPMCC
 			final ArrayList< PointMatch > pm21_strip = new ArrayList< PointMatch >();
 			for (PointMatch pm: pm12)
 			{
-				ctl1.applyInPlace(pm.getP1().getW());
-				ctl2.applyInPlace(pm.getP2().getW());
-				pm12_strip.add(new PointMatch(
-						new Point(pm.getP1().getL(), pm.getP1().getW()),
-						new Point(pm.getP2().getL(), pm.getP2().getW())));
+				PointMatch actualPm = new PointMatch(
+						new Point( pm.getP1().getL(), ctl1.apply( pm.getP1().getW() ) ),
+						new Point( pm.getP2().getL(), ctl2.apply( pm.getP2().getW() ) )
+						);
+				pm12_strip.add( actualPm );
 			}
 			for (PointMatch pm: pm21)
 			{
-				ctl2.applyInPlace(pm.getP1().getW());
-				ctl1.applyInPlace(pm.getP2().getW());
-				pm21_strip.add(new PointMatch(
-						new Point(pm.getP1().getL(), pm.getP1().getW()),
-						new Point(pm.getP2().getL(), pm.getP2().getW())));
+				PointMatch actualPm = new PointMatch(
+						new Point( pm.getP1().getL(), ctl2.apply( pm.getP1().getW() ) ),
+						new Point( pm.getP2().getL(), ctl1.apply( pm.getP2().getW() ) )
+						);
+				pm21_strip.add( actualPm );
 			}
 	
 			// TODO: Export / Import master sprint mesh vertices no calculated  individually per tile (v1, v2).

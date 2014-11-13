@@ -69,14 +69,8 @@ public class OptimizeMontageElastic
         @Parameter( names = "--modelIndex", description = "Model Index: 0=Translation, 1=Rigid, 2=Similarity, 3=Affine, 4=Homography", required = false )
         private int modelIndex = 3;
         
-        @Parameter( names = "--tileWidth", description = "Tile width (specify if same for all tiles, otherwise tilespec data will be used)", required = false )
-        private double tileWidth = 0;
-        
-        @Parameter( names = "--tileHeight", description = "Tile height (specify if same for all tiles, otherwise tilespec data will be used)", required = false )
-        private double tileHeight = 0;
-        
         @Parameter( names = "--layerScale", description = "Layer scale", required = false )
-        private float layerScale = 0.2f;
+        private float layerScale = 0.5f;
         
         @Parameter( names = "--resolutionSpringMesh", description = "resolutionSpringMesh", required = false )
         private int resolutionSpringMesh = 32;
@@ -120,6 +114,7 @@ public class OptimizeMontageElastic
 			final String corrFileUrl,
 			final HashMap< String, Integer > imgUrlToTileIdxs )
 	{
+		System.out.println( "Parsing correspondence file" );
 		HashMap< Integer, HashMap< Integer, CorrespondenceSpec > > tilesCorrs = new HashMap<Integer, HashMap<Integer,CorrespondenceSpec>>();
 
 		// Open and parse the json file
@@ -216,6 +211,7 @@ public class OptimizeMontageElastic
 			final HashMap< Integer, HashMap< Integer, CorrespondenceSpec > > tilesCorrs )
 	{
 
+		System.out.println( "Fixing point matches " );
 		final List< SpringMesh > meshes = Utils.createMeshes( tileSpecs, 
 				param.springLengthSpringMesh, param.stiffnessSpringMesh, param.maxStretchSpringMesh,
 				param.layerScale, param.dampSpringMesh );
@@ -311,22 +307,19 @@ public class OptimizeMontageElastic
 		final List< SpringMesh > meshes = 
 				fixAllPointMatchVertices( params, tileSpecs, tilesCorrs );
 		
-		
+		System.out.println( "Creating springs" );
 		// Iterate over all pairs of tile corrs, and create the appropriate matches
 		for ( int tile1Idx = 0; tile1Idx < tileSpecs.length; tile1Idx++ )
 		{
-			for ( int tile2Idx = 0; tile2Idx < tileSpecs.length; tile2Idx++ )
+			for ( int tile2Idx = tile1Idx + 1; tile2Idx < tileSpecs.length; tile2Idx++ )
 			{
-				final boolean tile1Fixed = params.fixedTiles.contains( tile1Idx );
-				final boolean tile2Fixed = params.fixedTiles.contains( tile2Idx );
-				
                 final CorrespondenceSpec corrspec12;
                 final List< PointMatch > pm12;
                 final CorrespondenceSpec corrspec21;
                 final List< PointMatch > pm21;
 
                 final SpringMesh m1 = meshes.get( tile1Idx );
-                final SpringMesh m2 = meshes.get( tile1Idx );
+                final SpringMesh m2 = meshes.get( tile2Idx );
                 
                 if ( !tilesCorrs.containsKey( tile1Idx ) || !tilesCorrs.get( tile1Idx ).containsKey( tile2Idx ) )
                 {
@@ -417,7 +410,13 @@ public class OptimizeMontageElastic
 		/* apply */
 		for ( int i = 0; i < tileSpecs.length; i++ )
 		{
-			if ( !params.fixedTiles.contains( i ) )
+			if ( params.fixedTiles.contains( i ) )
+			{
+				// Fixed tile, nothing to change in the tilespec
+				final TileSpec ts = tileSpecs[ i ];
+				out_tiles.add(ts);
+			}
+			else
 			{
 				final SpringMesh mesh = meshes.get( i );
 				final TileSpec ts = tileSpecs[ i ];
