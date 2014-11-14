@@ -12,7 +12,7 @@ import utils
 
 
 
-def match_multiple_pmcc(tiles_file, index_pairs, fixed_tiles, jar, out_fname, conf_args, threads_num=None):
+def match_multiple_pmcc(tiles_file, index_pairs, fixed_tiles, jar, out_fname, conf_fname=None, threads_num=None):
     tiles_url = utils.path2url(os.path.abspath(tiles_file))
 
     fixed_str = ""
@@ -22,6 +22,8 @@ def match_multiple_pmcc(tiles_file, index_pairs, fixed_tiles, jar, out_fname, co
     threads_str = ""
     if threads_num != None:
         threads_str = "--threads {0}".format(threads_num)
+
+    conf_args = utils.conf_args_from_file(conf_fname, 'MatchByMaxPMCC')
 
     java_cmd = 'java -Xmx16g -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.MatchByMaxPMCC --inputfile {1} {2} {3} {4} --targetPath {5} {6}'.format(
         jar,
@@ -34,7 +36,7 @@ def match_multiple_pmcc(tiles_file, index_pairs, fixed_tiles, jar, out_fname, co
     utils.execute_shell_command(java_cmd)
 
 
-def match_by_max_pmcc(tiles_file, fixed_tiles, out_fname, jar_file, conf=None, threads_num=None):
+def match_by_max_pmcc(tiles_file, fixed_tiles, out_fname, jar_file, conf_fname=None, threads_num=None):
 
     tile_file = tiles_file.replace('file://', '')
     with open(tile_file, 'r') as data_file:
@@ -59,9 +61,7 @@ def match_by_max_pmcc(tiles_file, fixed_tiles, out_fname, jar_file, conf=None, t
                 print "Matching by max pmcc: {0} and {1}".format(imageUrl1, imageUrl2)
                 indices.append((idx1, idx2))
 
-    conf_args = utils.conf_args(conf, 'MatchByMaxPMCC')
-
-    match_multiple_pmcc(tiles_file, indices, fixed_tiles, jar_file, out_fname, conf_args, threads_num)
+    match_multiple_pmcc(tiles_file, indices, fixed_tiles, jar_file, out_fname, conf_fname, threads_num)
 
 def main():
     # Command line parser
@@ -90,7 +90,7 @@ def main():
 
     try:
         match_by_max_pmcc(args.tiles_file, args.fixed_tiles, args.output_file, args.jar_file, \
-            conf=utils.conf_args_from_file(args.conf_file_name, "MatchByMaxPMCC"), threads_num=args.threads_num)
+            conf_fname=args.conf_file_name, threads_num=args.threads_num)
     except:
         print "Error while executing: {0}".format(sys.argv)
         print "Exiting"

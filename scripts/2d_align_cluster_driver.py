@@ -42,7 +42,7 @@ class CreateSiftFeatures(Job):
         #self.already_done = os.path.exists(self.output_file)
 
     def command(self):
-        return ['python',
+        return ['python -u',
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'create_sift_features.py'),
                 self.output_file, self.jar_file, self.threads_str, self.conf_fname, self.tiles_fname]
 
@@ -68,7 +68,7 @@ class MatchSiftFeaturesAndFilter(Job):
         #self.already_done = os.path.exists(self.output_file)
 
     def command(self):
-        return ['python',
+        return ['python -u',
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'match_sift_features_and_filter.py'),
                 self.output_file, self.jar_file, self.conf_fname, self.tiles_fname, self.features_fname]
 
@@ -98,7 +98,7 @@ class OptimizeMontageTransform(Job):
         #self.already_done = os.path.exists(self.output_file)
 
     def command(self):
-        return ['python',
+        return ['python -u',
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'optimize_montage_transform.py'),
                 self.output_file, self.fixed_tiles, self.jar_file, self.conf_fname, self.corr_fname, self.tiles_fname]
 
@@ -129,7 +129,7 @@ class MatchByMaxPMCC(Job):
         #self.already_done = os.path.exists(self.output_file)
 
     def command(self):
-        return ['python',
+        return ['python -u',
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'match_by_max_pmcc.py'),
                 self.output_file, self.fixed_tiles, self.jar_file, self.conf_fname, self.threads_str, self.tiles_fname]
 
@@ -160,7 +160,7 @@ class OptimizeMontageElastic(Job):
         #self.already_done = os.path.exists(self.output_file)
 
     def command(self):
-        return ['python',
+        return ['python -u',
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'optimize_elastic_transform.py'),
                 self.output_file, self.fixed_tiles, self.jar_file, self.conf_fname, self.corr_fname, self.tiles_fname]
 

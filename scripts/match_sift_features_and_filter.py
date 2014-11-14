@@ -12,8 +12,11 @@ import utils
 
 
 
-def match_multiple_sift_features_and_filter(tiles_file, features_file, index_pairs, jar, out_fname, conf_args):
+def match_multiple_sift_features_and_filter(tiles_file, features_file, index_pairs, jar, out_fname, conf_fname=None):
     tiles_url = utils.path2url(os.path.abspath(tiles_file))
+
+    conf_args = utils.conf_args_from_file(conf_fname, 'MatchSiftFeaturesAndFilter')
+
     java_cmd = 'java -Xmx4g -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.MatchSiftFeaturesAndFilter --tilespecfile {1} --featurefile {2} {3} --targetPath {4} {5}'.format(
         jar,
         tiles_url,
@@ -36,7 +39,7 @@ def load_data_files(tile_file, features_file):
     return tilespecs, {ft["mipmapLevels"]["0"]["imageUrl"] : idx for idx, ft in enumerate(features)}
 
 
-def match_sift_features_and_filter(tiles_file, features_file, out_fname, jar_file, conf=None):
+def match_sift_features_and_filter(tiles_file, features_file, out_fname, jar_file, conf_fname=None):
 
     tilespecs, feature_indices = load_data_files(tiles_file, features_file)
     for k, v in feature_indices.iteritems():
@@ -63,9 +66,7 @@ def match_sift_features_and_filter(tiles_file, features_file, out_fname, jar_fil
             idx2 = feature_indices[imageUrl2]
             indices.append((idx1, idx2))
 
-    conf_args = utils.conf_args(conf, 'MatchSiftFeaturesAndFilter')
-
-    match_multiple_sift_features_and_filter(tiles_file, features_file, indices, jar_file, out_fname, conf_args)
+    match_multiple_sift_features_and_filter(tiles_file, features_file, indices, jar_file, out_fname, conf_fname)
 
 def main():
     # Command line parser
@@ -90,7 +91,7 @@ def main():
 
     try:
         match_sift_features_and_filter(args.tiles_file, args.features_file, args.output_file, args.jar_file, \
-            conf=utils.conf_args_from_file(args.conf_file_name, "MatchSiftFeaturesAndFilter"))
+            conf_fname=args.conf_file_name)
     except:
         print "Error while executing: {0}".format(sys.argv)
         print "Exiting"

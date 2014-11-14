@@ -14,11 +14,11 @@ from subprocess import call
 import utils
 
 
-def optimize_elastic_transform(correspondence_file, tilespec_file, fixed_tiles, output_file, jar_file, conf=None):
+def optimize_elastic_transform(correspondence_file, tilespec_file, fixed_tiles, output_file, jar_file, conf_fname=None):
 
     corr_url = utils.path2url(correspondence_file)
     tiles_url = utils.path2url(tilespec_file)
-    conf_args = utils.conf_args(conf, 'OptimizeMontageElastic')
+    conf_args = utils.conf_args(conf_fname, 'OptimizeMontageElastic')
 
     fixed_str = ""
     if fixed_tiles != None:
@@ -59,7 +59,7 @@ def main():
 
     try:
         optimize_elastic_transform(args.correspondence_file, args.tilespec_file, args.fixed_tiles, args.output_file, args.jar_file, \
-            conf=utils.conf_args_from_file(args.conf_file_name, "OptimizeMontageElastic"))
+            conf_fname=args.conf_file_name)
     except:
         print "Error while executing: {0}".format(sys.argv)
         print "Exiting"
