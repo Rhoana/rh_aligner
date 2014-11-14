@@ -88,7 +88,7 @@ def main():
 
     args = parser.parse_args()
 
-    match_sift_features(args.tiles_file, args.fixed_tiles, args.output_file, args.jar_file, \
+    match_by_max_pmcc(args.tiles_file, args.fixed_tiles, args.output_file, args.jar_file, \
         conf=utils.conf_args_from_file(args.conf_file_name, "MatchByMaxPMCC"), threads_num=args.threads_num)
 
 if __name__ == '__main__':
