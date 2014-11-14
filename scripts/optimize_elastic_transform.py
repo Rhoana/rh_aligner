@@ -26,8 +26,7 @@ def optimize_elastic_transform(correspondence_file, tilespec_file, fixed_tiles, 
 
     java_cmd = 'java -Xmx4g -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.OptimizeMontageElastic --corrfile {1} --tilespecfile {2} {3} --targetPath {4} {5}'.format(\
         jar_file, corr_url, tiles_url, fixed_str, output_file, conf_args)
-    print "Executing: {0}".format(java_cmd)
-    call(java_cmd, shell=True) # w/o shell=True it seems that the env-vars are not set
+    utils.execute_shell_command(java_cmd)
 
 
 

@@ -24,10 +24,9 @@ def optimize_montage_transform(correspondence_file, tilespec_file, fixed_tiles, 
     if fixed_tiles != None:
         fixed_str = "--fixedTiles {0}".format(" ".join(map(str, fixed_tiles)))
 
-    java_cmd = 'java -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.OptimizeMontageTransform --inputfile {1} --tilespecfile {2} {3} --targetPath {4} {5}'.format(\
+    java_cmd = 'java -Xmx4g -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.OptimizeMontageTransform --inputfile {1} --tilespecfile {2} {3} --targetPath {4} {5}'.format(\
         jar_file, corr_url, tiles_url, fixed_str, output_file, conf_args)
-    print "Executing: {0}".format(java_cmd)
-    call(java_cmd, shell=True) # w/o shell=True it seems that the env-vars are not set
+    utils.execute_shell_command(java_cmd)
 
 
 
@@ -40,8 +39,9 @@ def main():
                         help='a correspondence_spec file')
     parser.add_argument('tilespec_file', metavar='tilespec_file', type=str, 
                         help='a tilespec file containing all the tiles')
-    parser.add_argument('output_file', metavar='output_file', type=str, 
-                        help='the output file')
+    parser.add_argument('-o', '--output_file', type=str, 
+                        help='the output file',
+                        default='./opt_montage_transform.json')
     parser.add_argument('-f', '--fixed_tiles', type=str, nargs='+',
                         help='a space separated list of fixed tile indices (default: 0)',
                         default="0")

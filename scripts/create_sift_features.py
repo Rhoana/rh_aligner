@@ -21,8 +21,7 @@ def create_sift_features(tiles_fname, out_fname, jar_file, conf=None, threads_nu
     # Compute the Sift features `for each tile in the tile spec file
     java_cmd = 'java -Xmx12g -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.ComputeSiftFeatures --all --url {1} --targetPath {2} --threads {3} {4}'.format(\
         jar_file, tiles_url, out_fname, threads_num, conf_args)
-    print "Executing: {0}".format(java_cmd)
-    call(java_cmd, shell=True) # w/o shell=True it seems that the env-vars are not set
+    utils.execute_shell_command(java_cmd)
 
 
 

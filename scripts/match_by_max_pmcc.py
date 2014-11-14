@@ -26,8 +26,7 @@ def match_multiple_pmcc(tiles_file, index_pairs, fixed_tiles, jar, out_fname, co
         " ".join("--indices {}:{}".format(a, b) for a, b in index_pairs),
         out_fname,
         conf_args)
-    print "Executing: {0}".format(java_cmd)
-    call(java_cmd, shell=True) # w/o shell=True it seems that the env-vars are not set
+    utils.execute_shell_command(java_cmd)
 
 
 def match_by_max_pmcc(tiles_file, fixed_tiles, out_fname, jar_file, conf=None):

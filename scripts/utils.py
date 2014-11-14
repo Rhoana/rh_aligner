@@ -30,3 +30,34 @@ def conf_args_from_file(conf_fname, tool):
                     res = res + "--{0} {1} ".format(tool_key, conf[tool][tool_key])
     return res
 
+def execute_shell_command(cmd):
+    print "Executing: {0}".format(cmd)
+    res = call(cmd, shell=True) # w/o shell=True it seems that the env-vars are not set
+    if res != 0:
+        print "Error while executing: {0}".format(cmd)
+        print "Exiting"
+        sys.exit(1)
+
+
+def create_dir(path):
+    # create a directory if not found
+    if not os.path.exists(path):
+        os.makedirs(path)
+
+def read_layer_from_file(tiles_spec_fname):
+    layer = None
+    with open(tiles_spec_fname, 'r') as data_file:
+        data = json.load(data_file)
+    for tile in data:
+        if tile['layer'] is None:
+            print "Error reading layer in one of the tiles in: {0}".format(tiles_spec_fname)
+            sys.exit(1)
+        if layer is None:
+            layer = tile['layer']
+        if layer != tile['layer']:
+            print "Error when reading tiles from {0} found inconsistent layers numbers: {1} and {2}".format(tiles_spec_fname, layer, tile['layer'])
+            sys.exit(1)
+    if layer is None:
+        print "Error reading layers file: {0}. No layers found.".format(tiles_spec_fname)
+        sys.exit(1)
+    return int(layer)
