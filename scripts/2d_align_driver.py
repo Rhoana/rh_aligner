@@ -47,6 +47,10 @@ parser.add_argument('-b', '--bounding_box', type=str,
 parser.add_argument('-c', '--conf_file_name', type=str, 
                     help='the configuration file with the parameters for each step of the alignment process in json format (uses default parameters, if )',
                     default=None)
+parser.add_argument('-t', '--threads_num', type=int, 
+                    help='the number of threads to use (default: 1)',
+                    default=1)
+
 
 
 
@@ -57,11 +61,6 @@ print args
 # create a workspace directory if not found
 if not os.path.exists(args.workspace_dir):
     os.makedirs(args.workspace_dir)
-
-conf = None
-if not args.conf_file_name is None:
-    with open(args.conf_file_name, 'r') as conf_file:
-        conf = json.load(conf_file)
 
 tiles_fname_prefix = os.path.splitext(os.path.basename(args.tiles_fname))[0]
 
@@ -74,28 +73,28 @@ if not os.path.exists(filter_json):
 # create the sift features of these tiles
 sifts_json = os.path.join(args.workspace_dir, "{0}_sifts.json".format(tiles_fname_prefix))
 if not os.path.exists(sifts_json):
-    create_sift_features(filter_json, sifts_json, args.jar_file, conf)
+    create_sift_features(filter_json, sifts_json, args.jar_file, args.conf_file_name, threads_num=args.threads_num)
 
 # match the features of overlapping tiles
 match_json = os.path.join(args.workspace_dir, "{0}_sift_matches.json".format(tiles_fname_prefix))
 if not os.path.exists(match_json):
     #match_sift_features(filter_json, sifts_json, match_json, args.jar_file, conf)
-    match_sift_features_and_filter(filter_json, sifts_json, match_json, args.jar_file, conf)
+    match_sift_features_and_filter(filter_json, sifts_json, match_json, args.jar_file, args.conf_file_name)
 
 # optimize the 2d layer montage
 optmon_fname = os.path.join(args.workspace_dir, "{0}_optimized_montage.json".format(tiles_fname_prefix))
 if not os.path.exists(optmon_fname):
-    optimize_montage_transform(match_json, filter_json, args.fixed_tiles, optmon_fname, args.jar_file, conf)
+    optimize_montage_transform(match_json, filter_json, args.fixed_tiles, optmon_fname, args.jar_file, args.conf_file_name)
 
 # template matching by max PMCC
 pmcc_json = os.path.join(args.workspace_dir, "{0}_pmcc_matches.json".format(tiles_fname_prefix))
 if not os.path.exists(pmcc_json):
-    match_by_max_pmcc(optmon_fname, args.fixed_tiles, pmcc_json, args.jar_file, conf)
+    match_by_max_pmcc(optmon_fname, args.fixed_tiles, pmcc_json, args.jar_file, args.conf_file_name, threads_num=args.threads_num)
 
 # optimize the 2d layer elastically
 optmon_elastic_fname = os.path.join(args.workspace_dir, "{0}_opt_elastic_montage.json".format(tiles_fname_prefix))
 if not os.path.exists(optmon_elastic_fname):
-    optimize_elastic_transform(pmcc_json, optmon_fname, args.fixed_tiles, optmon_elastic_fname, args.jar_file, conf)
+    optimize_elastic_transform(pmcc_json, optmon_fname, args.fixed_tiles, optmon_elastic_fname, args.jar_file, args.conf_file_name)
 
 
 
