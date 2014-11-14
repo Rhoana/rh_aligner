@@ -94,7 +94,7 @@ class OptimizeMontageTransform(Job):
         self.memory = 4000
         self.time = 40
         self.is_java_job = True
-        self.output = corr_output_file
+        self.output = corr_fname
         #self.already_done = os.path.exists(self.output_file)
 
     def command(self):
