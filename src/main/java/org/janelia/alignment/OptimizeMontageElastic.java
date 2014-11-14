@@ -450,7 +450,9 @@ public class OptimizeMontageElastic
 				    addedTransform.className = mlt.getClass().getCanonicalName();
 				    addedTransform.dataString = mlt.toDataString();
 				    
-					ArrayList< Transform > outTransforms = new ArrayList< Transform >(Arrays.asList(ts.transforms));
+					//ArrayList< Transform > outTransforms = new ArrayList< Transform >(Arrays.asList(ts.transforms));
+					// (override previous transformations)
+					ArrayList< Transform > outTransforms = new ArrayList< Transform >( );
 					outTransforms.add(addedTransform);
 					ts.transforms = outTransforms.toArray(ts.transforms);
 					out_tiles.add(ts);
