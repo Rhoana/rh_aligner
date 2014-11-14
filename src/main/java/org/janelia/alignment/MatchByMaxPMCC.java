@@ -213,6 +213,8 @@ public class MatchByMaxPMCC
 		}
 		*/
 		
+        ij.Prefs.setThreads( params.numThreads );
+
 		// The mipmap level to work on
 		// TODO: Should be a parameter from the user,
 		//       and decide whether or not to create the mipmaps if they are missing
