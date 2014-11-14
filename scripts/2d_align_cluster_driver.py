@@ -212,7 +212,7 @@ if __name__ == '__main__':
     matched_sifts_dir = os.path.join(args.workspace_dir, "matched_sifts")
     create_dir(matched_sifts_dir)
     opt_montage_dir = os.path.join(args.workspace_dir, "optimized_affine")
-    create_dir(matched_sifts_dir)
+    create_dir(opt_montage_dir)
     matched_pmcc_dir = os.path.join(args.workspace_dir, "matched_pmcc")
     create_dir(matched_pmcc_dir)
     create_dir(args.output_dir)
@@ -257,6 +257,7 @@ if __name__ == '__main__':
         # create the sift features of these tiles
         sifts_json = os.path.join(sifts_dir, "{0}_sifts.json".format(tiles_fname_prefix))
         if not os.path.exists(sifts_json):
+            print "Computing layer sifts: {0}".format(slayer)
             job_sift = CreateSiftFeatures(f, sifts_json, args.jar_file, conf_fname=args.conf_file_name, threads_num=4)
             jobs[slayer]['sifts'].append(job_sift)
 

@@ -12,24 +12,29 @@ import utils
 
 
 
-def match_multiple_pmcc(tiles_file, index_pairs, fixed_tiles, jar, out_fname, conf_args):
+def match_multiple_pmcc(tiles_file, index_pairs, fixed_tiles, jar, out_fname, conf_args, threads_num=None):
     tiles_url = utils.path2url(os.path.abspath(tiles_file))
 
     fixed_str = ""
     if fixed_tiles != None:
         fixed_str = "--fixedTiles {0}".format(" ".join(map(str, fixed_tiles)))
 
-    java_cmd = 'java -Xmx16g -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.MatchByMaxPMCC --inputfile {1} {2} {3} --targetPath {4} {5}'.format(
+    threads_str = ""
+    if threads_num != None:
+        threads_str = "--threads {0}".format(threads_num)
+
+    java_cmd = 'java -Xmx16g -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.MatchByMaxPMCC --inputfile {1} {2} {3} {4} --targetPath {5} {6}'.format(
         jar,
         tiles_url,
         fixed_str,
         " ".join("--indices {}:{}".format(a, b) for a, b in index_pairs),
+        threads_str,
         out_fname,
         conf_args)
     utils.execute_shell_command(java_cmd)
 
 
-def match_by_max_pmcc(tiles_file, fixed_tiles, out_fname, jar_file, conf=None):
+def match_by_max_pmcc(tiles_file, fixed_tiles, out_fname, jar_file, conf=None, threads_num=None):
 
     tile_file = tiles_file.replace('file://', '')
     with open(tile_file, 'r') as data_file:
@@ -56,7 +61,7 @@ def match_by_max_pmcc(tiles_file, fixed_tiles, out_fname, jar_file, conf=None):
 
     conf_args = utils.conf_args(conf, 'MatchByMaxPMCC')
 
-    match_multiple_pmcc(tiles_file, indices, fixed_tiles, jar_file, out_fname, conf_args)
+    match_multiple_pmcc(tiles_file, indices, fixed_tiles, jar_file, out_fname, conf_args, threads_num)
 
 def main():
     # Command line parser
@@ -77,12 +82,14 @@ def main():
     parser.add_argument('-c', '--conf_file_name', type=str, 
                         help='the configuration file with the parameters for each step of the alignment process in json format (uses default parameters, if not supplied)',
                         default=None)
-
+    parser.add_argument('-t', '--threads_num', type=int,
+                        help='the number of threads to use (default: the number of cores in the system)',
+                        default=None)
 
     args = parser.parse_args()
 
     match_sift_features(args.tiles_file, args.fixed_tiles, args.output_file, args.jar_file, \
-        conf=utils.conf_args_from_file(args.conf_file_name, "MatchByMaxPMCC"))
+        conf=utils.conf_args_from_file(args.conf_file_name, "MatchByMaxPMCC"), threads_num=args.threads_num)
 
 if __name__ == '__main__':
     main()
