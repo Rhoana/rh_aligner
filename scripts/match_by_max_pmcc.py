@@ -88,8 +88,13 @@ def main():
 
     args = parser.parse_args()
 
-    match_by_max_pmcc(args.tiles_file, args.fixed_tiles, args.output_file, args.jar_file, \
-        conf=utils.conf_args_from_file(args.conf_file_name, "MatchByMaxPMCC"), threads_num=args.threads_num)
+    try:
+        match_by_max_pmcc(args.tiles_file, args.fixed_tiles, args.output_file, args.jar_file, \
+            conf=utils.conf_args_from_file(args.conf_file_name, "MatchByMaxPMCC"), threads_num=args.threads_num)
+    except:
+        print "Error while executing: {0}".format(sys.argv)
+        print "Exiting"
+        sys.exit(1)
 
 if __name__ == '__main__':
     main()

@@ -57,8 +57,13 @@ def main():
 
     #print args
 
-    optimize_montage_transform(args.correspondence_file, args.tilespec_file, args.fixed_tiles, args.output_file, args.jar_file, \
-        conf=utils.conf_args_from_file(args.conf_file_name, "OptimizeMontageTransform"))
+    try:
+        optimize_montage_transform(args.correspondence_file, args.tilespec_file, args.fixed_tiles, args.output_file, args.jar_file, \
+            conf=utils.conf_args_from_file(args.conf_file_name, "OptimizeMontageTransform"))
+    except:
+        print "Error while executing: {0}".format(sys.argv)
+        print "Exiting"
+        sys.exit(1)
 
 if __name__ == '__main__':
     main()
