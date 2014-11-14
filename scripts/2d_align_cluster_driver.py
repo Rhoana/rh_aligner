@@ -139,7 +139,7 @@ class OptimizeMontageElastic(Job):
         Job.__init__(self)
         self.already_done = False
         self.tiles_fname = '"{0}"'.format(tiles_fname)
-        self.corr_fname = '"{0}"'.format(corr_fnames)
+        self.corr_fname = '"{0}"'.format(corr_fname)
         self.output_file = '-o "{0}"'.format(opt_output_file)
         self.jar_file = '-j "{0}"'.format(jar_file)
         if conf_fname is None:
