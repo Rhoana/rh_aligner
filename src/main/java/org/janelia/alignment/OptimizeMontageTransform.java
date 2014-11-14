@@ -347,7 +347,7 @@ public class OptimizeMontageTransform
 			// (override previous transformations)
 			ArrayList< Transform > outTransforms = new ArrayList< Transform >( );
 			outTransforms.add(addedTransform);
-			ts.transforms = outTransforms.toArray(ts.transforms);
+			ts.transforms = outTransforms.toArray( new Transform[0] );
 		    
 			// Get the bounding box of this tile in the world coordinates
 			if ( ts.width != -1 && ts.height != -1 )

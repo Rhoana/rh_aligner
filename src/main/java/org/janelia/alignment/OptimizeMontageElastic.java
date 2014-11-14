@@ -454,7 +454,7 @@ public class OptimizeMontageElastic
 					// (override previous transformations)
 					ArrayList< Transform > outTransforms = new ArrayList< Transform >( );
 					outTransforms.add(addedTransform);
-					ts.transforms = outTransforms.toArray(ts.transforms);
+					ts.transforms = outTransforms.toArray(new Transform[0] );
 					out_tiles.add(ts);
 				}
 				catch ( final Exception e )
