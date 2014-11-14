@@ -39,8 +39,9 @@ def main():
                         help='a correspondence_spec file')
     parser.add_argument('tilespec_file', metavar='tilespec_file', type=str, 
                         help='a tilespec file containing all the tiles')
-    parser.add_argument('output_file', metavar='output_file', type=str, 
-                        help='the output file')
+    parser.add_argument('-o', '--output_file', type=str, 
+                        help='the output file',
+                        default='./opt_elastic_transform.json')
     parser.add_argument('-f', '--fixed_tiles', type=str, nargs='+',
                         help='a space separated list of fixed tile indices (default: 0)',
                         default="0")
