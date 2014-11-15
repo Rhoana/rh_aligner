@@ -18,7 +18,7 @@ def optimize_montage_transform(correspondence_file, tilespec_file, fixed_tiles, 
 
     corr_url = utils.path2url(correspondence_file)
     tiles_url = utils.path2url(tilespec_file)
-    conf_args = utils.conf_args(conf_fname, 'OptimizeMontageTransform')
+    conf_args = utils.conf_args_from_file(conf_fname, 'OptimizeMontageTransform')
 
     fixed_str = ""
     if fixed_tiles != None:
