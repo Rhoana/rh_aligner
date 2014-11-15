@@ -24,8 +24,8 @@ def optimize_montage_transform(correspondence_file, tilespec_file, fixed_tiles, 
     if fixed_tiles != None:
         fixed_str = "--fixedTiles {0}".format(" ".join(map(str, fixed_tiles)))
 
-    java_cmd = 'java -Xmx4g -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.OptimizeMontageTransform --inputfile {1} --tilespecfile {2} {3} --targetPath {4} {5}'.format(\
-        jar_file, corr_url, tiles_url, fixed_str, output_file, conf_args)
+    java_cmd = 'java -Xmx4g -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.OptimizeMontageTransform {1} --inputfile {2} --tilespecfile {3} {4} --targetPath {5}'.format(\
+        jar_file, conf_args, corr_url, tiles_url, fixed_str, output_file)
     utils.execute_shell_command(java_cmd)
 
 
