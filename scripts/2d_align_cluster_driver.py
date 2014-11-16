@@ -36,7 +36,7 @@ class CreateSiftFeatures(Job):
         self.threads = threads_num
         self.threads_str = "-t {0}".format(threads_num)
         self.memory = 16000
-        self.time = 120
+        self.time = 300
         self.is_java_job = True
         self.output = output_file
         #self.already_done = os.path.exists(self.output_file)
@@ -62,7 +62,7 @@ class MatchSiftFeaturesAndFilter(Job):
         #self.threads = threads_num
         #self.threads_str = "-t {0}".format(threads_num)
         self.memory = 4000
-        self.time = 90
+        self.time = 240
         self.is_java_job = True
         self.output = corr_output_file
         #self.already_done = os.path.exists(self.output_file)
@@ -92,7 +92,7 @@ class OptimizeMontageTransform(Job):
         #self.threads = threads_num
         #self.threads_str = "-t {0}".format(threads_num)
         self.memory = 4000
-        self.time = 40
+        self.time = 200
         self.is_java_job = True
         self.output = opt_output_file
         #self.already_done = os.path.exists(self.output_file)
@@ -123,7 +123,7 @@ class MatchByMaxPMCC(Job):
         self.threads_str = '-t {0}'.format(threads_num)
         self.dependencies = dependencies
         self.memory = 16000
-        self.time = 240
+        self.time = 600
         self.is_java_job = True
         self.output = pmcc_output_file
         #self.already_done = os.path.exists(self.output_file)
@@ -154,7 +154,7 @@ class OptimizeMontageElastic(Job):
         self.threads_str = '-t {0}'.format(threads_num)
         self.dependencies = dependencies
         self.memory = 4000
-        self.time = 300
+        self.time = 500
         self.is_java_job = True
         self.output = opt_output_file
         #self.already_done = os.path.exists(self.output_file)
