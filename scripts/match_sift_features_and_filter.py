@@ -17,7 +17,7 @@ def match_multiple_sift_features_and_filter(tiles_file, features_file, index_pai
 
     conf_args = utils.conf_args_from_file(conf_fname, 'MatchSiftFeaturesAndFilter')
 
-    java_cmd = 'java -Xmx4g -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.MatchSiftFeaturesAndFilter --tilespecfile {1} --featurefile {2} {3} --targetPath {4} {5}'.format(
+    java_cmd = 'java -Xmx4g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.MatchSiftFeaturesAndFilter --tilespecfile {1} --featurefile {2} {3} --targetPath {4} {5}'.format(
         jar,
         tiles_url,
         features_file,
