@@ -153,7 +153,7 @@ class OptimizeMontageElastic(Job):
         self.threads = threads_num
         self.threads_str = '-t {0}'.format(threads_num)
         self.dependencies = dependencies
-        self.memory = 4000
+        self.memory = 10000
         self.time = 500
         self.is_java_job = True
         self.output = opt_output_file
