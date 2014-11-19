@@ -63,3 +63,10 @@ def read_layer_from_file(tiles_spec_fname):
         print "Error reading layers file: {0}. No layers found.".format(tiles_spec_fname)
         sys.exit(1)
     return int(layer)
+
+def parse_range(s):
+    result=set()
+    for part in s.split(','):
+        x = part.split('-')
+        result.update(range(int(x[0]), int(x[-1]) + 1))
+    return sorted(result)

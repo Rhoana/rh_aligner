@@ -17,7 +17,7 @@ from collections import defaultdict
 import argparse
 import glob
 import json
-from utils import path2url, create_dir, read_layer_from_file
+from utils import path2url, create_dir, read_layer_from_file, parse_range
 from job import Job
 
 
@@ -191,12 +191,16 @@ if __name__ == '__main__':
     parser.add_argument('-c', '--conf_file_name', type=str, 
                         help='the configuration file with the parameters for each step of the alignment process in json format (uses default parameters, if not supplied)',
                         default=None)
+    parser.add_argument('-s', '--skip_layers', type=str, 
+                        help='the range of layers (sections) that will not be processed e.g., "2,3,9-11,18" (default: no skipped sections)',
+                        default="")
     parser.add_argument('-k', '--keeprunning', action='store_true', 
                         help='Run all jobs and report cluster jobs execution stats')
     parser.add_argument('-m', '--multicore', action='store_true', 
                         help='Run all jobs in blocks on multiple cores')
     parser.add_argument('-mk', '--multicore_keeprunning', action='store_true', 
                         help='Run all jobs in blocks on multiple cores and report cluster jobs execution stats')
+
 
     args = parser.parse_args() 
 
@@ -223,6 +227,7 @@ if __name__ == '__main__':
     json_files = dict((jf, {}) for jf in (glob.glob(os.path.join(args.tiles_dir, '*.json'))))
 
 
+    skipped_layers = utils.parse_range(args.skip_layers)
 
 
 
@@ -237,6 +242,11 @@ if __name__ == '__main__':
 
         # read the layer from the file
         layer = read_layer_from_file(f)
+
+        # Check if we need to skip the layer
+        if layer in skipped_layers:
+            print "Skipping layer {}".format(layer)
+            continue
 
         slayer = str(layer)
 
