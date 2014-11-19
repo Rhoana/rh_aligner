@@ -193,7 +193,7 @@ if __name__ == '__main__':
                         default=None)
     parser.add_argument('-s', '--skip_layers', type=str, 
                         help='the range of layers (sections) that will not be processed e.g., "2,3,9-11,18" (default: no skipped sections)',
-                        default="")
+                        default=None)
     parser.add_argument('-k', '--keeprunning', action='store_true', 
                         help='Run all jobs and report cluster jobs execution stats')
     parser.add_argument('-m', '--multicore', action='store_true', 

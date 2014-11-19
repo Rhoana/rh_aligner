@@ -66,7 +66,8 @@ def read_layer_from_file(tiles_spec_fname):
 
 def parse_range(s):
     result=set()
-    for part in s.split(','):
-        x = part.split('-')
-        result.update(range(int(x[0]), int(x[-1]) + 1))
+    if s is not None and len(s) != 0:
+        for part in s.split(','):
+            x = part.split('-')
+            result.update(range(int(x[0]), int(x[-1]) + 1))
     return sorted(result)
