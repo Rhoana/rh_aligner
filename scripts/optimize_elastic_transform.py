@@ -61,9 +61,7 @@ def main():
         optimize_elastic_transform(args.correspondence_file, args.tilespec_file, args.fixed_tiles, args.output_file, args.jar_file, \
             conf_fname=args.conf_file_name)
     except:
-        print "Error while executing: {0}".format(sys.argv)
-        print "Exiting"
-        sys.exit(1)
+        sys.exit("Error while executing: {0}".format(sys.argv))
 
 if __name__ == '__main__':
     main()

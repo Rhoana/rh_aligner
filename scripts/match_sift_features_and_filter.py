@@ -93,9 +93,7 @@ def main():
         match_sift_features_and_filter(args.tiles_file, args.features_file, args.output_file, args.jar_file, \
             conf_fname=args.conf_file_name)
     except:
-        print "Error while executing: {0}".format(sys.argv)
-        print "Exiting"
-        sys.exit(1)
+        sys.exit("Error while executing: {0}".format(sys.argv))
 
 
 if __name__ == '__main__':

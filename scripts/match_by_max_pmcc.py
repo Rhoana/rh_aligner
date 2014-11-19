@@ -92,9 +92,7 @@ def main():
         match_by_max_pmcc(args.tiles_file, args.fixed_tiles, args.output_file, args.jar_file, \
             conf_fname=args.conf_file_name, threads_num=args.threads_num)
     except:
-        print "Error while executing: {0}".format(sys.argv)
-        print "Exiting"
-        sys.exit(1)
+        sys.exit("Error while executing: {0}".format(sys.argv))
 
 if __name__ == '__main__':
     main()
