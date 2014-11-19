@@ -227,7 +227,7 @@ if __name__ == '__main__':
     json_files = dict((jf, {}) for jf in (glob.glob(os.path.join(args.tiles_dir, '*.json'))))
 
 
-    skipped_layers = utils.parse_range(args.skip_layers)
+    skipped_layers = parse_range(args.skip_layers)
 
 
 
