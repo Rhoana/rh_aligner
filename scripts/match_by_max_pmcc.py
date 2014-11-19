@@ -25,7 +25,7 @@ def match_multiple_pmcc(tiles_file, index_pairs, fixed_tiles, jar, out_fname, co
 
     conf_args = utils.conf_args_from_file(conf_fname, 'MatchByMaxPMCC')
 
-    java_cmd = 'java -Xmx24g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.MatchByMaxPMCC --inputfile {1} {2} {3} {4} --targetPath {5} {6}'.format(
+    java_cmd = 'java -Xmx23g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.MatchByMaxPMCC --inputfile {1} {2} {3} {4} --targetPath {5} {6}'.format(
         jar,
         tiles_url,
         fixed_str,
