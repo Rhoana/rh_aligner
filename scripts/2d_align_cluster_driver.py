@@ -122,7 +122,7 @@ class MatchByMaxPMCC(Job):
         self.threads = threads_num
         self.threads_str = '-t {0}'.format(threads_num)
         self.dependencies = dependencies
-        self.memory = 20000
+        self.memory = 25000
         self.time = 600
         self.is_java_job = True
         self.output = pmcc_output_file
