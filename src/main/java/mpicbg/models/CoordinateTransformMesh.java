@@ -24,13 +24,7 @@ public class CoordinateTransformMesh extends TransformMesh
 			final float width,
 			final float height )
 	{
-		super( numX, numY( numX, width, height ), width, height );
-		
-		final Set< PointMatch > vertices = va.keySet();
-		for ( final PointMatch vertex : vertices )
-			vertex.getP2().apply( t );
-		
-		updateAffines();
+		this( t, numX, width, height, 1 );
 	}
 	
 	public CoordinateTransformMesh(
@@ -43,57 +37,66 @@ public class CoordinateTransformMesh extends TransformMesh
 		super( numX, numY( numX, width, height ), width, height );
 		
 		final Set< PointMatch > vertices = va.keySet();
-				
 		
-		final ExecutorService exec = Executors.newFixedThreadPool( threadsNum );
-		final ArrayList< Future< ? > > tasks = new ArrayList< Future< ? > >();
-
-		final int verticesPerThreadNum = vertices.size() / threadsNum;
-		for ( int i = 0; i < threadsNum; i++ )
+		if ( threadsNum == 1 )
 		{
-			final int fromIndex = i * verticesPerThreadNum;
-			final int lastIndex;
-			if ( i == threadsNum - 1 ) // lastThread
-				lastIndex = vertices.size();
-			else
-				lastIndex = fromIndex + verticesPerThreadNum;
-			
-			tasks.add( exec.submit( new Runnable() {
-				
-				@Override
-				public void run() {
-					final Iterator< PointMatch > it = vertices.iterator();
-					int idx = 0;
-					// Skip the initial part of the vertices
-					while ( idx < fromIndex )
-					{
-						it.next();
-						idx++;
-					}
-					// Apply the transformation to the relevant vertices
-					while ( idx < lastIndex )
-					{
-						PointMatch vertex = it.next();
-						vertex.getP2().apply( t );
-						idx++;
-					}
-				}
-			}));
+			//No need to create threads
+			for ( final PointMatch vertex : vertices )
+				vertex.getP2().apply( t );
 		}
-		
-		for ( Future< ? > task : tasks )
+		else
 		{
-			try {
-				task.get();
-			} catch (InterruptedException e) {
-				exec.shutdownNow();
-				e.printStackTrace();
-			} catch (ExecutionException e) {
-				exec.shutdownNow();
-				e.printStackTrace();
+			// Initialize threads
+			final ExecutorService exec = Executors.newFixedThreadPool( threadsNum );
+			final ArrayList< Future< ? > > tasks = new ArrayList< Future< ? > >();
+	
+			final int verticesPerThreadNum = vertices.size() / threadsNum;
+			for ( int i = 0; i < threadsNum; i++ )
+			{
+				final int fromIndex = i * verticesPerThreadNum;
+				final int lastIndex;
+				if ( i == threadsNum - 1 ) // lastThread
+					lastIndex = vertices.size();
+				else
+					lastIndex = fromIndex + verticesPerThreadNum;
+				
+				tasks.add( exec.submit( new Runnable() {
+					
+					@Override
+					public void run() {
+						final Iterator< PointMatch > it = vertices.iterator();
+						int idx = 0;
+						// Skip the initial part of the vertices
+						while ( idx < fromIndex )
+						{
+							it.next();
+							idx++;
+						}
+						// Apply the transformation to the relevant vertices
+						while ( idx < lastIndex )
+						{
+							PointMatch vertex = it.next();
+							vertex.getP2().apply( t );
+							idx++;
+						}
+					}
+				}));
 			}
+			
+			for ( Future< ? > task : tasks )
+			{
+				try {
+					task.get();
+				} catch (InterruptedException e) {
+					exec.shutdownNow();
+					e.printStackTrace();
+				} catch (ExecutionException e) {
+					exec.shutdownNow();
+					e.printStackTrace();
+				}
+			}
+			exec.shutdown();
 		}
-		exec.shutdown();
 		
 		updateAffines();
 	}
