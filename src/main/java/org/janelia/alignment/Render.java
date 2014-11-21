@@ -24,6 +24,7 @@ import ij.process.ImageProcessor;
 
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
+import java.awt.image.DataBufferByte;
 import java.awt.image.WritableRaster;
 import java.io.File;
 import java.io.IOException;
@@ -139,6 +140,10 @@ public class Render
         
         @Parameter( names = "--quality", description = "JPEG quality float [0, 1]", required = false )
         public float quality = 0.85f;
+        
+        @Parameter( names = "--hide", description = "Hide the output and do not show on screen (default: false)", required = false )
+        public boolean hide = false;
+        
 	}
 	
 	private Render() {}
@@ -207,12 +212,15 @@ public class Render
 			final double y,
 			final double triangleSize,
 			final double scale,
-			final boolean areaOffset )
+			final boolean areaOffset,
+			final int threadsNum )
 	{
 		final Graphics2D targetGraphics = targetImage.createGraphics();
+		int tileCount = 0;
 		
 		for ( final TileSpec ts : tileSpecs )
 		{
+			System.out.println( "Looking into tile " + tileCount );
 			/* assemble coordinate transformations and add bounding box offset */
 			final CoordinateTransformList< CoordinateTransform > ctl = ts.createTransformList();
 			final AffineModel2D scaleAndOffset = new AffineModel2D();
@@ -233,7 +241,7 @@ public class Render
 			 * the bounding box and the output we wish to render
 			 */
 			boolean relevantTile = true;
-			if ( ts.bbox != null )
+			/*if ( ts.bbox != null )
 			{
 				final double endX = x + targetImage.getWidth();
 				final double endY = y + targetImage.getHeight();
@@ -241,13 +249,15 @@ public class Render
 				if ((x > ts.bbox[1]) || (endX < ts.bbox[0]) ||
 				   (y > ts.bbox[3]) || (endY < ts.bbox[2]))
 					relevantTile = false;
-			}
+			}*/
 			
 			if ( relevantTile )
 			{
 				ImageAndMask mipmapEntry = null;
 				ImageProcessor ip = null;
-				final int width, height;
+				int width, height;
+				System.out.println( "tile " + mipmapLevels.get( "0" ).imageUrl + " is a relevant tile, loading it..." );
+				long startTime = System.currentTimeMillis();
 				/* figure width and height */
 				if ( ts.width < 0 || ts.height < 0 )
 				{
@@ -269,43 +279,74 @@ public class Render
 					width = ts.width;
 					height = ts.height;
 				}
-				
-				/* estimate average scale */
-				final double s = Utils.sampleAverageScale( ctl, width, height, triangleSize );
-				int mipmapLevel = Utils.bestMipmapLevel( s );
-				
+
 				final ImageProcessor ipMipmap;
-				if ( ip == null )
+				int mipmapLevel;
+				if ( scale == 1.0 ) // no scale - avoid downsampling
 				{
-					String key = mipmapLevels.floorKey( String.valueOf( mipmapLevel ) );
-					if ( key == null )
-						key = mipmapLevels.firstKey();
-					
-					/* load image TODO use Bioformats for strange formats */
-					mipmapEntry = mipmapLevels.get( key );
-					final String imgUrl = mipmapEntry.imageUrl;
-					final ImagePlus imp = Utils.openImagePlusUrl( imgUrl );
-					if ( imp == null )
+					/* Just load the image (disregard mipmaps and scales) */
+					mipmapLevel = 0;
+					mipmapEntry = mipmapLevels.get( String.valueOf( mipmapLevel ) );
+					if ( ip == null )
 					{
-						System.err.println( "Failed to load image '" + imgUrl + "'." );
-						continue;
+						final String imgUrl = mipmapEntry.imageUrl;
+						final ImagePlus imp = Utils.openImagePlusUrl( imgUrl );
+						if ( imp == null )
+						{
+							System.err.println( "Failed to load image '" + imgUrl + "'." );
+							continue;
+						}
+						ip = imp.getProcessor();
+						width = imp.getWidth();
+						height = imp.getHeight();
 					}
-					ip = imp.getProcessor();
-					final int currentMipmapLevel = Integer.parseInt( key );
-					if ( currentMipmapLevel >= mipmapLevel )
-					{
-						mipmapLevel = currentMipmapLevel;
-						ipMipmap = ip;
-					}
-					else
-						ipMipmap = Downsampler.downsampleImageProcessor( ip, mipmapLevel - currentMipmapLevel );
+					ipMipmap = ip;
 				}
 				else
 				{
-					/* create according mipmap level */
-					ipMipmap = Downsampler.downsampleImageProcessor( ip, mipmapLevel );
+					/* estimate average scale */
+					final double s = Utils.sampleAverageScale( ctl, width, height, triangleSize );
+					mipmapLevel = Utils.bestMipmapLevel( s );
+					
+					if ( ip == null )
+					{
+						String key = mipmapLevels.floorKey( String.valueOf( mipmapLevel ) );
+						if ( key == null )
+							key = mipmapLevels.firstKey();
+						
+						/* load image TODO use Bioformats for strange formats */
+						mipmapEntry = mipmapLevels.get( key );
+						final String imgUrl = mipmapEntry.imageUrl;
+						final ImagePlus imp = Utils.openImagePlusUrl( imgUrl );
+						if ( imp == null )
+						{
+							System.err.println( "Failed to load image '" + imgUrl + "'." );
+							continue;
+						}
+						ip = imp.getProcessor();
+						final int currentMipmapLevel = Integer.parseInt( key );
+						if ( currentMipmapLevel >= mipmapLevel )
+						{
+							mipmapLevel = currentMipmapLevel;
+							ipMipmap = ip;
+						}
+						else
+							ipMipmap = Downsampler.downsampleImageProcessor( ip, mipmapLevel - currentMipmapLevel );
+					}
+					else
+					{
+						/* create according mipmap level */
+						ipMipmap = Downsampler.downsampleImageProcessor( ip, mipmapLevel );
+					}
 				}
 				
+
+
+				long endTime = System.currentTimeMillis();
+				System.out.println("Initial render phase took: " + ((endTime - startTime) / 1000.0) + " sec");
+
+				startTime = System.currentTimeMillis();
+
 				/* create a target */
 				final ImageProcessor tp = ipMipmap.createProcessor( targetImage.getWidth(), targetImage.getHeight() );
 				
@@ -334,45 +375,81 @@ public class Render
 					bpMaskSource = null;
 					bpMaskTarget = null;
 				}
+				endTime = System.currentTimeMillis();
+				System.out.println("Creating image and mask processors phase took: " + ((endTime - startTime) / 1000.0) + " sec");
+
 				
-				
+				startTime = System.currentTimeMillis();
 				/* attach mipmap transformation */
 				final CoordinateTransformList< CoordinateTransform > ctlMipmap = new CoordinateTransformList< CoordinateTransform >();
 				ctlMipmap.add( Utils.createScaleLevelTransform( mipmapLevel ) );
 				ctlMipmap.add( ctl );
+				endTime = System.currentTimeMillis();
+				System.out.println("Creating basic coordinate transform list phase took: " + ((endTime - startTime) / 1000.0) + " sec");
 				
+				startTime = System.currentTimeMillis();
 				/* create mesh */
-				final CoordinateTransformMesh mesh = new CoordinateTransformMesh( ctlMipmap,  ( int )( width / triangleSize + 0.5 ), ipMipmap.getWidth(), ipMipmap.getHeight() );
+				final CoordinateTransformMesh mesh = new CoordinateTransformMesh( ctlMipmap, 
+						( int )( width / triangleSize + 0.5 ), 
+						ipMipmap.getWidth(), 
+						ipMipmap.getHeight(), 
+						threadsNum );
+				endTime = System.currentTimeMillis();
+				System.out.println("Creating coordinate transform mesh phase took: " + ((endTime - startTime) / 1000.0) + " sec");
+
+				startTime = System.currentTimeMillis();
 				
 				final ImageProcessorWithMasks source = new ImageProcessorWithMasks( ipMipmap, bpMaskSource, null );
 				final ImageProcessorWithMasks target = new ImageProcessorWithMasks( tp, bpMaskTarget, null );
 				final TransformMeshMappingWithMasks< TransformMesh > mapping = new TransformMeshMappingWithMasks< TransformMesh >( mesh );
 				mapping.mapInterpolated( source, target );
-				
+				endTime = System.currentTimeMillis();
+				System.out.println("Transforming the images phase took: " + ((endTime - startTime) / 1000.0) + " sec");
+	
+				startTime = System.currentTimeMillis();
 				/* convert to 24bit RGB */
 				tp.setMinAndMax( ts.minIntensity, ts.maxIntensity );
-				final ColorProcessor cp = tp.convertToColorProcessor();
-				
-				final int[] cpPixels = ( int[] )cp.getPixels();
+
+				// Create alphPixels, which will mark the relevant pixels of the tile
 				final byte[] alphaPixels;
-				
-				
-				/* set alpha channel */
 				if ( bpMaskTarget != null )
 					alphaPixels = ( byte[] )bpMaskTarget.getPixels();
 				else
 					alphaPixels = ( byte[] )target.outside.getPixels();
-	
-				for ( int i = 0; i < cpPixels.length; ++i )
-					cpPixels[ i ] &= 0x00ffffff | ( alphaPixels[ i ] << 24 );
-	
-				final BufferedImage image = new BufferedImage( cp.getWidth(), cp.getHeight(), BufferedImage.TYPE_INT_ARGB );
-				final WritableRaster raster = image.getRaster();
-				raster.setDataElements( 0, 0, cp.getWidth(), cp.getHeight(), cpPixels );
 				
+				// Adjust the pixels to include both the original image pixels (that includes previous tiles) and the pixels of the current tile
+				final byte[] tp2Pixels = ( byte[] )tp.getPixels();
+				final byte[] origPixels = ( ( DataBufferByte )targetImage.getRaster().getDataBuffer() ).getData();
+				for ( int i = 0; i < origPixels.length; ++i )
+				{
+					if ( alphaPixels[ i ] == 0 )
+						tp2Pixels[ i ] = origPixels[ i ];
+				}
+				
+				// Update the entire image to show also the current tile
+				final BufferedImage image = new BufferedImage( tp.getWidth(), tp.getHeight(), BufferedImage.TYPE_BYTE_GRAY );
+				final WritableRaster raster = image.getRaster();
+				raster.setDataElements( 0, 0, tp.getWidth(), tp.getHeight(), tp2Pixels );
+				endTime = System.currentTimeMillis();
+				System.out.println("Creating the buffered image and raster phase took: " + ((endTime - startTime) / 1000.0) + " sec");
+
 				targetGraphics.drawImage( image, 0, 0, null );
+
 			}
+			tileCount++;
 		}
+	}
+	
+	final static public void render(
+			final TileSpec[] tileSpecs,
+			final BufferedImage targetImage,
+			final double x,
+			final double y,
+			final double triangleSize,
+			final double scale,
+			final boolean areaOffset )
+	{
+		render( tileSpecs, targetImage, x, y, triangleSize, scale, areaOffset, Runtime.getRuntime().availableProcessors() );
 	}
 	
 	final static public void render(
@@ -415,13 +492,14 @@ public class Render
 	
 	public static void main( final String[] args )
 	{
-		new ImageJ();
 		
 		final Params params = parseParams( args );
 		
 		if ( params == null )
 			return;
 		
+		if ( !params.hide )
+			new ImageJ();
 		
 		/* open tilespec */
 		final URL url;
@@ -462,17 +540,21 @@ public class Render
 			}
 		}
 		if ( targetImage == null )
-			targetImage = new BufferedImage( params.width, params.height, BufferedImage.TYPE_INT_ARGB );
+			//targetImage = new BufferedImage( params.width, params.height, BufferedImage.TYPE_INT_ARGB );
+			targetImage = new BufferedImage( params.width, params.height, BufferedImage.TYPE_BYTE_GRAY );
 		
-		render( tileSpecs, targetImage, params.x, params.y, params.res, params.scale, params.areaOffset );
-		ColorProcessor cp = new ColorProcessor( render( tileSpecs, params.x, params.y, ( int )( params.width / params.scale ), ( int )( params.height / params.scale ), params.res, 1.0, false ) );
-		cp = Downsampler.downsampleColorProcessor( cp, params.mipmapLevel );
-		new ImagePlus( "downsampled", cp ).show();
-		new ImagePlus( "result", new ColorProcessor( targetImage ) ).show();
+		render( tileSpecs, targetImage, params.x, params.y, params.res, params.scale, params.areaOffset, params.numThreads );
+		//ColorProcessor cp = new ColorProcessor( render( tileSpecs, params.x, params.y, ( int )( params.width / params.scale ), ( int )( params.height / params.scale ), params.res, 1.0, false ) );
+		//cp = Downsampler.downsampleColorProcessor( cp, params.mipmapLevel );
+		//new ImagePlus( "downsampled", cp ).show();
+		//new ImagePlus( "result", new ColorProcessor( targetImage ) ).show();
 		
 		/* save the modified image */
+		System.out.println( "Saving the image to: " + params.out );
 		Utils.saveImage( targetImage, params.out, params.out.substring( params.out.lastIndexOf( '.' ) + 1 ), params.quality );
+		System.out.println( "Done." );
 		
-		new ImagePlus( params.out ).show();
+		if ( !params.hide )
+			new ImagePlus( params.out ).show();
 	}
 }
