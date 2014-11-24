@@ -31,7 +31,13 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.TreeMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import javax.imageio.ImageIO;
 
@@ -39,6 +45,7 @@ import mpicbg.models.AffineModel2D;
 import mpicbg.models.CoordinateTransform;
 import mpicbg.models.CoordinateTransformList;
 import mpicbg.models.CoordinateTransformMesh;
+import mpicbg.models.PointMatch;
 import mpicbg.models.TransformMesh;
 import mpicbg.trakem2.transform.TransformMeshMappingWithMasks;
 import mpicbg.trakem2.transform.TransformMeshMappingWithMasks.ImageProcessorWithMasks;
@@ -420,10 +427,57 @@ public class Render
 				// Adjust the pixels to include both the original image pixels (that includes previous tiles) and the pixels of the current tile
 				final byte[] tp2Pixels = ( byte[] )tp.getPixels();
 				final byte[] origPixels = ( ( DataBufferByte )targetImage.getRaster().getDataBuffer() ).getData();
-				for ( int i = 0; i < origPixels.length; ++i )
+				
+				if ( threadsNum == 1 )
 				{
-					if ( alphaPixels[ i ] == 0 )
-						tp2Pixels[ i ] = origPixels[ i ];
+					for ( int i = 0; i < origPixels.length; ++i )
+					{
+						if ( alphaPixels[ i ] == 0 )
+							tp2Pixels[ i ] = origPixels[ i ];
+					}
+				}
+				else
+				{
+					// Initialize threads
+					final ExecutorService exec = Executors.newFixedThreadPool( threadsNum );
+					final ArrayList< Future< ? > > tasks = new ArrayList< Future< ? > >();
+			
+					final int pixelsPerThreadNum = origPixels.length / threadsNum;
+					for ( int i = 0; i < threadsNum; i++ )
+					{
+						final int fromIndex = i * pixelsPerThreadNum;
+						final int lastIndex;
+						if ( i == threadsNum - 1 ) // lastThread
+							lastIndex = origPixels.length;
+						else
+							lastIndex = fromIndex + pixelsPerThreadNum;
+						
+						tasks.add( exec.submit( new Runnable() {
+							
+							@Override
+							public void run() {
+								for ( int i = fromIndex; i < lastIndex; i++ )
+								{
+									if ( alphaPixels[ i ] == 0 )
+										tp2Pixels[ i ] = origPixels[ i ];
+								}
+							}
+						}));
+					}
+					
+					for ( Future< ? > task : tasks )
+					{
+						try {
+							task.get();
+						} catch (InterruptedException e) {
+							exec.shutdownNow();
+							e.printStackTrace();
+						} catch (ExecutionException e) {
+							exec.shutdownNow();
+							e.printStackTrace();
+						}
+					}
+					exec.shutdown();
 				}
 				
 				// Update the entire image to show also the current tile
