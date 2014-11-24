@@ -119,6 +119,8 @@ public class MatchLayersByMaxPMCC {
         
 	}
 	
+	private final static boolean PRINT_TIME_PER_STEP = true;
+	
 	private MatchLayersByMaxPMCC() {}
 	
 	/**
@@ -220,7 +222,9 @@ public class MatchLayersByMaxPMCC {
 		
 		final int meshWidth = ( int )Math.ceil( param.imageWidth * param.layerScale );
 		final int meshHeight = ( int )Math.ceil( param.imageHeight * param.layerScale );
+
 		
+		long startTime = System.currentTimeMillis();
 		final SpringMesh[] meshes = new SpringMesh[2];
 		for ( int i = 0; i < meshes.length; i++ )
 			meshes[i] = new SpringMesh(
@@ -230,6 +234,9 @@ public class MatchLayersByMaxPMCC {
 					param.stiffnessSpringMesh,
 					param.maxStretchSpringMesh * param.layerScale,
 					param.dampSpringMesh );
+		long endTime = System.currentTimeMillis();
+		if ( PRINT_TIME_PER_STEP )
+			System.out.println("Creating mesh took: " + ((endTime - startTime) / 1000.0) + " sec");
 
 		//final int blockRadius = Math.max( 32, meshWidth / p.resolutionSpringMesh / 2 );
 //		final int param_blockRadius = param.imageWidth / param.resolution / 2;
@@ -248,7 +255,11 @@ public class MatchLayersByMaxPMCC {
 		final float localRegionSigma = param.layerScale * param.localRegionSigma;
 		final float maxLocalEpsilon = param.layerScale * param.maxLocalEpsilon;
 		
+		startTime = System.currentTimeMillis();
 		final AbstractModel< ? > localSmoothnessFilterModel = Util.createModel( param.localModelIndex );
+		endTime = System.currentTimeMillis();
+		if ( PRINT_TIME_PER_STEP )
+			System.out.println("Creating model took: " + ((endTime - startTime) / 1000.0) + " sec");
 
 		
 		final SpringMesh m1 = meshes[0];
@@ -264,6 +275,7 @@ public class MatchLayersByMaxPMCC {
 		//if ( !( layer1Fixed && layer2Fixed ) )
 		//{
 			/* Load images and masks into FloatProcessor objects */		
+			startTime = System.currentTimeMillis();
 			final TileSpecsImage layer1Img = new TileSpecsImage( ts1 );
 			final TileSpecsImage layer2Img = new TileSpecsImage( ts2 );
 			
@@ -283,6 +295,9 @@ public class MatchLayersByMaxPMCC {
 			// TODO: load the tile specs to FloatProcessor objects
 			tilespecToFloatAndMask( layer1Img, layer1, ip1, ip1Mask, mipmapLevel, param.layerScale );
 			tilespecToFloatAndMask( layer2Img, layer2, ip2, ip2Mask, mipmapLevel, param.layerScale );
+			endTime = System.currentTimeMillis();
+			if ( PRINT_TIME_PER_STEP )
+				System.out.println("Creating images took: " + ((endTime - startTime) / 1000.0) + " sec");
 			
 			//final float springConstant  = 1.0f / ( layer2 - layer1 );
 			
@@ -290,6 +305,7 @@ public class MatchLayersByMaxPMCC {
 			{
 				try
 				{
+					startTime = System.currentTimeMillis();
 					BlockMatching.matchByMaximalPMCC(
 							ip1,
 							ip2,
@@ -307,6 +323,9 @@ public class MatchLayersByMaxPMCC {
 							v1,
 							pm12,
 							new ErrorStatistic( 1 ) );
+					endTime = System.currentTimeMillis();
+					if ( PRINT_TIME_PER_STEP )
+						System.out.println("Block matching 1 took: " + ((endTime - startTime) / 1000.0) + " sec");
 				}
 				catch ( final InterruptedException e )
 				{
@@ -328,9 +347,13 @@ public class MatchLayersByMaxPMCC {
 	
 				if ( param.useLocalSmoothnessFilter )
 				{
+					startTime = System.currentTimeMillis();
 					System.out.println( layer1 + " > " + layer2 + ": found " + pm12.size() + " correspondence candidates." );
 					localSmoothnessFilterModel.localSmoothnessFilter( pm12, pm12, localRegionSigma, maxLocalEpsilon, param.maxLocalTrust );
 					System.out.println( layer1 + " > " + layer2 + ": " + pm12.size() + " candidates passed local smoothness filter." );
+					endTime = System.currentTimeMillis();
+					if ( PRINT_TIME_PER_STEP )
+						System.out.println("local smooth filter 1 took: " + ((endTime - startTime) / 1000.0) + " sec");
 				}
 				else
 				{
@@ -383,6 +406,7 @@ public class MatchLayersByMaxPMCC {
 			{
 				try
 				{
+					startTime = System.currentTimeMillis();
 					BlockMatching.matchByMaximalPMCC(
 							ip2,
 							ip1,
@@ -400,6 +424,9 @@ public class MatchLayersByMaxPMCC {
 							v2,
 							pm21,
 							new ErrorStatistic( 1 ) );
+					endTime = System.currentTimeMillis();
+					if ( PRINT_TIME_PER_STEP )
+						System.out.println("Block matching 2 took: " + ((endTime - startTime) / 1000.0) + " sec");
 				}
 				catch ( final InterruptedException e )
 				{
@@ -421,9 +448,13 @@ public class MatchLayersByMaxPMCC {
 	
 				if ( param.useLocalSmoothnessFilter )
 				{
+					startTime = System.currentTimeMillis();
 					System.out.println( layer1 + " < " + layer2 + ": found " + pm21.size() + " correspondence candidates." );
 					localSmoothnessFilterModel.localSmoothnessFilter( pm21, pm21, localRegionSigma, maxLocalEpsilon, param.maxLocalTrust );
 					System.out.println( layer1 + " < " + layer2 + ": " + pm21.size() + " candidates passed local smoothness filter." );
+					endTime = System.currentTimeMillis();
+					if ( PRINT_TIME_PER_STEP )
+						System.out.println("local smooth filter 2 took: " + ((endTime - startTime) / 1000.0) + " sec");
 				}
 				else
 				{
@@ -504,6 +535,7 @@ public class MatchLayersByMaxPMCC {
         }
 		
 		/* open the models */
+		long startTime = System.currentTimeMillis();
 		CoordinateTransform model = null;
 		try
 		{
@@ -554,14 +586,20 @@ public class MatchLayersByMaxPMCC {
 
 		TileSpec[] tilespecs1 = TileSpecUtils.readTileSpecFile( params.inputfile1 );
 		TileSpec[] tilespecs2 = TileSpecUtils.readTileSpecFile( params.inputfile2 );
+		long endTime = System.currentTimeMillis();
+		System.out.println("Parsing files took: " + ((endTime - startTime) / 1000.0) + " ms");
 		
+		startTime = System.currentTimeMillis();
 		final List< CorrespondenceSpec > corr_data = matchLayersByMaxPMCC( 
 				params, (AbstractModel< ? >)model,
 				tilespecs1, tilespecs2, mipmapLevel,
 				params.fixedLayers );
+		endTime = System.currentTimeMillis();
+		System.out.println("Entire match process took: " + ((endTime - startTime) / 1000.0) + " ms");
 		
 
 		// In case no correspondence points are found, write an "empty" file
+		startTime = System.currentTimeMillis();
 		try {
 			Writer writer = new FileWriter(params.targetPath);
 	        //Gson gson = new GsonBuilder().create();
@@ -574,6 +612,8 @@ public class MatchLayersByMaxPMCC {
 			System.err.println( "Error writing JSON file: " + params.targetPath );
 			e.printStackTrace( System.err );
 		}
+		endTime = System.currentTimeMillis();
+		System.out.println("Writing output took: " + ((endTime - startTime) / 1000.0) + " ms");
 
 	}
 	
