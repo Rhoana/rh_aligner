@@ -1,5 +1,6 @@
 package org.janelia.alignment;
 
+import ij.process.ByteProcessor;
 import ij.process.ColorProcessor;
 import ij.process.FloatProcessor;
 
@@ -434,8 +435,8 @@ public class ElasticLayerAlignment {
 //			}
 			
 			TileSpecsImage layerImage = new TileSpecsImage( layerTileSpecs );
-			ColorProcessor cp = layerImage.render( layerIndex, mipmapLevel, ( float )scale );
-			final List< Feature > fs = ComputeSiftFeatures.computeImageSiftFeatures( cp, siftParam );
+			ByteProcessor bp = layerImage.render( layerIndex, mipmapLevel, ( float )scale );
+			final List< Feature > fs = ComputeSiftFeatures.computeImageSiftFeatures( bp, siftParam );
 			System.out.println( "Found " + fs.size() + " features in the layer" );
 			sifts.put( layerIndex, fs );
 			
@@ -784,6 +785,8 @@ J:			for ( int j = layeri + 1; j < range; )
 	{
 		final TileSpecsImage tsImg = new TileSpecsImage( layerTileSpecs );
 		final int layer = layerTileSpecs.get( 0 ).layer;
+		final ByteProcessor bp = tsImg.render( layer, mipmapLevel, layerScale );
+		/*
 		final ColorProcessor cp = tsImg.render( layer, mipmapLevel, layerScale );
 		final int[] inputPixels = ( int[] )cp.getPixels();
 		for ( int i = 0; i < inputPixels.length; ++i )
@@ -799,6 +802,13 @@ J:			for ( int j = layeri + 1; j < range; )
 			
 			output.setf( i, v );
 			alpha.setf( i, w );
+		}
+		*/
+		final int[] inputPixels = ( int[] )bp.getPixels();
+		for ( int i = 0; i < inputPixels.length; ++i )
+		{
+			output.setf( i, inputPixels[ i ] );
+			alpha.setf( i, 1.0f );
 		}
 	}
 	

@@ -84,44 +84,10 @@ public class UpdateBoundingBox {
 			return;
 		
 
-		if ( params.numThreads <= params.files.size() )
+		// Each update of json file's bbox is done using multiple threads
+		for ( final String fileName : params.files )
 		{
-			// Each thread updates the bbox of a single json file
-			final ExecutorService threadPool = Executors.newFixedThreadPool( params.numThreads );
-			final List< Future< ? > > futures = new ArrayList< Future< ? >>();
-
-			for ( final String fileName : params.files )
-			{
-				final Future< ? > future = threadPool.submit( new Runnable() {
-					
-					@Override
-					public void run() {
-						updateFileBoundingBox( fileName, params.targetDir, 1 );
-					}
-				} );
-				futures.add( future );
-			}
-			
-			try {
-				for ( Future< ? > future : futures ) {
-					future.get();
-				}
-			} catch ( InterruptedException e ) {
-				e.printStackTrace();
-				throw new RuntimeException( e );
-			} catch ( ExecutionException e ) {
-				e.printStackTrace();
-				throw new RuntimeException( e );
-			}
-			threadPool.shutdown();
-		}
-		else
-		{
-			// Each update of json file's bbox is done using multiple threads
-			for ( final String fileName : params.files )
-			{
-				updateFileBoundingBox( fileName, params.targetDir, params.numThreads );
-			}
+			updateFileBoundingBox( fileName, params.targetDir, params.numThreads );
 		}
 	}
 }

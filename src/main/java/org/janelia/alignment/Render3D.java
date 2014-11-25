@@ -3,6 +3,7 @@ package org.janelia.alignment;
 import ij.IJ;
 import ij.ImageJ;
 import ij.ImagePlus;
+import ij.process.ByteProcessor;
 import ij.process.ColorProcessor;
 
 import java.util.ArrayList;
@@ -84,7 +85,7 @@ public class Render3D {
 	{
 		System.out.println( "Showing layer: " + layer );
 		
-		ColorProcessor cp = image.render( layer, 0, (float) scale, entireWidth, entireHeight );
+		ByteProcessor cp = image.render( layer, 0, (float) scale, entireWidth, entireHeight );
 		ImagePlus curLayer = new ImagePlus( "Layer " + layer, cp );
 		return curLayer;
 	}
@@ -118,8 +119,6 @@ public class Render3D {
 		
 		// Open all tiles
 		final TileSpecsImage entireImage = TileSpecsImage.createImageFromFiles( actualTileSpecFiles );
-		// Set a single thread per image, and render each layer with a different thread 
-		entireImage.setThreadsNum( 1 );
 		
 		// Get the bounding box
 		BoundingBox bbox = entireImage.getBoundingBox();
@@ -159,6 +158,8 @@ public class Render3D {
 		// Render all needed layers
 		if ( params.numThreads == 1 )
 		{
+			entireImage.setThreadsNum( 1 );
+			
 			// Single thread execution
 			for ( int i = firstLayer; i <= lastLayer; i++ )
 			{
@@ -177,45 +178,23 @@ public class Render3D {
 		}
 		else
 		{
-			final ExecutorService threadPool = Executors.newFixedThreadPool( params.numThreads );
-			final List< Future< ? > > futures = new ArrayList< Future< ? >>();
-			final int eImageWidth = entireImageWidth;
-			final int eImageHeight = entireImageHeight;
-			final double curScale = scale;
-
+			entireImage.setThreadsNum( params.numThreads );
+			
+			// TODO: create a thread for saving the layer image (an IO thread)
 			for ( int i = firstLayer; i <= lastLayer; i++ )
 			{
 				final int curLayer = i;
-				
-				final Future< ? > future = threadPool.submit( new Runnable() {
-					
-					@Override
-					public void run() {
-						final ImagePlus image = renderLayerImage( entireImage, curScale, curLayer, eImageWidth, eImageHeight );
-						if ( !params.hide )
-							image.show();
-						if ( params.targetDir != null )
-						{
-							String outFile = String.format( "%s/Section_%04d.tif", params.targetDir, curLayer );
-							saveLayerImage( image, outFile );
-						}
-					}
-				});
-				futures.add( future );				
-			}
-			
-			try {
-				for ( Future< ? > future : futures ) {
-					future.get();
+				final double curScale = scale;
+
+				final ImagePlus image = renderLayerImage( entireImage, curScale, curLayer, entireImageWidth, entireImageHeight );
+				if ( !params.hide )
+					image.show();
+				if ( params.targetDir != null )
+				{
+					String outFile = String.format( "%s/Section_%04d.tif", params.targetDir, curLayer );
+					saveLayerImage( image, outFile );
 				}
-			} catch ( InterruptedException e ) {
-				e.printStackTrace();
-				throw new RuntimeException( e );
-			} catch ( ExecutionException e ) {
-				e.printStackTrace();
-				throw new RuntimeException( e );
 			}
-			threadPool.shutdown();
 
 		}
 	}

@@ -1,6 +1,7 @@
 package org.janelia.alignment;
 
 import ij.ImagePlus;
+import ij.process.ByteProcessor;
 import ij.process.ColorProcessor;
 
 import java.awt.Color;
@@ -66,8 +67,9 @@ public class DebugCorrespondence {
 		final BoundingBox bbox = singleTileImage.getBoundingBox();
 		final int layerIndex = bbox.getStartPoint().getZ();
 		
-		ColorProcessor cp = singleTileImage.render( layerIndex, mipmapLevel, scale );
-
+		ByteProcessor bp = singleTileImage.render( layerIndex, mipmapLevel, scale );
+		ColorProcessor cp = bp.convertToColorProcessor();
+		
 		System.out.println( "The output image size: " + cp.getWidth() + ", " + cp.getHeight() );
 		
 		// Mark the correspondence points

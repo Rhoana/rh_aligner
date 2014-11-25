@@ -1,6 +1,7 @@
 package org.janelia.alignment;
 
 import ij.ImagePlus;
+import ij.process.ByteProcessor;
 import ij.process.ColorProcessor;
 import ij.process.ImageProcessor;
 
@@ -192,8 +193,8 @@ public class ComputeLayerSiftFeatures {
 
 		// Render the image
 		System.out.println( "Sift Features computation: layer scale: " + scale );
-		ColorProcessor cp = singleTileImage.render( layerIndex, mipmapLevel, ( float )scale );
-		final List< Feature > fs = ComputeSiftFeatures.computeImageSiftFeatures( cp, siftParam );
+		ByteProcessor tp = singleTileImage.render( layerIndex, mipmapLevel, ( float )scale );
+		final List< Feature > fs = ComputeSiftFeatures.computeImageSiftFeatures( tp, siftParam );
 		System.out.println( "Found " + fs.size() + " features in the layer" );
 
 		//final List< Feature > fs = computeTileSiftFeatures( imageUrl, siftParam );

@@ -5,6 +5,7 @@ import ij.ImageJ;
 import ij.ImagePlus;
 import ij.gui.Roi;
 import ij.process.Blitter;
+import ij.process.ByteProcessor;
 import ij.process.ColorProcessor;
 import ij.process.FloatProcessor;
 
@@ -409,7 +410,8 @@ public class TestBlockMatchingParameters {
 
 		final ImagePlus impTable;
 		final ColorProcessor ipTable;
-		final ColorProcessor[] renderedImages = new ColorProcessor[ bbox.getDepth() ];
+		//final ColorProcessor[] renderedImages = new ColorProcessor[ bbox.getDepth() ];
+		final ByteProcessor[] renderedImages = new ByteProcessor[ bbox.getDepth() ];
 		if ( exportDisplacementVectors )
 		{
 			ipTable = new ColorProcessor( w * bbox.getDepth() + w, h * bbox.getDepth() + h );

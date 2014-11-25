@@ -91,15 +91,15 @@ public class TileSpecsImage {
 	}
 
 	public void renderAndSave( String outFile, int layer, int mipmapLevel, float scale ) {
-		ColorProcessor cp = render( layer, mipmapLevel, scale );
-		IJ.save( new ImagePlus( "Layer " + layer, cp ), outFile );
+		ByteProcessor tp = render( layer, mipmapLevel, scale );
+		IJ.save( new ImagePlus( "Layer " + layer, tp ), outFile );
 	}
 
-	public ColorProcessor render( int layer, int mipmapLevel ) {
+	public ByteProcessor render( int layer, int mipmapLevel ) {
 		return render( layer, mipmapLevel, 1.0f );
 	}
 
-	public ColorProcessor render( int layer, int mipmapLevel, float scale ) {
+	public ByteProcessor render( int layer, int mipmapLevel, float scale ) {
 		// Get image width and height
 		parseTileSpecs();
 		
@@ -110,18 +110,15 @@ public class TileSpecsImage {
 
 	}
 	
-	public ColorProcessor render( int layer, int mipmapLevel, float scale, int width, int height ) {
+	public ByteProcessor render( int layer, int mipmapLevel, float scale, int width, int height ) {
 		
 		/* create a target */
 		ByteProcessor tp = new ByteProcessor( (int) ( width * scale ),
 				(int) ( height * scale ) );
-		ColorProcessor cp = null;
 		
 		// Create an offset according to the bounding box
 		final int offsetX = 0; //boundingBox.getStartPoint().getX();
 		final int offsetY = 0; //boundingBox.getStartPoint().getY();
-		
-		final ExecutorService threadPool = Executors.newFixedThreadPool( threadsNum );
 		
 		for ( TileSpec ts : tileSpecs ) {
 
@@ -198,7 +195,12 @@ public class TileSpecsImage {
 			ctlMipmap.add( ctl );
 			
 			/* create mesh */
-			final CoordinateTransformMesh mesh = new CoordinateTransformMesh( ctlMipmap,  ( int )( boundingBox.getWidth() / triangleSize + 0.5 ), tsIpMipmap.getWidth(), tsIpMipmap.getHeight() );
+			final CoordinateTransformMesh mesh = new CoordinateTransformMesh( 
+					ctlMipmap, 
+					( int )( boundingBox.getWidth() / triangleSize + 0.5 ), 
+					tsIpMipmap.getWidth(), 
+					tsIpMipmap.getHeight(), 
+					threadsNum );
 			
 			final ImageProcessorWithMasks source = new ImageProcessorWithMasks( tsIpMipmap, bpMaskSource, null );
 			final ImageProcessorWithMasks target = new ImageProcessorWithMasks( tp, bpMaskTarget, null );
@@ -207,64 +209,8 @@ public class TileSpecsImage {
 			
 			/* convert to 24bit RGB */
 			tp.setMinAndMax( ts.minIntensity, ts.maxIntensity );
-			cp = tp.convertToColorProcessor();
-
-			final int[] cpPixels = ( int[] )cp.getPixels();
-			final byte[] alphaPixels;
-			
-			
-			/* set alpha channel */
-			if ( bpMaskTarget != null )
-				alphaPixels = ( byte[] )bpMaskTarget.getPixels();
-			else
-				alphaPixels = ( byte[] )target.outside.getPixels();
-
-
-			if ( threadsNum == 1 )
-			{
-				for ( int i = 0; i < cpPixels.length; ++i )
-					cpPixels[ i ] &= 0x00ffffff | ( alphaPixels[ i ] << 24 );
-			}
-			else
-			{
-				final int pixelsPerThread = cpPixels.length / threadsNum;
-				final List< Future< ? > > futures = new ArrayList< Future< ? >>();
-	
-				for ( int t = 0; t < threadsNum; t++ ) {
-					final int threadIndex = t;
-					final Future< ? > future = threadPool.submit( new Runnable() {
-	
-						@Override
-						public void run() {
-							int startIndex = threadIndex * pixelsPerThread;
-							int endIndex = ( threadIndex + 1 ) * pixelsPerThread;
-							if ( threadIndex == threadsNum - 1 )
-								endIndex = cpPixels.length;
-							for ( int i = startIndex; i < endIndex; ++i )
-								cpPixels[ i ] &= 0x00ffffff | ( alphaPixels[ i ] << 24 );
-							
-						}
-					});
-					futures.add( future );
-				}
-				
-				try {
-					for ( Future< ? > future : futures ) {
-						future.get();
-					}
-				} catch ( InterruptedException e ) {
-					e.printStackTrace();
-					throw new RuntimeException( e );
-				} catch ( ExecutionException e ) {
-					e.printStackTrace();
-					throw new RuntimeException( e );
-				}
-			}
 		}
-		
-		threadPool.shutdown();
-		
-		return cp;
+		return tp;
 	}
 
 	
@@ -437,7 +383,11 @@ public class TileSpecsImage {
 		// Apply the transformations to the image
 		final CoordinateTransformList< CoordinateTransform > ctl = ts.createTransformList();
 		/* create mesh */
-		final CoordinateTransformMesh mesh = new CoordinateTransformMesh( ctl,  ( int )( origWidth / triangleSize + 0.5 ), ip.getWidth(), ip.getHeight() );
+		final CoordinateTransformMesh mesh = new CoordinateTransformMesh( ctl, 
+				( int )( origWidth / triangleSize + 0.5 ), 
+				ip.getWidth(), 
+				ip.getHeight(),
+				threadsNum );
 		final BoundingBox boundingBox = findBoundingBox( mesh, ip, threadsNum );
 		System.out.println( " tilespec bounding box is: " + boundingBox );
 
@@ -683,8 +633,8 @@ public class TileSpecsImage {
 	public static void main( String[] args ) {
 		
 		String[] tsFiles = {
-				  "file:///Users/adisuis/Fiji/FijiBento/scripts/alyssa_3d/my_Sec001.json",
-				  "file:///Users/adisuis/Fiji/FijiBento/scripts/alyssa_3d/my_Sec002.json"
+				  "file:///Volumes/Transcend/Harvard/lichtmanlab/Alyssa_W02/after_montage_test11/after_norm/Section_001.json",
+				  "file:///Volumes/Transcend/Harvard/lichtmanlab/Alyssa_W02/after_montage_test11/after_norm/Section_002.json"
 		};
 		
 		TileSpecsImage[] tsImgs = new TileSpecsImage[ tsFiles.length ];

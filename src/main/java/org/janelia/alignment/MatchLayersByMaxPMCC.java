@@ -1,5 +1,6 @@
 package org.janelia.alignment;
 
+import ij.process.ByteProcessor;
 import ij.process.ColorProcessor;
 import ij.process.FloatProcessor;
 
@@ -140,10 +141,11 @@ public class MatchLayersByMaxPMCC {
 			final int mipmapLevel,
 			final float layerScale )
 	{
-		final ColorProcessor cp = layerTileSpecsImage.render( layer, mipmapLevel, layerScale );
-		final int[] inputPixels = ( int[] )cp.getPixels();
+		final ByteProcessor tp = layerTileSpecsImage.render( layer, mipmapLevel, layerScale );
+		final int[] inputPixels = ( int[] )tp.getPixels();
 		for ( int i = 0; i < inputPixels.length; ++i )
 		{
+			/*
 			final int argb = inputPixels[ i ];
 			final int a = ( argb >> 24 ) & 0xff;
 			final int r = ( argb >> 16 ) & 0xff;
@@ -155,6 +157,9 @@ public class MatchLayersByMaxPMCC {
 			
 			output.setf( i, v );
 			alpha.setf( i, w );
+			*/
+			output.setf( i,  ( float )inputPixels[ i ]);
+			alpha.setf( i,  1.0f );
 		}
 	}
 
@@ -278,6 +283,9 @@ public class MatchLayersByMaxPMCC {
 			startTime = System.currentTimeMillis();
 			final TileSpecsImage layer1Img = new TileSpecsImage( ts1 );
 			final TileSpecsImage layer2Img = new TileSpecsImage( ts2 );
+			
+			layer1Img.setThreadsNum( param.numThreads );
+			layer2Img.setThreadsNum( param.numThreads );
 			
 			final BoundingBox layer1BBox = layer1Img.getBoundingBox();
 			final BoundingBox layer2BBox = layer2Img.getBoundingBox();
