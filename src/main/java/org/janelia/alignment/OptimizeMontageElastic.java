@@ -445,10 +445,19 @@ public class OptimizeMontageElastic
 					mlt.setAlpha( 2.0f );
 					mlt.setMatches( matches );
 					
+					
 					//Apply to the corresponding tilespec transforms
 				    Transform addedTransform = new Transform();
 				    addedTransform.className = mlt.getClass().getCanonicalName();
 				    addedTransform.dataString = mlt.toDataString();
+				    
+				    if ( ts.bbox == null )
+				    	ts.bbox = new float[ 4 ];
+				    float[][] minMaxXY = mlt.getMinMaxXY();
+				    ts.bbox[0] = minMaxXY[0][0];
+				    ts.bbox[1] = minMaxXY[1][0];
+				    ts.bbox[2] = minMaxXY[0][1];
+				    ts.bbox[3] = minMaxXY[0][3];
 				    
 					//ArrayList< Transform > outTransforms = new ArrayList< Transform >(Arrays.asList(ts.transforms));
 					// (override previous transformations)
