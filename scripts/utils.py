@@ -8,6 +8,8 @@ import json
 
 
 def path2url(path):
+    if "://" in path:
+        return path
     return urlparse.urljoin('file:', urllib.pathname2url(os.path.abspath(path)))
 
 

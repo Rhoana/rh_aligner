@@ -71,7 +71,14 @@ public class NormalizeCoordinates {
 		if ( params == null )
 			return;
 		
-		final TileSpecsImage tsImage = TileSpecsImage.createImageFromFiles( params.files );
+		List< String > actualFiles;
+		if ( params.files.size() == 1 )
+			// It might be a non-json file that contains a list of
+			actualFiles = Utils.getListFromFile( params.files.get( 0 ) );
+		else
+			actualFiles = params.files;
+
+		final TileSpecsImage tsImage = TileSpecsImage.createImageFromFiles( actualFiles );
 
 		// Get the bounding box
 		final BoundingBox bbox = tsImage.getBoundingBox();
@@ -87,7 +94,7 @@ public class NormalizeCoordinates {
 			TranslationModel2D trans = new TranslationModel2D();
 			trans.init( -curX + ".0 " + -curY + ".0" );
 
-			for ( String fileName : params.files )
+			for ( String fileName : actualFiles )
 			{
 				// Read the json file
 				TileSpec[] tileSpecs = TileSpecUtils.readTileSpecFile( fileName );

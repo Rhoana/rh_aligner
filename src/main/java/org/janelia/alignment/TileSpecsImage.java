@@ -6,6 +6,7 @@ import ij.process.ByteProcessor;
 import ij.process.ColorProcessor;
 import ij.process.ImageProcessor;
 
+import java.awt.image.BufferedImage;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.Writer;
@@ -92,7 +93,8 @@ public class TileSpecsImage {
 
 	public void renderAndSave( String outFile, int layer, int mipmapLevel, float scale ) {
 		ByteProcessor tp = render( layer, mipmapLevel, scale );
-		IJ.save( new ImagePlus( "Layer " + layer, tp ), outFile );
+		BufferedImage targetImage = new BufferedImage( tp.getWidth(), tp.getHeight(), BufferedImage.TYPE_BYTE_GRAY );
+		Utils.saveImage( targetImage, outFile, outFile.substring( outFile.lastIndexOf( '.' ) + 1 ) );
 	}
 
 	public ByteProcessor render( int layer, int mipmapLevel ) {

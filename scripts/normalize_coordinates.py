@@ -32,8 +32,14 @@ def normalize_coordinates(tile_fnames_or_dir, output_dir, jar_file):
         tiles_url = utils.path2url(file_name)
         files_urls.append(tiles_url)
 
+    list_file = os.path.join(output_dir, "all_files.txt")
+    print "list_file", list_file
+    utils.write_list_to_file(list_file, files_urls)
+
+    list_file_url = utils.path2url(list_file)
+
     java_cmd = 'java -Xmx2g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.NormalizeCoordinates --targetDir {1} {2}'.format(\
-        jar_file, output_dir, ' '.join(files_urls))
+        jar_file, output_dir, list_file_url)
     utils.execute_shell_command(java_cmd)
 
 

@@ -6,6 +6,7 @@ import ij.ImagePlus;
 import ij.process.ByteProcessor;
 import ij.process.ColorProcessor;
 
+import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -85,15 +86,17 @@ public class Render3D {
 	{
 		System.out.println( "Showing layer: " + layer );
 		
-		ByteProcessor cp = image.render( layer, 0, (float) scale, entireWidth, entireHeight );
-		ImagePlus curLayer = new ImagePlus( "Layer " + layer, cp );
+		ByteProcessor tp = image.render( layer, 0, (float) scale, entireWidth, entireHeight );
+		ImagePlus curLayer = new ImagePlus( "Layer " + layer, tp );
 		return curLayer;
 	}
 
 	private static void saveLayerImage( ImagePlus image, String outFile )
 	{
-		IJ.saveAsTiff( image, outFile );
+		//IJ.saveAsTiff( image, outFile );
 		//IJ.save( image, outFile );
+		BufferedImage bufImage = image.getBufferedImage();
+		Utils.saveImage( bufImage, outFile, outFile.substring( outFile.lastIndexOf( '.' ) + 1 ) );
 		System.out.println( "Image " + outFile + " was saved." );
 	}
 
@@ -171,7 +174,7 @@ public class Render3D {
 					image.show();
 				if ( params.targetDir != null )
 				{
-					String outFile = String.format( "%s/Section_%04d.tif", params.targetDir, curLayer );
+					String outFile = String.format( "%s/Section_%04d.png", params.targetDir, curLayer );
 					saveLayerImage( image, outFile );
 				}
 			}
@@ -191,7 +194,7 @@ public class Render3D {
 					image.show();
 				if ( params.targetDir != null )
 				{
-					String outFile = String.format( "%s/Section_%04d.tif", params.targetDir, curLayer );
+					String outFile = String.format( "%s/Section_%04d.png", params.targetDir, curLayer );
 					saveLayerImage( image, outFile );
 				}
 			}
