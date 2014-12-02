@@ -30,7 +30,6 @@ import com.beust.jcommander.Parameters;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
-import com.sun.tools.corba.se.idl.toJavaPortable.Util;
 
 public class MatchSiftFeaturesAndFilter {
 
