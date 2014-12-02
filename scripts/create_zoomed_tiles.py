@@ -13,7 +13,6 @@ import utils
 import math
 import numpy as np
 from scipy import ndimage
-import matplotlib.image as mpimg
 import cv2
 
 
@@ -27,7 +26,7 @@ def block_mean(ar, fact):
     return res
 
 def get_tile_size(tile_file):
-    img = mpimg.imread(tile_file)
+    img = cv2.imread(tile_file, 0)
     return img.shape[0]
 
 def create_img(tiles_dir, from_row, from_col, rows_num, cols_num, tile_size):
@@ -39,12 +38,29 @@ def create_img(tiles_dir, from_row, from_col, rows_num, cols_num, tile_size):
             tile_files = glob.glob(os.path.join(tiles_dir, 'tile_{}_{}.*'.format(from_row + row, from_col + col)))
             if len(tile_files) > 0:
                 tile_file = tile_files[0]
-                tile_img = mpimg.imread(tile_file)
+                tile_img = cv2.imread(tile_file, 0)
                 new_img_arr[row * tile_size:(row + 1) * tile_size,
                             col * tile_size:(col + 1) * tile_size] = tile_img
     return new_img_arr
 
-def create_zoomed_tiles(tiles_dir):
+def create_open_sea_dragon_conf(conf_file, tile_size, initial_rows, initial_cols, zoom_level):
+    with open(conf_file, 'w') as conf_data:
+        conf_data.write('function createTileSource() {\n')
+        conf_data.write('   var tileSource = {};\n')
+        conf_data.write('   tileSource.height = {}\n'.format(initial_rows * tile_size))
+        conf_data.write('   tileSource.width = {}\n'.format(initial_cols * tile_size))
+        conf_data.write('   tileSource.tileSize = {}\n'.format(tile_size))
+        conf_data.write('   tileSource.tileOverlap = 0\n')
+        conf_data.write('   tileSource.minLevel = 0\n')
+        conf_data.write('   tileSource.maxLevel = {}\n'.format(zoom_level))
+        conf_data.write('   tileSource.getTileUrl = function( level, x, y ) {\n')
+        conf_data.write('       return "/tiles/" + ({} - level) + "/tile_" + y + "_" + x + ".jpg";\n'.format(zoom_level))
+        conf_data.write('   }\n')
+        conf_data.write('   return tileSource;\n')
+        conf_data.write('}\n')
+
+
+def create_zoomed_tiles(tiles_dir, open_sea_dragon=False):
     #all_tiles = glob.glob(os.path.join(os.path.join(tiles_dir, '0'), '*'))
 
     first_tile = glob.glob(os.path.join(os.path.join(tiles_dir, '0'), 'tile_0_0.*'))[0]
@@ -54,6 +70,9 @@ def create_zoomed_tiles(tiles_dir):
     # get number of rows and columns used for full resolution
     cur_rows = len(glob.glob(os.path.join(os.path.join(tiles_dir, '0'), 'tile_*_0.*')))
     cur_cols = len(glob.glob(os.path.join(os.path.join(tiles_dir, '0'), 'tile_0_*')))
+
+    initial_rows = cur_rows
+    initial_cols = cur_cols
 
     single_tile = (cur_rows == 1) and (cur_cols == 1)
     zoom_level = 0
@@ -72,13 +91,15 @@ def create_zoomed_tiles(tiles_dir):
             for col in range(cur_cols):
                 # load the original 4 tiles image
                 new_img = create_img(prev_dir, row * 2, col * 2, 2, 2, tile_size)
-                # out_file_new = os.path.join(cur_dir, 'tile_{}_{}_new{}'.format(row, col, tile_ext))
-                # mpimg.imsave(out_file_new, new_img)
                 # scale down the image by 2 and save it to disk
                 scaled_img = block_mean(new_img, 2)
                 out_file = os.path.join(cur_dir, 'tile_{}_{}{}'.format(row, col, tile_ext))
                 cv2.imwrite(out_file, scaled_img)
         single_tile = (cur_rows == 1) and (cur_cols == 1)
+
+    if open_sea_dragon:
+        conf_file = os.path.join(tiles_dir, 'osd.js')
+        create_open_sea_dragon_conf(conf_file, tile_size, initial_rows, initial_cols, zoom_level)
 
 
 
@@ -88,13 +109,16 @@ def main():
                         and creates zoomed downsampled tiles (mipmaps), up to a level which has the entire image size as a single original tile.')
     parser.add_argument('tiles_dir', metavar='tiles_dir', type=str, 
                         help='the directory which has a sub-directory named "0" that contains the full resolution tiles')
+    parser.add_argument('-s', '--open_sea_dragon', action='store_true', 
+                        help='Create an open sea dragon conf file for these images (default: false)',
+                        default=False)
 
 
     args = parser.parse_args()
 
     #print args
 
-    create_zoomed_tiles(args.tiles_dir)
+    create_zoomed_tiles(args.tiles_dir, args.open_sea_dragon)
     # try:
     #     create_zoomed_tiles(args.tiles_dir)
     # except:

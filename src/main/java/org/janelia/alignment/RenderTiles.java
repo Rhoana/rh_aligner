@@ -140,8 +140,8 @@ public class RenderTiles {
 				raster.setDataElements( 0, 0, tileColsNum, tileRowsNum, croppedImage.getPixels() );
 								
 				// Save the image to disk
-				String outFile = outputDir + File.separatorChar + "tile_" + (row / tileSize) + "_" + (col / tileSize) + ".tif";
-				Utils.saveImage( targetImage, outFile, "png" );
+				String outFile = outputDir + File.separatorChar + "tile_" + (row / tileSize) + "_" + (col / tileSize) + ".jpg";
+				Utils.saveImage( targetImage, outFile, "jpg" );
 				
 				raster.setDataElements( 0, 0, tileSize, tileSize, origData );
 			}			
