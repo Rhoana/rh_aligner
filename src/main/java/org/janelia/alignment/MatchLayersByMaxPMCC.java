@@ -142,7 +142,7 @@ public class MatchLayersByMaxPMCC {
 			final float layerScale )
 	{
 		final ByteProcessor tp = layerTileSpecsImage.render( layer, mipmapLevel, layerScale );
-		final int[] inputPixels = ( int[] )tp.getPixels();
+		final byte[] inputPixels = ( byte[] )tp.getPixels();
 		for ( int i = 0; i < inputPixels.length; ++i )
 		{
 			/*
@@ -158,7 +158,7 @@ public class MatchLayersByMaxPMCC {
 			output.setf( i, v );
 			alpha.setf( i, w );
 			*/
-			output.setf( i,  ( float )inputPixels[ i ]);
+			output.setf( i,  ( float )( inputPixels[ i ] / 255.0f ));
 			alpha.setf( i,  1.0f );
 		}
 	}
