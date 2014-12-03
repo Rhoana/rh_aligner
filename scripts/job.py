@@ -88,7 +88,7 @@ class Job(object):
             command_list = ["sbatch",
                 "-J", self.name,                   # Job name
                 "-p", work_queue,            # Work queue (partition) = general / unrestricted / interactive / serial_requeue
-                "--requeue",
+                "--no-requeue",
                 #"--exclude=holy2b05105,hp1301,hp0403",           # Exclude some bad nodes - holy2b05105 did not have scratch2 mapped.
                 ##"--ntasks", str(self.processors),        # Number of processes
                 "--ntasks", str(1),        # Number of processes
@@ -486,7 +486,7 @@ class JobBlock(object):
             command_list = ["sbatch",
                 "-J", block_name,                   # Job name
                 "-p", work_queue,            # Work queue (partition) = general / unrestricted / interactive / serial_requeue
-                "--requeue",
+                "--no-requeue",
                 #"--exclude=holy2b05105,hp1301,hp0403",           # Exclude some bad nodes - holy2b05105 did not have scratch2 mapped.
                 "--ntasks", str(self.jobs_count),        # Number of processes
                 "--cpus-per-task", str(self.required_threads),        # Number of threads
