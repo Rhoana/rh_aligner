@@ -151,6 +151,10 @@ public class Render
         @Parameter( names = "--hide", description = "Hide the output and do not show on screen (default: false)", required = false )
         public boolean hide = false;
         
+        @Parameter( names = "--fullImage", description = "Render the full image from (0,0) to (width,height) as defined by the bounding boxes (default: false)", required = false )
+        public boolean fullImage = false;
+        
+        
 	}
 	
 	private Render() {}
@@ -581,6 +585,30 @@ public class Render
 			e.printStackTrace( System.err );
 			return;
 		}
+		
+		if ( params.fullImage )
+		{
+			// Parse the tilespecs bounding boxes to find the maximal x and y
+			float maxX = 0;
+			float maxY = 0;
+			for ( TileSpec ts : tileSpecs )
+			{
+				if ( ts.bbox != null )
+				{
+					maxX = Math.max( maxX, ts.bbox[1] );
+					maxY = Math.max( maxY, ts.bbox[3] );
+				}
+			}
+			
+			if ( maxX == 0 || maxY == 0 )
+			{
+				throw new RuntimeException( "Error: Cannot render an image of size width,height: (" + 
+					maxX + ", " + maxY + ")" );
+			}
+			params.width = ( int )maxX;
+			params.height = ( int )maxY;
+		}
+		
 		
 		/* open or create target image */
 		BufferedImage targetImage = null;

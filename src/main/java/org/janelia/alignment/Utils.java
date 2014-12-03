@@ -21,8 +21,11 @@ import ij.io.Opener;
 
 import java.awt.image.BufferedImage;
 import java.awt.image.RenderedImage;
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
@@ -32,6 +35,9 @@ import javax.imageio.ImageIO;
 import javax.imageio.ImageWriteParam;
 import javax.imageio.ImageWriter;
 import javax.imageio.stream.FileImageOutputStream;
+
+import com.google.gson.JsonParseException;
+import com.google.gson.JsonParser;
 
 import mpicbg.trakem2.transform.TranslationModel2D;
 import mpicbg.trakem2.transform.RigidModel2D;
@@ -509,6 +515,74 @@ public class Utils
 		a.set( ( float )scale, 0, 0, ( float )scale, t, t );
 		return a;
 	}
+	
+	/**
+	 * Receives a file name of either a json file or a file name that contai
+ns
+	 * a line-separated list of files.
+	 *
+	 * @param listFileOrJsonFile
+	 * @return
+	 */
+	public static List<String> getListFromFile( String listFileOrJsonFile )
+	{
+		List< String > result = new ArrayList<String>();
+
+		if ( ! listFileOrJsonFile.contains( "://" ) )
+			listFileOrJsonFile = "file://" + listFileOrJsonFile;
+
+		// Try parsing the file as JSON file, if it is successful, return a single element list,
+		// otherwise (if it fails) then read the list from the file
+		final URL url;
+		try
+		{
+			url = new URL( listFileOrJsonFile );
+		}
+		catch ( final MalformedURLException e )
+		{
+			System.err.println( "URL malformed." );
+			e.printStackTrace( System.err );
+			throw new RuntimeException( e );
+		}
+
+		try
+		{
+			new JsonParser().parse( new InputStreamReader( url.openStream() ) );
+			result.add( listFileOrJsonFile );
+			return result;
+		}
+		catch ( final JsonParseException e )
+		{
+			// The file includes a list of files
+		}
+		catch ( final Exception e )
+		{
+			e.printStackTrace( System.err );
+			throw new RuntimeException( e );
+		}
+
+		try
+		{
+			// Read the file
+			BufferedReader br = new BufferedReader( new InputStreamReader( url.openStream() ) );
+			String line;
+			while ( ( line = br.readLine() ) != null ) {
+				if ( ! line.contains( "://" ) )
+					line = "file://" + line;
+				result.add( line );
+			}
+			br.close();
+
+		}
+		catch ( final Exception e )
+		{
+			e.printStackTrace( System.err );
+			throw new RuntimeException( e );
+		}
+
+		return result;
+	}
+	
 	
 	public static final CoordinateTransformList< CoordinateTransform > getInverseModel( final CoordinateTransformList< CoordinateTransform > ctl )
 	{
