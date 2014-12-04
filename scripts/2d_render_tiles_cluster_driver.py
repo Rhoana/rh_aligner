@@ -4,7 +4,7 @@
 # normalizaes each section, and renders its 2d image.
 # The input is a directory with tilespec files in json format (each file for a single layer),
 # and a workspace directory where the intermediate and result files will be located.
-# Renders the full images in full resolution.
+# Renders the full images as squared tiles in full resolution.
 #
 
 import sys
@@ -42,28 +42,50 @@ class NormalizeCoordinates(Job):
                 self.output_dir, self.jar_file, self.tiles_fname]
 
 
-class Render2D(Job):
-    def __init__(self, dependencies, tiles_fname, out_fname, width, jar_file, threads_num=1):
+class RenderTiles2D(Job):
+    def __init__(self, dependencies, tiles_fname, out_dir, tile_size, jar_file, threads_num=1):
         Job.__init__(self)
         self.already_done = False
         self.tiles_fname = '"{0}"'.format(tiles_fname)
-        self.output_file = '-o "{0}"'.format(out_fname)
+        self.output_dir = '-o "{0}"'.format(out_dir)
         self.jar_file = '-j "{0}"'.format(jar_file)
-        self.width = '-w {0}'.format(width)
+        self.tile_size = '-s {0}'.format(tile_size)
         self.threads = threads_num
         self.threads_str = '-t {0}'.format(threads_num)
         self.dependencies = dependencies
         self.memory = 34000
         self.time = 500
         self.is_java_job = True
-        self.output = out_fname
+        self.output = out_dir
         #self.already_done = os.path.exists(self.output_file)
 
     def command(self):
         return ['python -u',
-                os.path.join(os.environ['ALIGNER'], 'scripts', 'render_2d.py'),
-                self.output_file, self.jar_file, self.width, self.threads_str, self.tiles_fname]
+                os.path.join(os.environ['ALIGNER'], 'scripts', 'render_tiles_2d.py'),
+                self.output_dir, self.jar_file, self.tile_size, self.threads_str, self.tiles_fname]
 
+
+class CreateZoomedTiles(Job):
+    def __init__(self, dependencies, in_dir, open_sea_dragon):
+        Job.__init__(self)
+        self.already_done = False
+        self.in_dir = '"{0}"'.format(in_dir)
+        self.jar_file = '-j "{0}"'.format(jar_file)
+        self.width = '-w {0}'.format(width)
+        self.open_sea_dragon = ''
+        if open_sea_dragon is True:
+            self.open_sea_dragon = '-s'
+        self.dependencies = dependencies
+        self.memory = 16000
+        self.time = 500
+        self.is_java_job = False
+        self.output = os.path.join(in_dir, "1")
+        #self.already_done = os.path.exists(self.output_file)
+
+    def command(self):
+        return ['python -u',
+                os.path.join(os.environ['ALIGNER'], 'scripts', 'create_zoomed_tiles.py'),
+                self.open_sea_dragon, self.in_dir]
 
 
 
@@ -88,9 +110,9 @@ if __name__ == '__main__':
     parser.add_argument('-j', '--jar_file', type=str, 
                         help='the jar file that includes the render (default: ../target/render-0.0.1-SNAPSHOT.jar)',
                         default='../target/render-0.0.1-SNAPSHOT.jar')
-    parser.add_argument('-f', '--format', type=str, 
-                        help='the output format (default: png)',
-                        default='png')
+    parser.add_argument('-i', '--tile_size', type=int, 
+                        help='the size (square side) of each tile (default: 512)',
+                        default=512)
     parser.add_argument('-s', '--skip_layers', type=str, 
                         help='the range of layers (sections) that will not be processed e.g., "2,3,9-11,18" (default: no skipped sections)',
                         default=None)
@@ -141,6 +163,7 @@ if __name__ == '__main__':
 
         job_normalize = None
         job_render = None
+        job_tile = None
 
         # Normalize the json file
         norm_json = os.path.join(norm_dir, tiles_fname_basename)
@@ -148,13 +171,25 @@ if __name__ == '__main__':
             print "Normalizing layer: {0}".format(slayer)
             job_normalize = NormalizeCoordinates(f, norm_dir, norm_json, args.jar_file)
 
-        # Render the normalized json file
-        out_fname = os.path.join(args.output_dir, "{0}.{1}".format(tiles_fname_prefix, args.format))
-        if not os.path.exists(out_fname):
+        # Render the normalized json file into tiles
+        out_dir = os.path.join(args.output_dir, tiles_fname_prefix)
+        create_dir(out_dir)
+        out_0_dir = os.path.join(out_dir, "0")
+        if not os.path.exists(out_0_dir):
             dependencies = [ ]
             if job_normalize != None:
                 dependencies.append(job_normalize)
-            job_render = Render2D(dependencies, norm_json, out_fname, -1, args.jar_file, threads_num=args.threads_num)
+            job_render = RenderTiles2D(dependencies, norm_json, out_0_dir, args.tile_size, args.jar_file, threads_num=args.threads_num)
+
+        # Create zoomed tiles
+        out_1_dir = os.path.join(out_dir, "1")
+        if not os.path.exists(out_1_dir):
+            dependencies = [ ]
+            if job_normalize != None:
+                dependencies.append(job_normalize)
+            if job_render != None:
+                dependencies.append(job_render)
+            job_tile = CreateZoomedTiles(dependencies, out_dir, True)
 
 
 
