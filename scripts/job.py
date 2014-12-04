@@ -55,8 +55,25 @@ class Job(object):
             return True
         all_outputs = self.output if isinstance(self.output, (list, tuple)) else [self.output]
         if all([os.path.exists(f) for f in all_outputs]):
-            self.already_done = True
-            return True
+            # If the job's output is a directory, and the job is currently running or executing, then it is not done
+            if self.jobid is not None and any([os.path.isdir(f) for f in all_outputs]):
+                s_jobid = str(self.jobid)
+                sacct_output = subprocess.check_output(['sacct', '-n', '-o', 'JobID,JobName%100,State%20'])
+                for job_line in sacct_output.split('\n'):
+
+                    job_split = job_line.split()
+                    if len(job_split) == 0:
+                        continue
+
+                    job_id = job_split[0]
+                    job_status = ' '.join(job_split[2:])
+
+                    if s_jobid == job_id and job_status == 'COMPLETED':
+                        self.already_done = True
+                        return True
+            else:
+                self.already_done = True
+                return True
         return False
 
     def dependendencies_done(self):
