@@ -9,7 +9,7 @@ import time
 from itertools import product
 from collections import defaultdict
 
-LOGS_DIR = './logs'
+LOGS_DIR = './logs_' + datetime.datetime.now().isoformat()
 MEASURE_PERFORMANCE = False
 RUN_LOCAL = False
 USE_QSUB = False
@@ -96,8 +96,8 @@ class Job(object):
                 "-t", str(self.time),              # Time in munites 1440 = 24 hours
                 "--mem-per-cpu", str(self.memory), # Max memory in MB (strict - attempts to allocate more memory will fail)
                 "--open-mode=append",              # Append to log files
-                "-o", "logs/out." + self.name,     # Standard out file
-                "-e", "logs/error." + self.name]   # Error out file
+                "-o", LOGS_DIR + "/out." + self.name,     # Standard out file
+                "-e", LOGS_DIR + "/error." + self.name]   # Error out file
 
             if len(self.dependencies) > 0:
                 #print command_list
@@ -110,7 +110,7 @@ class Job(object):
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
             if MEASURE_PERFORMANCE:
-                sbatch_out, sbatch_err = process.communicate("#!/bin/bash\nperf stat -o logs/perf.{0} {1}".format(self.name, " ".join(self.command())))
+                sbatch_out, sbatch_err = process.communicate("#!/bin/bash\nperf stat -o " + LOGS_DIR + "/perf.{0} {1}".format(self.name, " ".join(self.command())))
             else:
                 sbatch_out, sbatch_err = process.communicate("#!/bin/bash\n{0}".format(" ".join(self.command())))
 
@@ -494,8 +494,8 @@ class JobBlock(object):
                 "-t", str(self.required_full_time),              # Time in munites 1440 = 24 hours
                 "--mem", str(self.required_memory), # Max memory in MB (strict - attempts to allocate more memory will fail)
                 "--open-mode=append",              # Append to log files
-                "-o", "logs/out." + block_name,     # Standard out file
-                "-e", "logs/error." + block_name]   # Error out file
+                "-o", LOGS_DIR + "/out." + block_name,     # Standard out file
+                "-e", LOGS_DIR + "/error." + block_name]   # Error out file
 
         elif USE_QSUB:
             command_list = ["qsub"]#,
@@ -505,7 +505,7 @@ class JobBlock(object):
                 # "-l", 'nodes=1:ppn={0},walltime={1}:00'.format(str(required_cores), required_full_time),  # Number of processors
                 # #"-l", 'walltime={0}:00'.format(self.time),             # Time in munites 1440 = 24 hours
                 # #"-l", '-mppmem={0}'.format(self.memory),               # Max memory per cpu in MB (strict - attempts to allocate more memory will fail)
-                # "-e", "logs/outerror." + block_name('_')[0],      # Error out file
+                # "-e", LOGS_DIR + "/outerror." + block_name('_')[0],      # Error out file
                 # "-j", "eo"]                                            # Join standard out file to error file
 
             # Better to use file input rather than command line inputs (according to XSEDE helpdesk)
@@ -515,7 +515,7 @@ class JobBlock(object):
                "#PBS -A hvd113\n" +
                "#PBS -q {0}\n".format(QSUB_WORK_QUEUE) +
                "#PBS -l nodes=1:ppn={0}:native,walltime={1}:00\n".format(str(MAX_CORES), self.required_full_time) +
-               "#PBS -e logs/outerror.{0}\n".format(block_name.split('_')[0]) +
+               "#PBS -e " + LOGS_DIR + "/outerror.{0}\n".format(block_name.split('_')[0]) +
                "#PBS -j eo\n")
 
         if len(dependency_set) > 0:
