@@ -457,7 +457,7 @@ public class OptimizeMontageElastic
 				    ts.bbox[0] = minMaxXY[0][0];
 				    ts.bbox[1] = minMaxXY[1][0];
 				    ts.bbox[2] = minMaxXY[0][1];
-				    ts.bbox[3] = minMaxXY[0][3];
+				    ts.bbox[3] = minMaxXY[1][1];
 				    
 					//ArrayList< Transform > outTransforms = new ArrayList< Transform >(Arrays.asList(ts.transforms));
 					// (override previous transformations)

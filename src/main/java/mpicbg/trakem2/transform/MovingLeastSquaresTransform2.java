@@ -391,7 +391,7 @@ public class MovingLeastSquaresTransform2 extends mpicbg.models.MovingLeastSquar
 	 * Finds the minimal x and y (possibly z, if in 3D), and maximal x and y (and possibly z) values after the transform.
 	 * This can be used for calculating the bounding box.
 	 * 
-	 * @return two 2D/3D locations of the minimal and maximal x and y values.
+	 * @return two 2D/3D locations of the minimal and maximal x and y values: [ [minX, minY], [maxX, maxY] ].
 	 */
 	public float[][] getMinMaxXY()
 	{
@@ -402,8 +402,10 @@ public class MovingLeastSquaresTransform2 extends mpicbg.models.MovingLeastSquar
 		
 		for ( int i = 0; i < q[0].length; i++ )
 		{
+			// X
 			minAndMax[0][0] = Math.min( minAndMax[0][0], q[0][i] );
 			minAndMax[1][0] = Math.max( minAndMax[1][0], q[0][i] );
+			// Y
 			minAndMax[0][1] = Math.min( minAndMax[0][1], q[1][i] );
 			minAndMax[1][1] = Math.max( minAndMax[1][1], q[1][i] );
 		}
