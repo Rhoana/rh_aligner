@@ -139,6 +139,7 @@ public class TileSpecsImage {
 			/* load image TODO use Bioformats for strange formats */
 			tsMipmapEntry = tsMipmapLevels.get( key );
 			final String imgUrl = tsMipmapEntry.imageUrl;
+			System.out.println( "Rendering tile: " + imgUrl );
 			final ImagePlus imp = Utils.openImagePlusUrl( imgUrl );
 			if ( imp == null )
 			{
