@@ -179,7 +179,7 @@ if __name__ == '__main__':
             dependencies = [ ]
             if job_normalize != None:
                 dependencies.append(job_normalize)
-            job_render = RenderTiles2D(dependencies, norm_json, out_0_dir, args.tile_size, args.jar_file, threads_num=args.threads_num)
+            job_render = RenderTiles2D(dependencies, norm_json, out_0_dir, args.tile_size, args.jar_file, threads_num=8)
 
         # Create zoomed tiles
         out_1_dir = os.path.join(out_dir, "1")

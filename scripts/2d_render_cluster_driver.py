@@ -154,7 +154,7 @@ if __name__ == '__main__':
             dependencies = [ ]
             if job_normalize != None:
                 dependencies.append(job_normalize)
-            job_render = Render2D(dependencies, norm_json, out_fname, -1, args.jar_file, threads_num=args.threads_num)
+            job_render = Render2D(dependencies, norm_json, out_fname, -1, args.jar_file, threads_num=8)
 
 
 
