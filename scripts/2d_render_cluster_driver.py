@@ -113,7 +113,7 @@ if __name__ == '__main__':
 
 
     norm_dir = os.path.join(args.workspace_dir, "normalized")
-    utils.create_dir(norm_dir)
+    create_dir(norm_dir)
     create_dir(args.output_dir)
 
     # Get all input json files (one per section) into a dictionary {json_fname -> [filtered json fname, sift features file, etc.]}
