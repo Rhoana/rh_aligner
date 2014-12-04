@@ -70,8 +70,6 @@ class CreateZoomedTiles(Job):
         Job.__init__(self)
         self.already_done = False
         self.in_dir = '"{0}"'.format(in_dir)
-        self.jar_file = '-j "{0}"'.format(jar_file)
-        self.width = '-w {0}'.format(width)
         self.open_sea_dragon = ''
         if open_sea_dragon is True:
             self.open_sea_dragon = '-s'
