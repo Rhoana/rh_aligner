@@ -27,7 +27,7 @@ def render_2d(tiles_fname, output_fname, width, jar_file, threads_num=None):
 def main():
     # Command line parser
     parser = argparse.ArgumentParser(description='Renders a single tilespec file (with all its tiles)')
-    parser.add_argument('tiles_file', metavar='tiles_file', type=str, nargs='+',
+    parser.add_argument('tiles_file', metavar='tiles_file', type=str,
                         help='a json tilespecs file that need to be rendered')
     parser.add_argument('-o', '--output_fname', type=str, 
                         help='an output file (default: ./tilespec_fname.tif)',
