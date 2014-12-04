@@ -413,7 +413,7 @@ public class Render
 				final ImageProcessorWithMasks source = new ImageProcessorWithMasks( ipMipmap, bpMaskSource, null );
 				final ImageProcessorWithMasks target = new ImageProcessorWithMasks( tp, bpMaskTarget, null );
 				final TransformMeshMappingWithMasks< TransformMesh > mapping = new TransformMeshMappingWithMasks< TransformMesh >( mesh );
-				mapping.mapInterpolated( source, target );
+				mapping.mapInterpolated( source, target, threadsNum );
 				endTime = System.currentTimeMillis();
 				System.out.println("Transforming the images phase took: " + ((endTime - startTime) / 1000.0) + " sec");
 	
