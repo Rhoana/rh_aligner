@@ -23,7 +23,7 @@ def render_tiles_2d(tiles_fname, output_dir, tile_size, jar_file, threads_num=No
 def main():
     # Command line parser
     parser = argparse.ArgumentParser(description='Renders a single tilespec file (with all its tiles) into a tiled image')
-    parser.add_argument('tiles_file', metavar='tiles_file', type=str, nargs='+',
+    parser.add_argument('tiles_file', metavar='tiles_file', type=str,
                         help='a json tilespecs file that need to be rendered')
     parser.add_argument('-o', '--output_dir', type=str, 
                         help='The directory where the tiled images will be stored (default: ./output_tiles)',
