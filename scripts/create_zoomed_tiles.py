@@ -80,6 +80,7 @@ def create_zoomed_tiles(tiles_dir, open_sea_dragon=False):
     while not single_tile:
         prev_dir = os.path.join(tiles_dir, '{}'.format(zoom_level))
         zoom_level += 1
+        print "Creating zoom level {} tiles".format(zoom_level)
         cur_dir = os.path.join(tiles_dir, '{}'.format(zoom_level))
         utils.create_dir(cur_dir)
         prev_rows = cur_rows
@@ -99,6 +100,7 @@ def create_zoomed_tiles(tiles_dir, open_sea_dragon=False):
 
     if open_sea_dragon:
         conf_file = os.path.join(tiles_dir, 'osd.js')
+        print "Creating open sea dragon configuration file at: {}".format(conf_file)
         create_open_sea_dragon_conf(conf_file, tile_size, initial_rows, initial_cols, zoom_level)
 
 
