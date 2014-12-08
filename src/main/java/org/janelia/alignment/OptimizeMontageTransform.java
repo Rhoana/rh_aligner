@@ -295,9 +295,9 @@ public class OptimizeMontageTransform
 		try
 		{
 			if ( params.filterOutliers )
-				tc.optimizeAndFilter( params.maxEpsilon, params.maxIterations, params.maxPlateauwidth, params.meanFactor );
+				tc.optimizeAndFilter( params.maxEpsilon, params.maxIterations, params.maxPlateauwidth, params.meanFactor, params.numThreads );
 			else
-				tc.optimize( params.maxEpsilon, params.maxIterations, params.maxPlateauwidth );
+				tc.optimize( params.maxEpsilon, params.maxIterations, params.maxPlateauwidth, params.numThreads );
 		}
 		catch ( final Exception e )
 		{
