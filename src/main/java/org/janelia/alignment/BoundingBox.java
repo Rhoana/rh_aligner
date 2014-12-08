@@ -237,4 +237,9 @@ public class BoundingBox {
 		};
 		return arr;
 	}
+	
+	public boolean containsPoint( int x, int y ) {
+		return ( (x >= startPoint.getX()) && (x <= endPoint.getX()) &&
+				 (y >= startPoint.getY()) && (y <= endPoint.getY()) );
+	}
 }

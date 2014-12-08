@@ -1,29 +1,20 @@
 package org.janelia.alignment;
 
-import ij.ImageJ;
 import ij.ImagePlus;
 import ij.process.ByteProcessor;
-import ij.process.ColorProcessor;
 import ij.process.ImageProcessor;
 
-import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
-import java.awt.image.DataBuffer;
-import java.awt.image.DataBufferByte;
 import java.awt.image.WritableRaster;
 import java.io.File;
-import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.util.ArrayList;
 import java.util.TreeMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-
-import javax.imageio.ImageIO;
 
 import mpicbg.models.AffineModel2D;
 import mpicbg.models.CoordinateTransform;
@@ -31,6 +22,7 @@ import mpicbg.models.CoordinateTransformList;
 import mpicbg.models.CoordinateTransformMesh;
 import mpicbg.models.TransformMesh;
 import mpicbg.trakem2.transform.TransformMeshMappingWithMasks;
+import mpicbg.trakem2.transform.TranslationModel2D;
 import mpicbg.trakem2.transform.TransformMeshMappingWithMasks.ImageProcessorWithMasks;
 
 import com.beust.jcommander.JCommander;
@@ -64,18 +56,180 @@ public class RenderTiles {
         
         @Parameter( names = "--quality", description = "JPEG quality float [0, 1]", required = false )
         public float quality = 0.85f;
-        
-        @Parameter( names = "--width", description = "Target image width (optional, if not given will be taken from the tilespecs)", required = false )
-        public int width = -1;
-        
-        @Parameter( names = "--height", description = "Target image height (optional, if not given will be taken from the tilespecs)", required = false )
-        public int height = -1;
 
         @Parameter( names = "--tileSize", description = "The size of a tile (one side of the square)", required = false )
         public int tileSize = 512;
 
 	}
 
+	
+	private static class SingleTileSpecRender {
+		
+		public SingleTileSpecRender( final TileSpec ts, final int threadsNum ) {
+			this( ts, threadsNum, DEFAULT_TRIANGLE_SIZE );
+		}
+
+		public SingleTileSpecRender( final TileSpec ts, final int threadsNum, final int triangleSize ) {
+			this.ts = ts;
+			this.threadsNum = threadsNum;
+			this.bbox = null;
+			this.renderedBp = null;
+			this.triangleSize = triangleSize;
+		}
+
+		/**
+		 * Fetch the current tilespec bounding box (doesn't have to start at (0,0))
+		 * @return
+		 */
+		public BoundingBox getBoundingBox() {
+			if ( bbox == null ) {
+				// check if the tilespec already has a bounding box
+				if ( ts.bbox == null ) {
+					throw new RuntimeException( "Could not find a bounding box for a tilespec" );
+				}
+				
+				bbox = new BoundingBox(
+						(int) ts.bbox[0],
+						(int) ts.bbox[1],
+						(int) ts.bbox[2],
+						(int) ts.bbox[3],
+						ts.layer,
+						ts.layer
+					);
+			}
+			return bbox;
+		}
+
+		/**
+		 * Get normalization transform that translates the tile to (0,0), or null if none is needed
+		 */
+		private TranslationModel2D getNormalizationTransform() {
+			BoundingBox currentBBox = getBoundingBox();
+			int minX = currentBBox.getStartPoint().getX();
+			int minY = currentBBox.getStartPoint().getY();
+			TranslationModel2D normalizationTransform = null;
+			if (( minX != 0 ) || ( minY != 0 )) {
+				// Add transformation (translation)
+				normalizationTransform = new TranslationModel2D();
+				normalizationTransform.init( -minX + ".0 " + -minY + ".0" );
+			}
+			return normalizationTransform;
+		}
+
+		public ByteProcessor render( ) {
+			return render( 1.0f );
+		}
+
+		public ByteProcessor render( final float scale ) {
+			if ( renderedBp == null ) {
+				
+				final BoundingBox currentBBox = getBoundingBox();
+				
+				TranslationModel2D normalizationTransform = getNormalizationTransform();
+				final int tileWidth = currentBBox.getWidth();
+				final int tileHeight = currentBBox.getHeight();
+				
+				final int mipmapLevel = 0;
+				
+				/* create a target */
+				renderedBp = new ByteProcessor( (int) ( tileWidth * scale ),
+						(int) ( tileHeight * scale ) );
+				
+				// Create an offset according to the bounding box
+				final int offsetX = 0; //boundingBox.getStartPoint().getX();
+				final int offsetY = 0; //boundingBox.getStartPoint().getY();
+				
+				
+				ImageAndMask tsMipmapEntry = null;
+				ImageProcessor tsIp = null;	
+				
+				TreeMap< String, ImageAndMask > tsMipmapLevels = ts.getMipmapLevels();
+				
+				String key = tsMipmapLevels.floorKey( String.valueOf( mipmapLevel ) );
+				if ( key == null )
+					key = tsMipmapLevels.firstKey();
+				
+				/* load image TODO use Bioformats for strange formats */
+				tsMipmapEntry = tsMipmapLevels.get( key );
+				final String imgUrl = tsMipmapEntry.imageUrl;
+				System.out.println( "Rendering tile: " + imgUrl );
+				final ImagePlus imp = Utils.openImagePlusUrl( imgUrl );
+				if ( imp == null )
+				{
+					throw new RuntimeException( "Failed to load image '" + imgUrl + "'." );
+				}
+				tsIp = imp.getProcessor();
+	
+				
+				/* open mask */
+				final ByteProcessor bpMaskSource;
+				final ByteProcessor bpMaskTarget;
+				final String maskUrl = tsMipmapEntry.maskUrl;
+				if ( maskUrl != null )
+				{
+					final ImagePlus impMask = Utils.openImagePlusUrl( maskUrl );
+					if ( impMask == null )
+					{
+						System.err.println( "Failed to load mask '" + maskUrl + "'." );
+						bpMaskSource = null;
+						bpMaskTarget = null;
+					}
+					else
+					{
+						/* create according mipmap level */
+						bpMaskSource = Downsampler.downsampleByteProcessor( impMask.getProcessor().convertToByteProcessor(), mipmapLevel );
+						bpMaskTarget = new ByteProcessor( renderedBp.getWidth(), renderedBp.getHeight() );
+					}
+				}
+				else
+				{
+					bpMaskSource = null;
+					bpMaskTarget = null;
+				}
+				
+				
+				/* attach mipmap transformation */
+				final CoordinateTransformList< CoordinateTransform > ctl = ts.createTransformList();
+				final AffineModel2D scaleTransform = new AffineModel2D();
+				scaleTransform.set( ( float )scale, 0, 0, ( float )scale, -( float )( offsetX * scale ), -( float )( offsetY * scale ) );
+	
+				ctl.add( scaleTransform );
+				if ( normalizationTransform != null )
+					ctl.add( normalizationTransform );
+	
+				final CoordinateTransformList< CoordinateTransform > ctlMipmap = new CoordinateTransformList< CoordinateTransform >();
+				ctlMipmap.add( Utils.createScaleLevelTransform( mipmapLevel ) );
+				ctlMipmap.add( ctl );
+				
+				/* create mesh */
+				final CoordinateTransformMesh mesh = new CoordinateTransformMesh( 
+						ctlMipmap, 
+						( int )( tileWidth / triangleSize + 0.5 ), 
+						tsIp.getWidth(), 
+						tsIp.getHeight(), 
+						threadsNum );
+				
+				final ImageProcessorWithMasks source = new ImageProcessorWithMasks( tsIp, bpMaskSource, null );
+				final ImageProcessorWithMasks target = new ImageProcessorWithMasks( renderedBp, bpMaskTarget, null );
+				final TransformMeshMappingWithMasks< TransformMesh > mapping = new TransformMeshMappingWithMasks< TransformMesh >( mesh );
+				mapping.mapInterpolated( source, target, threadsNum );
+				
+				/* convert to 24bit RGB */
+				renderedBp.setMinAndMax( ts.minIntensity, ts.maxIntensity );
+	
+			}
+			return renderedBp;
+		}
+
+		
+		private TileSpec ts;
+		private int threadsNum;
+		private BoundingBox bbox;
+		private ByteProcessor renderedBp;
+		private int triangleSize;
+		private static final int DEFAULT_TRIANGLE_SIZE = 64;
+
+	}
 	
 	
 	private RenderTiles() {}
@@ -108,47 +262,70 @@ public class RenderTiles {
 		
 		return params;
 	}	
-
 	
 	private static void saveAsTiles( 
-			final ByteProcessor bpEntireSection,
+			final SingleTileSpecRender[] origTiles,
+			final BoundingBox entireImageBBox,
 			final int tileSize,
-			final String outputDir,
-			final int layer )
+			final String outputDir )
 	{
 		BufferedImage targetImage = new BufferedImage( tileSize, tileSize, BufferedImage.TYPE_BYTE_GRAY );
+		ByteProcessor targetBp = new ByteProcessor( targetImage );
 		WritableRaster origRaster = targetImage.getRaster();
 		Object origData = origRaster.getDataElements( 0, 0, tileSize, tileSize, null );
 		WritableRaster raster = targetImage.getRaster();
 		
 		
-		bpEntireSection.snapshot();
-
-		for ( int row = 0; row < bpEntireSection.getHeight(); row += tileSize )
+		for ( int row = 0; row < entireImageBBox.getHeight(); row += tileSize )
 		{
-			int tileRowsNum = Math.min( row + tileSize, bpEntireSection.getHeight() ) - row;
-			for ( int col = 0; col < bpEntireSection.getWidth(); col += tileSize )
+			int tileMaxRow = Math.min( row + tileSize, entireImageBBox.getHeight() );
+			for ( int col = 0; col < entireImageBBox.getWidth(); col += tileSize )
 			{
-				int tileColsNum = Math.min( col + tileSize, bpEntireSection.getWidth() ) - col;
+				int tileMaxCol = Math.min( col + tileSize, entireImageBBox.getWidth() );
 
-				// Crop the image
-				bpEntireSection.resetRoi();
-				bpEntireSection.setRoi( col, row, tileColsNum, tileRowsNum );
-				ImageProcessor croppedImage = bpEntireSection.crop();
-
-				// Save the cropped image 
-				raster.setDataElements( 0, 0, tileColsNum, tileRowsNum, croppedImage.getPixels() );
-								
+				// Set each pixel of the output tile
+				for ( int pixelRow = row; pixelRow < tileMaxRow; pixelRow++ ) {
+					for ( int pixelCol = col; pixelCol < tileMaxCol; pixelCol++ ) {
+						int sumPixelValue = 0;
+						int overlapPixelCount = 0;
+						
+						// Iterate over all tiles that this pixel is part of, and the average of
+						// this pixel's values will be used as the output value
+						// Find the original tiles that are needed for the output tile
+						for ( int origTileIdx = 0; origTileIdx < origTiles.length; origTileIdx++ ) {
+							BoundingBox origTileBBox = origTiles[ origTileIdx ].getBoundingBox();
+							if ( origTileBBox.containsPoint( pixelCol, pixelRow ) ) {
+								ByteProcessor origTileBp = origTiles[ origTileIdx ].render();
+								int translatedX = pixelCol - origTileBBox.getStartPoint().getX();
+								int translatedY = pixelRow - origTileBBox.getStartPoint().getY();
+								if ( origTileBp.get( translatedX, translatedY ) != 0 ) {
+									sumPixelValue += origTileBp.get( translatedX, translatedY );
+									overlapPixelCount++;
+								}
+							}
+						}
+						
+						if ( overlapPixelCount != 0 ) {
+							targetBp.set(
+									pixelCol - col,
+									pixelRow - row,
+									(sumPixelValue / overlapPixelCount) );
+						}
+					}
+					
+				}
+												
 				// Save the image to disk
 				String outFile = outputDir + File.separatorChar + "tile_" + (row / tileSize) + "_" + (col / tileSize) + ".jpg";
 				Utils.saveImage( targetImage, outFile, "jpg" );
 				
+				// Clear the output image
 				raster.setDataElements( 0, 0, tileSize, tileSize, origData );
 			}			
 		}
 	}
 
-
+	
 
 	public static void main( final String[] args )
 	{
@@ -186,43 +363,25 @@ public class RenderTiles {
 			return;
 		}
 		
-		TileSpecsImage entireSection = new TileSpecsImage( tileSpecs, params.res );
-		entireSection.setThreadsNum( params.numThreads );
 		
-		int width = -1;
-		int height = -1;
-		if ( ( params.width == -1 ) ||
-			 ( params.height == -1 ) )
-		{
-			// Find the actual width and height of the image using the bounding boxes in the tilespecs
-			BoundingBox bbox = entireSection.getBoundingBox();
-			width = bbox.getWidth();
-			height = bbox.getHeight();
+		// Load each original tile and compute the entire image bbox
+		System.out.println( "Loading tilespecs and computing entire bounding box" );
+		SingleTileSpecRender[] origTilesRendered = new SingleTileSpecRender[ tileSpecs.length ];
+		BoundingBox entireImageBBox = new BoundingBox();
+		for ( int i = 0; i < origTilesRendered.length; i++ ) {
+			origTilesRendered[ i ] = new SingleTileSpecRender( tileSpecs[ i ], params.numThreads );
+			BoundingBox origTileBBox = origTilesRendered[ i ].getBoundingBox();
+			// Update the entire image bounding box
+			entireImageBBox.extendByBoundingBox(origTileBBox);
 		}
-		
-		if ( params.width != -1 )
-			width = params.width;
-
-		if ( params.height != -1 )
-			height = params.height;
-
-		// The mipmap level to work on
-		// TODO: Should be a parameter from the user,
-		//       and decide whether or not to create the mipmaps if they are missing
-		int mipmapLevel = 0;
-
-		// Render the entire image
-		// TODO: maybe we should only render small tiles and save them (instead of rendering everything and saving the tiles)
-		System.out.println( "Rendering the image to a temporary buffer" );
-		ByteProcessor bpEntireSection = entireSection.render( tileSpecs[0].layer, mipmapLevel, ( float )params.scale, width, height );
-		
+		System.out.println( "Image bounding box is: " + entireImageBBox );
 		
 		System.out.println( "Saving all tiles" );
 		saveAsTiles( 
-				bpEntireSection, 
+				origTilesRendered,
+				entireImageBBox,
 				params.tileSize, 
-				params.targetDir,
-				tileSpecs[0].layer );
+				params.targetDir );
 		
 		System.out.println( "Done." );
 		
