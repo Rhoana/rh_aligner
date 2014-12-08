@@ -91,7 +91,7 @@ class OptimizeMontageTransform(Job):
         self.dependencies = dependencies
         #self.threads = threads_num
         #self.threads_str = "-t {0}".format(threads_num)
-        self.memory = 4000
+        self.memory = 6000
         self.time = 200
         self.is_java_job = True
         self.output = opt_output_file
