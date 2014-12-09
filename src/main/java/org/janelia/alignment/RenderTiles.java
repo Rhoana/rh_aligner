@@ -10,6 +10,7 @@ import java.io.File;
 import java.io.InputStreamReader;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.TreeMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -325,6 +326,106 @@ public class RenderTiles {
 		}
 	}
 
+	private static void saveAsTiles( 
+			final SingleTileSpecRender[] origTiles,
+			final BoundingBox entireImageBBox,
+			final int tileSize,
+			final String outputDir,
+			final int threadsNum )
+	{
+		// Divide the rows between the threads
+		final int rowsPerThread = ( entireImageBBox.getHeight() / tileSize ) / threadsNum;
+		
+		// Initialize threads
+		final ExecutorService exec = Executors.newFixedThreadPool( threadsNum );
+		final ArrayList< Future< ? > > tasks = new ArrayList< Future< ? > >();
+
+		for ( int t = 0; t < threadsNum; t++ ) {
+			final int fromRow = t * rowsPerThread * tileSize;
+			final int lastRow;
+			if ( t == threadsNum - 1 ) // lastThread
+				lastRow = entireImageBBox.getHeight();
+			else
+				lastRow = fromRow + rowsPerThread * tileSize;
+			
+			tasks.add( exec.submit( new Runnable() {
+				
+				@Override
+				public void run() {
+					BufferedImage targetImage = new BufferedImage( tileSize, tileSize, BufferedImage.TYPE_BYTE_GRAY );
+					ByteProcessor targetBp = new ByteProcessor( targetImage );
+					WritableRaster origRaster = targetImage.getRaster();
+					Object origData = origRaster.getDataElements( 0, 0, tileSize, tileSize, null );
+					WritableRaster raster = targetImage.getRaster();
+
+					for ( int row = fromRow; row < lastRow; row += tileSize )
+					{
+						int tileMaxRow = Math.min( row + tileSize, entireImageBBox.getHeight() );
+						for ( int col = 0; col < entireImageBBox.getWidth(); col += tileSize )
+						{
+							int tileMaxCol = Math.min( col + tileSize, entireImageBBox.getWidth() );
+
+							// Set each pixel of the output tile
+							for ( int pixelRow = row; pixelRow < tileMaxRow; pixelRow++ ) {
+								for ( int pixelCol = col; pixelCol < tileMaxCol; pixelCol++ ) {
+									int sumPixelValue = 0;
+									int overlapPixelCount = 0;
+									
+									// Iterate over all tiles that this pixel is part of, and the average of
+									// this pixel's values will be used as the output value
+									// Find the original tiles that are needed for the output tile
+									for ( int origTileIdx = 0; origTileIdx < origTiles.length; origTileIdx++ ) {
+										BoundingBox origTileBBox = origTiles[ origTileIdx ].getBoundingBox();
+										if ( origTileBBox.containsPoint( pixelCol, pixelRow ) ) {
+											ByteProcessor origTileBp = origTiles[ origTileIdx ].render();
+											int translatedX = pixelCol - origTileBBox.getStartPoint().getX();
+											int translatedY = pixelRow - origTileBBox.getStartPoint().getY();
+											if ( origTileBp.get( translatedX, translatedY ) != 0 ) {
+												sumPixelValue += origTileBp.get( translatedX, translatedY );
+												overlapPixelCount++;
+											}
+										}
+									}
+									
+									if ( overlapPixelCount != 0 ) {
+										targetBp.set(
+												pixelCol - col,
+												pixelRow - row,
+												(sumPixelValue / overlapPixelCount) );
+									}
+								}
+								
+							}
+															
+							// Save the image to disk
+							String outFile = outputDir + File.separatorChar + "tile_" + (row / tileSize) + "_" + (col / tileSize) + ".jpg";
+							Utils.saveImage( targetImage, outFile, "jpg" );
+							
+							// Clear the output image
+							raster.setDataElements( 0, 0, tileSize, tileSize, origData );
+						}			
+					}
+				}
+			}));
+
+		}
+
+		for ( Future< ? > task : tasks )
+		{
+			try {
+				task.get();
+			} catch (InterruptedException e) {
+				exec.shutdownNow();
+				e.printStackTrace();
+			} catch (ExecutionException e) {
+				exec.shutdownNow();
+				e.printStackTrace();
+			}
+		}
+
+		exec.shutdown();
+	}
+
 	
 
 	public static void main( final String[] args )
@@ -376,12 +477,28 @@ public class RenderTiles {
 		}
 		System.out.println( "Image bounding box is: " + entireImageBBox );
 		
+		// Pre-render all original tiles, so we can have a parallel version that saves
+		// the new tiles
+		System.out.println( "Rendering all tiles in the tilespec" );
+		for ( int i = 0; i < origTilesRendered.length; i++ ) {
+			origTilesRendered[ i ].render();
+		}
+		
 		System.out.println( "Saving all tiles" );
-		saveAsTiles( 
-				origTilesRendered,
-				entireImageBBox,
-				params.tileSize, 
-				params.targetDir );
+		if ( params.numThreads == 1 ) {
+			saveAsTiles( 
+					origTilesRendered,
+					entireImageBBox,
+					params.tileSize, 
+					params.targetDir );
+		} else {
+			saveAsTiles( 
+					origTilesRendered,
+					entireImageBBox,
+					params.tileSize, 
+					params.targetDir,
+					params.numThreads );
+		}
 		
 		System.out.println( "Done." );
 		
