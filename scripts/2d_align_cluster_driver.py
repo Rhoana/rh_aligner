@@ -89,10 +89,10 @@ class OptimizeMontageTransform(Job):
         else:
             self.fixed_tiles = '-f {0}'.format(" ".join(str(f) for f in fixed_tiles))
         self.dependencies = dependencies
-        #self.threads = threads_num
-        #self.threads_str = "-t {0}".format(threads_num)
+        self.threads = threads_num
+        self.threads_str = "-t {0}".format(threads_num)
         self.memory = 6000
-        self.time = 200
+        self.time = 300
         self.is_java_job = True
         self.output = opt_output_file
         #self.already_done = os.path.exists(self.output_file)
@@ -100,7 +100,7 @@ class OptimizeMontageTransform(Job):
     def command(self):
         return ['python -u',
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'optimize_montage_transform.py'),
-                self.output_file, self.fixed_tiles, self.jar_file, self.conf_fname, self.corr_fname, self.tiles_fname]
+                self.output_file, self.fixed_tiles, self.jar_file, self.conf_fname, self.threads_str, self.corr_fname, self.tiles_fname]
 
 
 
