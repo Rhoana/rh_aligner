@@ -53,8 +53,8 @@ class RenderTiles2D(Job):
         self.threads = threads_num
         self.threads_str = '-t {0}'.format(threads_num)
         self.dependencies = dependencies
-        self.memory = 34000
-        self.time = 500
+        self.memory = 55000
+        self.time = 600
         self.is_java_job = True
         self.output = out_dir
         #self.already_done = os.path.exists(self.output_file)
@@ -177,7 +177,7 @@ if __name__ == '__main__':
             dependencies = [ ]
             if job_normalize != None:
                 dependencies.append(job_normalize)
-            job_render = RenderTiles2D(dependencies, norm_json, out_0_dir, args.tile_size, args.jar_file, threads_num=8)
+            job_render = RenderTiles2D(dependencies, norm_json, out_0_dir, args.tile_size, args.jar_file, threads_num=32)
 
         # Create zoomed tiles
         out_1_dir = os.path.join(out_dir, "1")
