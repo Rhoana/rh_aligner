@@ -122,7 +122,7 @@ class MatchByMaxPMCC(Job):
         self.threads = threads_num
         self.threads_str = '-t {0}'.format(threads_num)
         self.dependencies = dependencies
-        self.memory = 25000
+        self.memory = 28000
         self.time = 600
         self.is_java_job = True
         self.output = pmcc_output_file
@@ -316,7 +316,7 @@ if __name__ == '__main__':
             if job_opt_montage != None:
                 dependencies.append(job_opt_montage)
             job_pmcc = MatchByMaxPMCC(dependencies, layers_data[slayer]['optimized_montage'], \
-                [ fixed_tile ], pmcc_fname, args.jar_file, conf_fname=args.conf_file_name, threads_num=8)
+                [ fixed_tile ], pmcc_fname, args.jar_file, conf_fname=args.conf_file_name, threads_num=16)
         layers_data[slayer]['matched_pmcc'] = pmcc_fname
 
 
