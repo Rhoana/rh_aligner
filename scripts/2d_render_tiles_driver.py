@@ -65,4 +65,4 @@ if not os.path.exists(out_0_dir):
 # create the zoomed tiles
 out_1_dir = os.path.join(args.output_dir, "1")
 if not os.path.exists(out_1_dir):
-    create_zoomed_tiles(args.output_dir, True)
+    create_zoomed_tiles(args.output_dir, True, args.threads_num)

@@ -66,7 +66,7 @@ class RenderTiles2D(Job):
 
 
 class CreateZoomedTiles(Job):
-    def __init__(self, dependencies, in_dir, open_sea_dragon):
+    def __init__(self, dependencies, in_dir, open_sea_dragon, processes_num=1):
         Job.__init__(self)
         self.already_done = False
         self.in_dir = '"{0}"'.format(in_dir)
@@ -74,6 +74,8 @@ class CreateZoomedTiles(Job):
         if open_sea_dragon is True:
             self.open_sea_dragon = '-s'
         self.dependencies = dependencies
+        self.threads = processes_num
+        self.processes_str = '-p {0}'.format(processes_num)
         self.memory = 16000
         self.time = 500
         self.is_java_job = False
@@ -83,7 +85,7 @@ class CreateZoomedTiles(Job):
     def command(self):
         return ['python -u',
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'create_zoomed_tiles.py'),
-                self.open_sea_dragon, self.in_dir]
+                self.open_sea_dragon, self.processes_str, self.in_dir]
 
 
 
@@ -187,7 +189,7 @@ if __name__ == '__main__':
                 dependencies.append(job_normalize)
             if job_render != None:
                 dependencies.append(job_render)
-            job_tile = CreateZoomedTiles(dependencies, out_dir, True)
+            job_tile = CreateZoomedTiles(dependencies, out_dir, True, processes_num=16)
 
 
 

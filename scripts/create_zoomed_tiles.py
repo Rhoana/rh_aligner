@@ -14,6 +14,7 @@ import math
 import numpy as np
 from scipy import ndimage
 import cv2
+import multiprocessing as mp
 
 
 def block_mean(ar, fact):
@@ -60,7 +61,18 @@ def create_open_sea_dragon_conf(conf_file, tile_size, initial_rows, initial_cols
         conf_data.write('}\n')
 
 
-def create_zoomed_tiles(tiles_dir, open_sea_dragon=False):
+def worker_process_create_zoomed_tiles(prev_dir, cur_dir, tile_size, tile_ext, rows, cur_cols):
+    for row in range(rows[0], rows[1]):
+        for col in range(cur_cols):
+            # load the original 4 tiles image
+            new_img = create_img(prev_dir, row * 2, col * 2, 2, 2, tile_size)
+            # scale down the image by 2 and save it to disk
+            scaled_img = block_mean(new_img, 2)
+            out_file = os.path.join(cur_dir, 'tile_{}_{}{}'.format(row, col, tile_ext))
+            cv2.imwrite(out_file, scaled_img)
+
+
+def create_zoomed_tiles(tiles_dir, open_sea_dragon=False, processes_num=1):
     #all_tiles = glob.glob(os.path.join(os.path.join(tiles_dir, '0'), '*'))
 
     first_tile = glob.glob(os.path.join(os.path.join(tiles_dir, '0'), 'tile_0_0.*'))[0]
@@ -77,26 +89,79 @@ def create_zoomed_tiles(tiles_dir, open_sea_dragon=False):
     single_tile = (cur_rows == 1) and (cur_cols == 1)
     zoom_level = 0
 
-    while not single_tile:
-        prev_dir = os.path.join(tiles_dir, '{}'.format(zoom_level))
-        zoom_level += 1
-        print "Creating zoom level {} tiles".format(zoom_level)
-        cur_dir = os.path.join(tiles_dir, '{}'.format(zoom_level))
-        utils.create_dir(cur_dir)
-        prev_rows = cur_rows
-        prev_cols = cur_cols
-        cur_rows =  int(math.ceil(float(prev_rows) / 2))
-        cur_cols =  int(math.ceil(float(prev_cols) / 2))
-        # create the downscaled images and save them
-        for row in range(cur_rows):
-            for col in range(cur_cols):
-                # load the original 4 tiles image
-                new_img = create_img(prev_dir, row * 2, col * 2, 2, 2, tile_size)
-                # scale down the image by 2 and save it to disk
-                scaled_img = block_mean(new_img, 2)
-                out_file = os.path.join(cur_dir, 'tile_{}_{}{}'.format(row, col, tile_ext))
-                cv2.imwrite(out_file, scaled_img)
-        single_tile = (cur_rows == 1) and (cur_cols == 1)
+    if processes_num == 1: # Single process execution
+        while not single_tile:
+            prev_dir = os.path.join(tiles_dir, '{}'.format(zoom_level))
+            zoom_level += 1
+            print "Creating zoom level {} tiles".format(zoom_level)
+            cur_dir = os.path.join(tiles_dir, '{}'.format(zoom_level))
+            utils.create_dir(cur_dir)
+            prev_rows = cur_rows
+            prev_cols = cur_cols
+            cur_rows =  int(math.ceil(float(prev_rows) / 2))
+            cur_cols =  int(math.ceil(float(prev_cols) / 2))
+            # create the downscaled images and save them
+            for row in range(cur_rows):
+                for col in range(cur_cols):
+                    # load the original 4 tiles image
+                    new_img = create_img(prev_dir, row * 2, col * 2, 2, 2, tile_size)
+                    # scale down the image by 2 and save it to disk
+                    scaled_img = block_mean(new_img, 2)
+                    out_file = os.path.join(cur_dir, 'tile_{}_{}{}'.format(row, col, tile_ext))
+                    cv2.imwrite(out_file, scaled_img)
+            single_tile = (cur_rows == 1) and (cur_cols == 1)
+    else: # Multiple process execution
+
+        while not single_tile:
+            prev_dir = os.path.join(tiles_dir, '{}'.format(zoom_level))
+            zoom_level += 1
+            print "Creating zoom level {} tiles".format(zoom_level)
+            cur_dir = os.path.join(tiles_dir, '{}'.format(zoom_level))
+            utils.create_dir(cur_dir)
+            prev_rows = cur_rows
+            prev_cols = cur_cols
+            cur_rows =  int(math.ceil(float(prev_rows) / 2))
+            cur_cols =  int(math.ceil(float(prev_cols) / 2))
+
+            # Create a list of jobs (rows), so each process will fetch a row and work on it
+            rows_list = []
+            pool = None
+            if cur_rows < processes_num:
+                # create cur_rows-1 worker processes
+                if cur_rows > 1:
+                    print "Creating {} other processes".format(cur_rows - 1)
+                    pool = mp.Pool(processes=cur_rows - 1)
+                for r in range(cur_rows):
+                    rows_list.append([r, r + 1])
+            else:                
+                # create N-1 worker processes
+                pool = mp.Pool(processes=processes_num - 1)
+                print "Creating {} other processes".format(processes_num - 1)
+                rows_per_processes = cur_rows / processes_num
+                r = 0
+                for i in range(processes_num):
+                    if i == processes_num - 1:
+                        rows_list.append([r, cur_rows])
+                    else:
+                        rows_list.append([r, r + rows_per_processes])
+                    r += rows_per_processes
+
+            # run all jobs but one by other processes
+            async_res = None
+            for row_job in rows_list[:-1]:
+                async_res = pool.apply_async(worker_process_create_zoomed_tiles, (prev_dir, cur_dir, tile_size, tile_ext, row_job, cur_cols))
+
+            # run the last job by the current process
+            worker_process_create_zoomed_tiles(prev_dir, cur_dir, tile_size, tile_ext, rows_list[-1], cur_cols)
+
+            # wait for all other processes to finish their job
+            if pool is not None:
+                pool.close()
+                pool.join()
+
+            single_tile = (cur_rows == 1) and (cur_cols == 1)
+
+
 
     if open_sea_dragon:
         conf_file = os.path.join(tiles_dir, 'osd.js')
@@ -114,13 +179,16 @@ def main():
     parser.add_argument('-s', '--open_sea_dragon', action='store_true', 
                         help='Create an open sea dragon conf file for these images (default: false)',
                         default=False)
+    parser.add_argument('-p', '--processes_num', type=int, 
+                        help='Number of python processes to create the tiles (default: 1)',
+                        default=1)
 
 
     args = parser.parse_args()
 
     #print args
 
-    create_zoomed_tiles(args.tiles_dir, args.open_sea_dragon)
+    create_zoomed_tiles(args.tiles_dir, args.open_sea_dragon, args.processes_num)
     # try:
     #     create_zoomed_tiles(args.tiles_dir)
     # except:
