@@ -89,11 +89,15 @@ public class OptimizeMontageTransform
         @Parameter( names = "--meshResolution", description = "The mesh resolution for the bounding box transformation", required = false )
         private int meshResolution = 20;
 
+        @Parameter( names = "--minimalMatchesNum", description = "The minimal number of matches between two tiles, to consider them as connected", required = false )
+        private int minimalMatchesNum = 2;
+
         @Parameter( names = "--targetPath", description = "Path for the output correspondences", required = true )
         public String targetPath;
         
         @Parameter( names = "--threads", description = "Number of threads to be used", required = false )
         public int numThreads = Runtime.getRuntime().availableProcessors();
+        
         
 	}
 	
@@ -224,8 +228,11 @@ public class OptimizeMontageTransform
 					tilesMap.put(corr.url2, tile2);
 					//tiles.add(tile2);
 				}
-	
-				tile1.connect( tile2, corr.correspondencePointPairs );
+
+				if ( corr.correspondencePointPairs.size() >= params.minimalMatchesNum )
+					tile1.connect( tile2, corr.correspondencePointPairs );
+				else
+					System.out.println( "Not connecting tiles " + corr.url1 + " and " + corr.url2 + " because only " + corr.correspondencePointPairs.size() + " matches were found" );
 				
 				/*
 				tile1.addConnectedTile(tile2);
