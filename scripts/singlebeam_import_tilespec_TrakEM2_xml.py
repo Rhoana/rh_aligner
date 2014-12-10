@@ -32,9 +32,8 @@ def fetch_and_increase_oid():
     global_oid_counter += 1
     return res
 
-def write_pre_xml(out_data, xml_file_name):
-    lines = """
-<?xml version="1.0" encoding="ISO-8859-1"?>
+def write_pre_xml(out_data, xml_file_name, layer_width, layer_height):
+    lines = """<?xml version="1.0" encoding="ISO-8859-1"?>
 <!DOCTYPE trakem2_anything [
         <!ELEMENT trakem2 (project,t2_layer_set,t2_display)>
         <!ELEMENT project (anything)>
@@ -317,6 +316,8 @@ def write_pre_xml(out_data, xml_file_name):
                 transform="matrix(1.0,0.0,0.0,1.0,0.0,0.0)"
                 title="Top Level"
                 links=""
+                """ + 'layer_width="{}"'.format(float(layer_width)) + """
+                """ + 'layer_height="{}"'.format(float(layer_height)) + """
                 rot_x="0.0"
                 rot_y="0.0"
                 rot_z="0.0"
@@ -349,20 +350,18 @@ def write_pre_xml(out_data, xml_file_name):
 
 
 def write_post_xml(out_data, layer_width, layer_height):
-    lines = 'layer_width="{}"\n'.format(float(layer_width)) + \
-            'layer_height="{}"\n'.format(float(layer_height)) + \
-        '</t2_layer_set>\n' + \
-        '<t2_display id="{}"\n'.format(fetch_and_increase_oid()) + \
-                'layer_id="1"' + """
+    lines = """</t2_layer_set>
+            """ + '<t2_display id="{}"'.format(fetch_and_increase_oid()) + """
+                layer_id="1"
                 c_alphas="-1"
                 c_alphas_state="-1"
                 x="0"
                 y="0"
                 magnification="0.013888888888888888"
                 srcrect_x="0"
-                srcrect_y="0" """ + \
-                'srcrect_width="{}"\n'.format(layer_width) + \
-                'srcrect_height="{}"'.format(layer_height) + """
+                srcrect_y="0"
+                """ + 'srcrect_width="{}"'.format(layer_width) + """
+                """ + 'srcrect_height="{}"'.format(layer_height) + """
                 scroll_step="1"
                 filter_enabled="false"
                 filter_min_max_enabled="false"
@@ -379,13 +378,13 @@ def write_post_xml(out_data, layer_width, layer_height):
     out_data.writelines(lines)
 
 def write_layer(out_data, layer, layer_patches):
-    pre_layer = '<t2_layer oid="{}"\n'.format(fetch_and_increase_oid()) + \
-                         'thickness="7.5"\n' + \
-                         'z="{}.0"'.format(layer) + """
+    pre_layer = '<t2_layer oid="{}"'.format(fetch_and_increase_oid()) + """
+                         """ + 'thickness="7.5"' + """
+                         """ + 'z="{}.0"'.format(layer) + """
                          title=""
                 >
-                """
-    post_layer = "</t2_layer>"
+"""
+    post_layer = "</t2_layer>\n"
 
     out_data.writelines(pre_layer)
     for tile in layer_patches:
@@ -394,29 +393,29 @@ def write_layer(out_data, layer, layer_patches):
 
 
 def write_patch(out_data, tile):
-    patch_lines = """
-                        <t2_patch """ + \
-                                'oid="{}"\n'.format(fetch_and_increase_oid()) + \
-                                'width="{}.0"\n'.format(tile["width"]) + \
-                                'height="{}.0"\n'.format(tile["height"]) + \
-                                'transform="matrix(1.0,0.0,0.0,1.0,{},{})"\n'.format(float(tile["tx"]), float(tile["ty"])) + \
-                                'title="{}"'.format(tile["file_base_name"]) + """
+    patch_lines = \
+"""                        <t2_patch
+                                """ + 'oid="{}"'.format(fetch_and_increase_oid()) + """
+                                """ + 'width="{}.0"'.format(tile["width"]) + """
+                                """ + 'height="{}.0"'.format(tile["height"]) + """
+                                """ + 'transform="matrix(1.0,0.0,0.0,1.0,{},{})"'.format(float(tile["tx"]), float(tile["ty"])) + """
+                                """ + 'title="{}"'.format(tile["file_base_name"]) + """
                                 links=""
-                                type="0" """ + \
-                                'file_path="{}"\n'.format(tile["file_full_path"]) + \
-                                'style="fill-opacity:1.0;stroke:#ffff00;"\n' + \
-                                'o_width="{}"\n'.format(tile["width"]) + \
-                                'o_height="{}"'.format(tile["height"]) + """
+                                type="0"
+                                """ + 'file_path="{}"'.format(tile["file_full_path"]) + """
+                                style="fill-opacity:1.0;stroke:#ffff00;"
+                                """ + 'o_width="{}"'.format(tile["width"]) + """
+                                """ + 'o_height="{}"'.format(tile["height"]) + """
                                 min="0.0"
                                 max="255.0"
                                 mres="32"
                         >
                         </t2_patch>
-    """
+"""
     out_data.writelines(patch_lines)
 
 
-def parse_layer_and_write(subdir, out_data, layer, overlap):
+def parse_layer(subdir, layer, overlap):
     '''Writes the tilespec for a single directory (aka, section)'''
     tiles = []
     layer_size = [0, 0]
@@ -427,23 +426,31 @@ def parse_layer_and_write(subdir, out_data, layer, overlap):
         if image_size is None:
             with tifffile.TiffFile(image_file) as tiffinfo:
                 image_size = tiffinfo.pages[0].shape
-        coords = extract_coords(image_file, image_size, overlap)
-        tile["file_full_path"] = os.path.abspath(image_file)
-        tile["file_base_name"] = os.path.basename(tile["file_full_path"])
-        tile["width"] = image_size[1]
-        tile["height"] = image_size[0]
-        tile["tx"] = coords[0]
-        tile["ty"] = coords[1]
-        tiles.append(tile)
-        layer_size[0] = max(layer_size[0], image_size[0] + tile["ty"])
-        layer_size[1] = max(layer_size[1], image_size[1] + tile["tx"])
-        #layer_size = max(layer_size, image_size)
+        if len(image_size) == 0:
+            print('Cannot read tile image: {}'.format(image_file))
+        else:
+            coords = extract_coords(image_file, image_size, overlap)
+            tile["file_full_path"] = os.path.abspath(image_file)
+            tile["file_base_name"] = os.path.basename(tile["file_full_path"])
+            tile["width"] = image_size[1]
+            tile["height"] = image_size[0]
+            tile["tx"] = coords[0]
+            tile["ty"] = coords[1]
+            tiles.append(tile)
+            layer_size[0] = max(layer_size[0], image_size[0] + tile["ty"])
+            layer_size[1] = max(layer_size[1], image_size[1] + tile["tx"])
 
-    if len(tiles) > 0:
-        write_layer(out_data, layer, tiles)
-    else:
+    # if len(tiles) > 0:
+    #     write_layer(out_data, layer, tiles)
+    # else:
+    #     print('Nothing to write from directory {}'.format(subdir))
+    if len(tiles) == 0:
         print('Nothing to write from directory {}'.format(subdir))
-    return layer_size
+    layer_data = {}
+    layer_data["height"] = layer_size[0]
+    layer_data["width"] = layer_size[1]
+    layer_data["tiles"] = tiles
+    return layer_data
 
 
 if __name__ == '__main__':
@@ -465,22 +472,28 @@ if __name__ == '__main__':
 
     all_sub_folders = sorted(glob.glob(os.path.join(args.input_folder, 'W*Sec*')))
 
-    # Create the output file and write the first lines of the xml
-    out_data = open(args.output_xml, "w")
-    write_pre_xml(out_data, xml_file_name)
 
     max_layer_width = 0
     max_layer_height = 0
 
+    all_layers = []
+
     layer = 1
     for sub_folder in all_sub_folders:
         if os.path.isdir(sub_folder):
-            cur_layer_height, cur_layer_width = parse_layer_and_write(sub_folder, out_data, layer, args.overlap)
-            max_layer_width = max(max_layer_width, cur_layer_width)
-            max_layer_height = max(max_layer_height, cur_layer_height)
+            cur_layer = parse_layer(sub_folder, layer, args.overlap)
+            max_layer_width = max(max_layer_width, cur_layer["width"])
+            max_layer_height = max(max_layer_height, cur_layer["height"])
+            cur_layer["layer_num"] = layer
+            all_layers.append(cur_layer)
             layer += 1
-        if layer == 3:
-            break
+
+    # Create the output file and write the first lines of the xml
+    out_data = open(args.output_xml, "w")
+    write_pre_xml(out_data, xml_file_name, max_layer_width, max_layer_height)
+    # write the tiles per layer
+    for cur_layer in all_layers:
+        write_layer(out_data, cur_layer["layer_num"], cur_layer["tiles"])
 
     # write the last lines of the xml
     write_post_xml(out_data, max_layer_width, max_layer_height)
