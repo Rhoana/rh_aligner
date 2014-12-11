@@ -15,6 +15,9 @@ RUN_LOCAL = False
 USE_QSUB = False
 USE_SBATCH = True
 
+SBATCH_QUEUE = 'serial_requeue'
+#SBATCH_QUEUE = 'general'
+
 #SBATCH_ACCOUNT = None
 SBATCH_ACCOUNT = 'lichtman_lab'
 
@@ -98,9 +101,9 @@ class Job(object):
         print "RUN", self.name
         print " ".join(self.command())
 
-        work_queue = "serial_requeue"
-        if self.get_threads_num() > 1:
-            work_queue = "general"
+        work_queue = SBATCH_QUEUE
+        # if self.get_threads_num() > 1:
+        #     work_queue = "general"
 
         account_str = ""
         if SBATCH_ACCOUNT is not None:
@@ -502,7 +505,7 @@ class JobBlock(object):
                     # else:
                     #     dependency_set.add(d.name)
 
-        work_queue = "serial_requeue"
+        work_queue = SBATCH_QUEUE
         # if self.required_threads > 1:
         #     work_queue = "general"
 
