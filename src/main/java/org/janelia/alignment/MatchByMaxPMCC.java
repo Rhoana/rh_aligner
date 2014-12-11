@@ -19,6 +19,8 @@ package org.janelia.alignment;
 import ij.ImagePlus;
 import ij.process.FloatProcessor;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Writer;
@@ -132,10 +134,97 @@ public class MatchByMaxPMCC
         @Parameter( names = "--threads", description = "Number of threads to be used", required = false )
         public int numThreads = Runtime.getRuntime().availableProcessors();
 
+        @Parameter( names = "--saveAndUseIntermediateResults", description = "Saves the matches per two tiles (used when running on the cluster)", required = false )
+        public boolean saveAndUseIntermediateResults = false;
         
 	}
 	
 	private MatchByMaxPMCC() {}
+	
+	private static String getIntermediateFileName( final String targetPath, final int index1, final int index2 )
+	{
+		String outputFile = targetPath.substring( 0, targetPath.lastIndexOf( '.' ) ) +
+				"_" + index1 + "_" + index2 + ".json";
+		return outputFile;
+	}
+
+	private static List< PointMatch > loadIntermediateResults(
+			final Params params,
+			final int index1,
+			final int index2 )
+	{
+		List< PointMatch > res = null;
+		
+		final String inputFileName = getIntermediateFileName( params. targetPath, index1, index2 );
+		File inFile = new File( inputFileName );
+		if ( inFile.exists() )
+		{
+			System.out.println( "Intermediate file: " + inputFileName + " exists, loading data" );
+			// Open and parse the json file
+			final CorrespondenceSpec[] corr_data;
+			try
+			{
+				final Gson gson = new Gson();
+				corr_data = gson.fromJson( new InputStreamReader( new FileInputStream( inFile ) ),
+							CorrespondenceSpec[].class );
+			}
+			catch ( final JsonSyntaxException e )
+			{
+				System.err.println( "JSON syntax malformed." );
+				e.printStackTrace( System.err );
+				return null;
+			}
+			catch ( final Exception e )
+			{
+				e.printStackTrace( System.err );
+				return null;
+			}
+			
+			if ( corr_data != null )
+			{
+				// There should only be a single correspondence points list in the intermediate files
+				assert( corr_data.length == 1 );
+				
+				res = corr_data[0].correspondencePointPairs;
+			}
+
+		}
+		
+		return res;
+	}
+	
+	private static void saveIntermediateResults(
+			final List< PointMatch > pm_strip, 
+			final int mipmapLevel,
+			final String imageUrl1,
+			final String imageUrl2,
+			final Params params,
+			final int index1,
+			final int index2 )
+	{
+		List< CorrespondenceSpec > tiles_correspondence = new ArrayList< CorrespondenceSpec >();
+
+		tiles_correspondence.add(new CorrespondenceSpec(
+				mipmapLevel,
+				imageUrl1,
+				imageUrl2,
+				pm_strip));
+
+		try {
+			String outputFile = getIntermediateFileName( params.targetPath, index1, index2 );
+			System.out.println( "Saving intermediate result to: " + outputFile );
+			Writer writer = new FileWriter(outputFile);
+	        //Gson gson = new GsonBuilder().create();
+	        Gson gson = new GsonBuilder().setPrettyPrinting().create();
+	        gson.toJson(tiles_correspondence, writer);
+	        writer.close();
+	    }
+		catch ( final IOException e )
+		{
+			System.err.println( "Error writing JSON file: " + params.targetPath );
+			e.printStackTrace( System.err );
+		}
+	}
 	
 	public static void main( final String[] args )
 	{
@@ -239,6 +328,8 @@ public class MatchByMaxPMCC
 			
 			final ArrayList< PointMatch > pm12 = new ArrayList< PointMatch >();
 			final ArrayList< PointMatch > pm21 = new ArrayList< PointMatch >();
+			List< PointMatch > pm12_strip = new ArrayList< PointMatch >();
+			List< PointMatch > pm21_strip = new ArrayList< PointMatch >();
 	
 			/* load image TODO use Bioformats for strange formats */
 			final String imageUrl1 = ts1.getMipmapLevels().get( String.valueOf( mipmapLevel ) ).imageUrl;
@@ -286,43 +377,74 @@ public class MatchByMaxPMCC
 			if ( !params.fixedTiles.contains( idx1 ) )
 			{
 				System.out.println( "Matching: " + imageUrl1 + " > " + imageUrl2 );
-
-				try{
-					BlockMatching.matchByMaximalPMCC(
-							ip1,
-							ip2,
-							null, //mask1
-							null, //mask2
-							params.layerScale, //Math.min( 1.0f, ( float )params.maxImageSize / ip1.getWidth() ),
-							transform21,
-							blockRadius,
-							blockRadius,
-							searchRadius,
-							searchRadius,
-							params.minR,
-							params.rodR,
-							params.maxCurvatureR,
-							v1,
-							pm12,
-							new ErrorStatistic( 1 ) );
-				}
-				catch ( final Exception e )
+				boolean alreadyCalculated = false;
+				
+				if ( params.saveAndUseIntermediateResults )
 				{
-					e.printStackTrace( System.err );
-					return;
-				}
-		
-				if ( params.useLocalSmoothnessFilter )
-				{
-					System.out.println( imageUrl1 + " > " + imageUrl2 + ": found " + pm12.size() + " correspondence candidates." );
-					localSmoothnessFilterModel.localSmoothnessFilter( pm12, pm12, params.localRegionSigma, params.maxLocalEpsilon, params.maxLocalTrust );
-					System.out.println( imageUrl1 + " > " + imageUrl2 + ": " + pm12.size() + " candidates passed local smoothness filter." );
-				}
-				else
-				{
-					System.out.println( imageUrl1 + " > " + imageUrl2 + ": found " + pm12.size() + " correspondences." );
+					// try loading the data
+					List< PointMatch > intermediateResult = loadIntermediateResults( params, idx1, idx2 );
+					if ( intermediateResult == null )
+						System.out.println( "Intermediate result between " + idx1 + " and " + idx2 + " was not found. Matching..." );
+					else
+					{
+						pm12_strip = intermediateResult;
+						alreadyCalculated = true;
+					}
 				}
 
+				if ( !alreadyCalculated )
+				{
+					try{
+						BlockMatching.matchByMaximalPMCC(
+								ip1,
+								ip2,
+								null, //mask1
+								null, //mask2
+								params.layerScale, //Math.min( 1.0f, ( float )params.maxImageSize / ip1.getWidth() ),
+								transform21,
+								blockRadius,
+								blockRadius,
+								searchRadius,
+								searchRadius,
+								params.minR,
+								params.rodR,
+								params.maxCurvatureR,
+								v1,
+								pm12,
+								new ErrorStatistic( 1 ) );
+					}
+					catch ( final Exception e )
+					{
+						e.printStackTrace( System.err );
+						return;
+					}
+			
+					if ( params.useLocalSmoothnessFilter )
+					{
+						System.out.println( imageUrl1 + " > " + imageUrl2 + ": found " + pm12.size() + " correspondence candidates." );
+						localSmoothnessFilterModel.localSmoothnessFilter( pm12, pm12, params.localRegionSigma, params.maxLocalEpsilon, params.maxLocalTrust );
+						System.out.println( imageUrl1 + " > " + imageUrl2 + ": " + pm12.size() + " candidates passed local smoothness filter." );
+					}
+					else
+					{
+						System.out.println( imageUrl1 + " > " + imageUrl2 + ": found " + pm12.size() + " correspondences." );
+					}
+	
+					// Remove Vertex (spring mesh) details from points
+					for (PointMatch pm: pm12)
+					{
+						PointMatch actualPm = new PointMatch(
+								new Point( pm.getP1().getL(), ctl1.apply( pm.getP1().getW() ) ),
+								new Point( pm.getP2().getL(), ctl2.apply( pm.getP2().getW() ) )
+								);
+						pm12_strip.add( actualPm );
+					}
+	
+					if ( params.saveAndUseIntermediateResults )
+					{
+						saveIntermediateResults( pm12_strip, mipmapLevel, imageUrl1, imageUrl2, params, idx1, idx2 );
+					}
+				}
 			}
 			else
             {
@@ -332,70 +454,81 @@ public class MatchByMaxPMCC
 			if ( !params.fixedTiles.contains( idx2 ) )
 			{
 				System.out.println( "Matching: " + imageUrl1 + " < " + imageUrl2 );
-
-				try{
-				BlockMatching.matchByMaximalPMCC(
-						ip2,
-						ip1,
-						null, //mask2
-						null, //mask1
-						params.layerScale, //Math.min( 1.0f, ( float )p.maxImageSize / ip2.getWidth() ),
-						transform12,
-						blockRadius,
-						blockRadius,
-						searchRadius,
-						searchRadius,
-						params.minR,
-						params.rodR,
-						params.maxCurvatureR,
-						v2,
-						pm21,
-						new ErrorStatistic( 1 ) );
-				}
-				catch ( final Exception e )
+				boolean alreadyCalculated = false;
+				
+				if ( params.saveAndUseIntermediateResults )
 				{
-					e.printStackTrace( System.err );
-					return;
-				}
-		
-		
-				if ( params.useLocalSmoothnessFilter )
-				{
-					System.out.println( imageUrl1 + " < " + imageUrl2 + ": found " + pm21.size() + " correspondence candidates." );
-					localSmoothnessFilterModel.localSmoothnessFilter( pm21, pm21, params.localRegionSigma, params.maxLocalEpsilon, params.maxLocalTrust );
-					System.out.println( imageUrl1 + " < " + imageUrl2 + ": " + pm21.size() + " candidates passed local smoothness filter." );
-				}
-				else
-				{
-					System.out.println( imageUrl1 + " < " + imageUrl2 + ": found " + pm21.size() + " correspondences." );
+					// try loading the data
+					List< PointMatch > intermediateResult = loadIntermediateResults( params, idx2, idx1 );
+					if ( intermediateResult == null )
+						System.out.println( "Intermediate result between " + idx2 + " and " + idx1 + " was not found. Matching..." );
+					else
+					{
+						pm21_strip = intermediateResult;
+						alreadyCalculated = true;
+					}
 				}
 
+				if ( !alreadyCalculated )
+				{
+					try{
+					BlockMatching.matchByMaximalPMCC(
+							ip2,
+							ip1,
+							null, //mask2
+							null, //mask1
+							params.layerScale, //Math.min( 1.0f, ( float )p.maxImageSize / ip2.getWidth() ),
+							transform12,
+							blockRadius,
+							blockRadius,
+							searchRadius,
+							searchRadius,
+							params.minR,
+							params.rodR,
+							params.maxCurvatureR,
+							v2,
+							pm21,
+							new ErrorStatistic( 1 ) );
+					}
+					catch ( final Exception e )
+					{
+						e.printStackTrace( System.err );
+						return;
+					}
+			
+			
+					if ( params.useLocalSmoothnessFilter )
+					{
+						System.out.println( imageUrl1 + " < " + imageUrl2 + ": found " + pm21.size() + " correspondence candidates." );
+						localSmoothnessFilterModel.localSmoothnessFilter( pm21, pm21, params.localRegionSigma, params.maxLocalEpsilon, params.maxLocalTrust );
+						System.out.println( imageUrl1 + " < " + imageUrl2 + ": " + pm21.size() + " candidates passed local smoothness filter." );
+					}
+					else
+					{
+						System.out.println( imageUrl1 + " < " + imageUrl2 + ": found " + pm21.size() + " correspondences." );
+					}
+	
+					// Remove Vertex (spring mesh) details from points
+					for (PointMatch pm: pm21)
+					{
+						PointMatch actualPm = new PointMatch(
+								new Point( pm.getP1().getL(), ctl2.apply( pm.getP1().getW() ) ),
+								new Point( pm.getP2().getL(), ctl1.apply( pm.getP2().getW() ) )
+								);
+						pm21_strip.add( actualPm );
+					}
+					
+					if ( params.saveAndUseIntermediateResults )
+					{
+						saveIntermediateResults( pm21_strip, mipmapLevel, imageUrl2, imageUrl1, params, idx2, idx1 );
+					}
+				}
 			}
 			else
             {
 				System.out.println( "Skipping fixed tile " + idx2 );
             }
 
-			// Remove Vertex (spring mesh) details from points
-			final ArrayList< PointMatch > pm12_strip = new ArrayList< PointMatch >();
-			final ArrayList< PointMatch > pm21_strip = new ArrayList< PointMatch >();
-			for (PointMatch pm: pm12)
-			{
-				PointMatch actualPm = new PointMatch(
-						new Point( pm.getP1().getL(), ctl1.apply( pm.getP1().getW() ) ),
-						new Point( pm.getP2().getL(), ctl2.apply( pm.getP2().getW() ) )
-						);
-				pm12_strip.add( actualPm );
-			}
-			for (PointMatch pm: pm21)
-			{
-				PointMatch actualPm = new PointMatch(
-						new Point( pm.getP1().getL(), ctl2.apply( pm.getP1().getW() ) ),
-						new Point( pm.getP2().getL(), ctl1.apply( pm.getP2().getW() ) )
-						);
-				pm21_strip.add( actualPm );
-			}
-	
 			// TODO: Export / Import master sprint mesh vertices no calculated  individually per tile (v1, v2).
 			corr_data.add(new CorrespondenceSpec(
 					mipmapLevel,
