@@ -32,7 +32,7 @@ def verify_tiles(filename, all_tiles):
 def find_possible_bad_after_affine(affine_dir):
 
     # Get all input json files
-    json_files = [jf for jf in (glob.glob(os.path.join(affine_dir, '*.json')))]
+    json_files = sorted([jf for jf in (glob.glob(os.path.join(affine_dir, '*.json')))])
 
     good_files = 0
 
