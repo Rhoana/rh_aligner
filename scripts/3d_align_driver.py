@@ -21,7 +21,7 @@ from match_layers_sift_features import match_layers_sift_features
 from filter_ransac import filter_ransac
 from match_layers_by_max_pmcc import match_layers_by_max_pmcc
 from optimize_layers_elastic import optimize_layers_elastic
-from utils import path2url, write_list_to_file, create_dir, read_layer_from_file
+from utils import path2url, write_list_to_file, create_dir, read_layer_from_file, parse_range
 from bounding_box import BoundingBox
 
 
@@ -60,6 +60,9 @@ parser.add_argument('--from_layer', type=int,
 parser.add_argument('--to_layer', type=int, 
                     help='the last layer to render (inclusive, default: the last layer in the data)',
                     default=-1)
+parser.add_argument('-s', '--skip_layers', type=str, 
+                    help='the range of layers (sections) that will not be processed e.g., "2,3,9-11,18" (default: no skipped sections)',
+                    default=None)
 
 
 
@@ -136,12 +139,18 @@ for tiles_fname in glob.glob(os.path.join(args.input_dir, '*.json')):
     #layer_to_ts_json[layer] = after_bbox_json
     layer_to_ts_json[layer] = tiles_fname
 
+
+skipped_layers = parse_range(args.skip_layers)
+
+
 # Verify that all the layers are there and that there are no holes
 all_layers.sort()
 for i in range(len(all_layers) - 1):
     if all_layers[i + 1] - all_layers[i] != 1:
-        print "Error missing layers between: {1} and {2}".format(all_layers[i], all_layers[i + 1])
-        sys.exit(1)
+        for l in range(all_layers[i] + 1, all_layers[i + 1]):
+            if l not in skipped_layers:
+                print "Error missing layer {} between: {} and {}".format(l, all_layers[i], all_layers[i + 1])
+                sys.exit(1)
 
 print "Found the following layers: {0}".format(all_layers)
 
@@ -156,6 +165,9 @@ for i in all_layers:
     layers_to_process = min(i + args.max_layer_distance + 1, all_layers[-1] + 1) - i
     print "layers_to_process {0}".format(layers_to_process)
     for j in range(1, layers_to_process):
+        if i in skipped_layers or (i+j) in skipped_layers:
+            print "Skipping matching of layers {} and {}, because at least one of them should be skipped".format(i, i+j)
+            continue
         print "j {0}".format(j)
         fname1_prefix = layer_to_json_prefix[i]
         fname2_prefix = layer_to_json_prefix[i + j]
