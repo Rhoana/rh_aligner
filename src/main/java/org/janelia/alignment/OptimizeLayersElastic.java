@@ -105,6 +105,9 @@ public class OptimizeLayersElastic {
 
         @Parameter( names = "--toLayer", description = "The last layer to include in the optimization (default: last layer in the tile specs data)", required = false )
         private int toLayer = -1;
+               
+        @Parameter( names = "--skipLayers", description = "The layers ranges that will not be processed (default: none)", required = false )
+        private String skippedLayers = "";
 
 	}
 	
@@ -302,7 +305,8 @@ public class OptimizeLayersElastic {
 			final int startLayer,
 			final int endLayer,
 			final int startX,
-			final int startY )
+			final int startY,
+			final List<Integer> skippedLayers )
 	{
 		final ArrayList< Tile< ? > > tiles = createLayersModels( endLayer - startLayer + 1, param.modelIndex );
 		
@@ -315,9 +319,19 @@ public class OptimizeLayersElastic {
 		
 		for ( int layerA = startLayer; layerA < endLayer; layerA++ )
 		{
-			
+			if ( skippedLayers.contains( layerA ) )
+			{
+				System.out.println( "Skipping optimization of layer " + layerA );
+				continue;
+			}
 			for ( int layerB = layerA + 1; layerB <= endLayer; layerB++ )
 			{
+
+				if ( skippedLayers.contains( layerB ) )
+				{
+					System.out.println( "Skipping optimization of layer " + layerB );
+					continue;
+				}
 
 				final boolean layer1Fixed = fixedLayers.contains( layerA );
 				final boolean layer2Fixed = fixedLayers.contains( layerB );
@@ -618,6 +632,12 @@ public class OptimizeLayersElastic {
 		// Iterate the layers, and add the mesh transform for each tile
 		for ( int i = startLayer; i <= endLayer; ++i )
 		{
+			if ( skippedLayers.contains( i ) )
+			{
+				System.out.println( "Skipping saving after optimization of layer " + i );
+				continue;
+			}
+			
 			final SpringMesh mesh = meshes.get( i - startLayer );
 			final List< TileSpec > layer = layersTs.get( i );
 			
@@ -735,12 +755,15 @@ public class OptimizeLayersElastic {
 		if (( params.toLayer != -1 ) && ( params.toLayer <= lastLayer ))
 			lastLayer = params.toLayer;
 		
+		List<Integer> skippedLayers = Utils.parseRange( params.skippedLayers );
+		
 		// Optimze
 		optimizeElastic(
 			params, layersTs, layersCorrs,
 			params.fixedLayers,
 			firstLayer, lastLayer,
-			bbox.getStartPoint().getX(), bbox.getStartPoint().getY() );
+			bbox.getStartPoint().getX(), bbox.getStartPoint().getY(),
+			skippedLayers );
 
 		// Save new tilespecs
 		System.out.println( "Optimization complete. Generating tile transforms.");
@@ -748,6 +771,9 @@ public class OptimizeLayersElastic {
 		// Iterate through the layers and output the new tile specs
 		for ( int layer = firstLayer; layer <= lastLayer; layer++ )
 		{
+			if ( skippedLayers.contains( layer ) )
+				continue;
+			
 			String layerString = String.format( "%04d", layer );
 			System.out.println( "Writing layer " + layerString );
 			final File targetFile = new File( params.targetDir, "Section_" + layerString + ".json" );

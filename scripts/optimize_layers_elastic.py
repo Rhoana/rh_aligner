@@ -10,16 +10,20 @@ import utils
 
 # common functions
 
-def optimize_layers_elastic(tile_files, corr_files, image_width, image_height, fixed_layers, out_dir, jar_file, conf=None, threads_num=4):
+def optimize_layers_elastic(tile_files, corr_files, image_width, image_height, fixed_layers, out_dir, jar_file, conf=None, skip_layers=None, threads_num=4):
     conf_args = utils.conf_args(conf, 'OptimizeLayersElastic')
 
     fixed_str = ""
     if fixed_layers != None:
         fixed_str = "--fixedLayers {0}".format(" ".join(map(str, fixed_layers)))
 
+    skip_str = ""
+    if skip_layers != None:
+        skip_str = "--skipLayers {0}".format(skip_layers)
+
 
     java_cmd = 'java -Xmx4g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.OptimizeLayersElastic --tilespecFiles {1} --corrFiles {2} \
-            {3} --imageWidth {4} --imageHeight {5} --threads {6} --targetDir {7} {8}'.format(
+            {3} --imageWidth {4} --imageHeight {5} --threads {6} {7} --targetDir {8} {9}'.format(
         jar_file,
         " ".join(utils.path2url(f) for f in tile_files),
         " ".join(utils.path2url(f) for f in corr_files),
@@ -27,6 +31,7 @@ def optimize_layers_elastic(tile_files, corr_files, image_width, image_height, f
         int(image_width),
         int(image_height),
         threads_num,
+        skip_str,
         out_dir,
         conf_args)
     utils.execute_shell_command(java_cmd)
@@ -58,6 +63,9 @@ def main():
     parser.add_argument('-t', '--threads_num', type=int, 
                         help='the number of threads to use (default: 1)',
                         default=1)
+    parser.add_argument('-s', '--skip_layers', type=str, 
+                        help='the range of layers (sections) that will not be processed e.g., "2,3,9-11,18" (default: no skipped sections)',
+                        default=None)
 
 
     args = parser.parse_args()
@@ -67,7 +75,8 @@ def main():
 
     optimize_layers_elastic(args.tile_files, args.corr_files, \
         args.image_width, args.image_height, args.fixed_layers, args.output_dir, args.jar_file, \
-        conf=utils.conf_args_from_file(args.conf_file_name, "OptimizeLayersElastic"), threads_num=args.threads_num)
+        conf=utils.conf_args_from_file(args.conf_file_name, "OptimizeLayersElastic"), 
+        skip_layers=args.skip_layers, threads_num=args.threads_num)
 
 if __name__ == '__main__':
     main()

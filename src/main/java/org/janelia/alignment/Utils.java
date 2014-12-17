@@ -549,5 +549,38 @@ public class Utils
 		return result;
 	}
 	
+	/**
+	 * Receives a range string (numbers with dashes and commas),
+	 * and returns all the numbers in that range
+	 * 
+	 * @param s
+	 * @return
+	 */
+	public static List<Integer> parseRange(String s)
+	{
+		List<Integer> res = new ArrayList<Integer>();
+		
+		if ( ( s != null ) && ( s.length() > 0 ) )
+		{
+			for ( String part : s.split(",") )
+			{
+				if ( part.indexOf('-') > 0 ) // If there is a dash (range)
+				{
+					String[] x = part.split("-");
+					int from = Integer.parseInt( x[0] );
+					int to = Integer.parseInt( x[1] );
+					for ( int i = from; i <= to; i++ )
+						res.add( i );
+				}
+				else // no dash - single number
+				{
+					res.add( Integer.parseInt( part ) );
+				}
+				
+			}
+		}
+		
+		return res;
+	}
 
 }
