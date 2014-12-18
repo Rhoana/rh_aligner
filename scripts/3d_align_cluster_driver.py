@@ -17,7 +17,7 @@ from collections import defaultdict
 import argparse
 import glob
 import json
-from utils import path2url, write_list_to_file, create_dir, read_layer_from_file
+from utils import path2url, write_list_to_file, create_dir, read_layer_from_file, parse_range
 from job import Job
 from bounding_box import BoundingBox
 
