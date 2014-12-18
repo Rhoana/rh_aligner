@@ -314,7 +314,7 @@ if __name__ == '__main__':
         # create the sift features of these tiles
         sifts_json = os.path.join(sifts_dir, "{0}_sifts.json".format(tiles_fname_prefix))
         if not os.path.exists(sifts_json):
-            sift_job = CreateLayerSiftFeatures(f, sifts_json, args.jar_file, conf_fname=args.conf_file_name, threads_num=4)
+            sift_job = CreateLayerSiftFeatures(f, sifts_json, args.jar_file, conf_fname=args.conf_file_name, threads_num=8)
             jobs[slayer]['sifts'].append(sift_job)
             all_running_jobs.append(sift_job)
 
@@ -420,7 +420,7 @@ if __name__ == '__main__':
 
                 job_pmcc = MatchLayersByMaxPMCC(dependencies, layers_data[si]['ts'], layers_data[sij]['ts'], \
                     layers_data[si]['ransac'][sij], imageWidth, imageHeight, \
-                    [ fixed_layer ], pmcc_fname, args.jar_file, conf_fname=args.conf_file_name, threads_num=8, auto_add_model=args.auto_add_model)
+                    [ fixed_layer ], pmcc_fname, args.jar_file, conf_fname=args.conf_file_name, threads_num=16, auto_add_model=args.auto_add_model)
                 #match_layers_by_max_pmcc(args.jar_file, layer_to_ts_json[i], layer_to_ts_json[i + j], ransac_fname, imageWidth, imageHeight, [fixed_layer], pmcc_fname, conf)
                 pmcc_jobs.append(job_pmcc)
                 all_running_jobs.append(job_pmcc)
