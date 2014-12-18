@@ -194,6 +194,7 @@ public class ComputeLayerSiftFeatures {
 		// Render the image
 		System.out.println( "Sift Features computation: layer scale: " + scale );
 		ByteProcessor tp = singleTileImage.render( layerIndex, mipmapLevel, ( float )scale );
+		System.out.println( "Image rendering of layer " + layerIndex + " is done, computing sift features." );
 		final List< Feature > fs = ComputeSiftFeatures.computeImageSiftFeatures( tp, siftParam );
 		System.out.println( "Found " + fs.size() + " features in the layer" );
 

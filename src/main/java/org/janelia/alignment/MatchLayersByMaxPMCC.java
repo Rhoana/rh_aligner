@@ -281,6 +281,7 @@ public class MatchLayersByMaxPMCC {
 		//if ( !( layer1Fixed && layer2Fixed ) )
 		//{
 			/* Load images and masks into FloatProcessor objects */		
+			System.out.println( "Rendering layers" );
 			startTime = System.currentTimeMillis();
 			final TileSpecsImage layer1Img = new TileSpecsImage( ts1 );
 			final TileSpecsImage layer2Img = new TileSpecsImage( ts2 );
