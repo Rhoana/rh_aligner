@@ -156,7 +156,7 @@ class MatchLayersByMaxPMCC(Job):
 
 
 class OptimizeLayersElastic(Job):
-    def __init__(self, dependencies, outputs, tiles_fnames, corr_fnames, image_width, image_height, fixed_layers, output_dir, jar_file, conf_fname=None, threads_num=1):
+    def __init__(self, dependencies, outputs, tiles_fnames, corr_fnames, image_width, image_height, fixed_layers, output_dir, jar_file, conf_fname=None, skip_layers=None, threads_num=1):
         Job.__init__(self)
         self.already_done = False
         self.tiles_fnames = '--tile_files {0}'.format(" ".join(tiles_fnames))
@@ -173,6 +173,10 @@ class OptimizeLayersElastic(Job):
             self.conf_fname = ''
         else:
             self.conf_fname = '-c "{0}"'.format(conf_fname)
+        if skip_layers is None:
+            self.skip_layers = ''
+        else:
+            self.skip_layers = '-s "{0}"'.format(skip_layers)
         self.threads = threads_num
         self.threads_str = '-t {0}'.format(threads_num)
         self.dependencies = dependencies
@@ -185,7 +189,8 @@ class OptimizeLayersElastic(Job):
     def command(self):
         return ['python',
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'optimize_layers_elastic.py'),
-                self.output_dir, self.jar_file, self.conf_fname, self.image_width, self.image_height, self.fixed_layers, self.tiles_fnames, self.corr_fnames]
+                self.output_dir, self.jar_file, self.conf_fname, self.image_width, self.image_height, self.fixed_layers,
+                self.skip_layers, self.tiles_fnames, self.corr_fnames]
 
 
 
@@ -225,6 +230,9 @@ if __name__ == '__main__':
                         default=1)
     parser.add_argument('--auto_add_model', action="store_true", 
                         help='automatically add the identity model, if a model is not found')
+    parser.add_argument('-s', '--skip_layers', type=str, 
+                        help='the range of layers (sections) that will not be processed e.g., "2,3,9-11,18" (default: no skipped sections)',
+                        default=None)
     parser.add_argument('-k', '--keeprunning', action='store_true', 
                         help='Run all jobs and report cluster jobs execution stats')
     parser.add_argument('-m', '--multicore', action='store_true', 
@@ -257,6 +265,7 @@ if __name__ == '__main__':
 
 
 
+    skipped_layers = parse_range(args.skip_layers)
 
 
     all_layers = []
@@ -327,8 +336,10 @@ if __name__ == '__main__':
     all_layers.sort()
     for i in range(len(all_layers) - 1):
         if all_layers[i + 1] - all_layers[i] != 1:
-            print "Error missing layers between: {1} and {2}".format(all_layers[i], all_layers[i + 1])
-            sys.exit(1)
+            for l in range(all_layers[i] + 1, all_layers[i + 1]):
+                if l not in skipped_layers:
+                    print "Error missing layer {} between: {} and {}".format(l, all_layers[i], all_layers[i + 1])
+                    sys.exit(1)
 
     print "Found the following layers: {0}".format(all_layers)
 
@@ -346,6 +357,10 @@ if __name__ == '__main__':
         layers_to_process = min(i + args.max_layer_distance + 1, all_layers[-1] + 1) - i
         for j in range(1, layers_to_process):
             sij = str(i + j)
+            if i in skipped_layers or (i+j) in skipped_layers:
+                print "Skipping matching of layers {} and {}, because at least one of them should be skipped".format(i, i+j)
+                continue
+
             fname1_prefix = layers_data[si]['prefix']
             fname2_prefix = layers_data[sij]['prefix']
 
@@ -428,12 +443,13 @@ if __name__ == '__main__':
     create_dir(args.output_dir)
     sections_outputs = []
     for i in all_layers:
-        out_section = os.path.join(args.output_dir, "Section{0}.json".format(str(i).zfill(3)))
+        out_section = os.path.join(args.output_dir, os.path.basename(layers_data[str(i)]['ts']))
         sections_outputs.append(out_section)
 
     dependencies = all_running_jobs
     job_optimize = OptimizeLayersElastic(dependencies, sections_outputs, [ ts_list_file ], [ pmcc_list_file ], \
-        imageWidth, imageHeight, [ fixed_layer ], args.output_dir, args.jar_file, conf_fname=args.conf_file_name, threads_num=16)
+        imageWidth, imageHeight, [ fixed_layer ], args.output_dir, args.jar_file, conf_fname=args.conf_file_name,
+        skip_layers=args.skip_layers, threads_num=16)
     #optimize_layers_elastic(all_ts_files, all_pmcc_files, imageWidth, imageHeight, [fixed_layer], args.output_dir, args.jar_file, conf)
 
 
