@@ -43,7 +43,7 @@ class CreateLayerSiftFeatures(Job):
         #self.already_done = os.path.exists(self.output_file)
 
     def command(self):
-        return ['python',
+        return ['python -u',
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'create_layer_sift_features.py'),
                 self.output_file, self.jar_file, self.threads_str, self.conf_fname, self.tiles_fname]
 
@@ -71,7 +71,7 @@ class MatchLayersSiftFeatures(Job):
         #self.already_done = os.path.exists(self.output_file)
 
     def command(self):
-        return ['python',
+        return ['python -u',
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'match_layers_sift_features.py'),
                 self.output_file, self.jar_file, self.conf_fname, self.tiles_fname1, self.features_fname1, self.tiles_fname2, self.features_fname2]
 
