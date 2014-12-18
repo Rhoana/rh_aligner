@@ -9,11 +9,17 @@ import time
 from itertools import product
 from collections import defaultdict
 
-LOGS_DIR = './logs'
+LOGS_DIR = './logs_' + datetime.datetime.now().isoformat()
 MEASURE_PERFORMANCE = False
 RUN_LOCAL = False
 USE_QSUB = False
 USE_SBATCH = True
+
+SBATCH_QUEUE = 'serial_requeue'
+#SBATCH_QUEUE = 'general'
+
+#SBATCH_ACCOUNT = None
+SBATCH_ACCOUNT = 'lichtman_lab'
 
 # Make sure the logs directory exists
 if not os.path.exists(LOGS_DIR) or not os.path.isdir(os.path.dirname(LOGS_DIR)):
@@ -55,8 +61,25 @@ class Job(object):
             return True
         all_outputs = self.output if isinstance(self.output, (list, tuple)) else [self.output]
         if all([os.path.exists(f) for f in all_outputs]):
-            self.already_done = True
-            return True
+            # If the job's output is a directory, and the job is currently running or executing, then it is not done
+            if self.jobid is not None and any([os.path.isdir(f) for f in all_outputs]):
+                s_jobid = str(self.jobid)
+                sacct_output = subprocess.check_output(['sacct', '-n', '-o', 'JobID,JobName%100,State%20'])
+                for job_line in sacct_output.split('\n'):
+
+                    job_split = job_line.split()
+                    if len(job_split) == 0:
+                        continue
+
+                    job_id = job_split[0]
+                    job_status = ' '.join(job_split[2:])
+
+                    if s_jobid == job_id and job_status == 'COMPLETED':
+                        self.already_done = True
+                        return True
+            else:
+                self.already_done = True
+                return True
         return False
 
     def dependendencies_done(self):
@@ -78,9 +101,13 @@ class Job(object):
         print "RUN", self.name
         print " ".join(self.command())
 
-        work_queue = "serial_requeue"
-        if self.get_threads_num() > 1:
-            work_queue = "general"
+        work_queue = SBATCH_QUEUE
+        # if self.get_threads_num() > 1:
+        #     work_queue = "general"
+
+        account_str = ""
+        if SBATCH_ACCOUNT is not None:
+            account_str = "--account={}".format(SBATCH_ACCOUNT)
 
         if RUN_LOCAL:
             subprocess.check_call(self.command())
@@ -88,16 +115,17 @@ class Job(object):
             command_list = ["sbatch",
                 "-J", self.name,                   # Job name
                 "-p", work_queue,            # Work queue (partition) = general / unrestricted / interactive / serial_requeue
-                "--requeue",
+                "--no-requeue",
                 #"--exclude=holy2b05105,hp1301,hp0403",           # Exclude some bad nodes - holy2b05105 did not have scratch2 mapped.
                 ##"--ntasks", str(self.processors),        # Number of processes
                 "--ntasks", str(1),        # Number of processes
                 "--cpus-per-task", str(self.get_threads_num()),        # Number of threads
                 "-t", str(self.time),              # Time in munites 1440 = 24 hours
                 "--mem-per-cpu", str(self.memory), # Max memory in MB (strict - attempts to allocate more memory will fail)
+                account_str,
                 "--open-mode=append",              # Append to log files
-                "-o", "logs/out." + self.name,     # Standard out file
-                "-e", "logs/error." + self.name]   # Error out file
+                "-o", LOGS_DIR + "/out." + self.name,     # Standard out file
+                "-e", LOGS_DIR + "/error." + self.name]   # Error out file
 
             if len(self.dependencies) > 0:
                 #print command_list
@@ -110,7 +138,7 @@ class Job(object):
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
             if MEASURE_PERFORMANCE:
-                sbatch_out, sbatch_err = process.communicate("#!/bin/bash\nperf stat -o logs/perf.{0} {1}".format(self.name, " ".join(self.command())))
+                sbatch_out, sbatch_err = process.communicate("#!/bin/bash\nperf stat -o " + LOGS_DIR + "/perf.{0} {1}".format(self.name, " ".join(self.command())))
             else:
                 sbatch_out, sbatch_err = process.communicate("#!/bin/bash\n{0}".format(" ".join(self.command())))
 
@@ -477,25 +505,29 @@ class JobBlock(object):
                     # else:
                     #     dependency_set.add(d.name)
 
-        work_queue = "serial_requeue"
+        work_queue = SBATCH_QUEUE
         # if self.required_threads > 1:
         #     work_queue = "general"
 
+        account_str = ""
+        if SBATCH_ACCOUNT is not None:
+            account_str = "--account={}".format(SBATCH_ACCOUNT)
 
         if USE_SBATCH:
             command_list = ["sbatch",
                 "-J", block_name,                   # Job name
                 "-p", work_queue,            # Work queue (partition) = general / unrestricted / interactive / serial_requeue
-                "--requeue",
+                "--no-requeue",
                 #"--exclude=holy2b05105,hp1301,hp0403",           # Exclude some bad nodes - holy2b05105 did not have scratch2 mapped.
                 "--ntasks", str(self.jobs_count),        # Number of processes
                 "--cpus-per-task", str(self.required_threads),        # Number of threads
 #                "-n", str(required_cores),        # Number of processors
                 "-t", str(self.required_full_time),              # Time in munites 1440 = 24 hours
                 "--mem", str(self.required_memory), # Max memory in MB (strict - attempts to allocate more memory will fail)
+                account_str,
                 "--open-mode=append",              # Append to log files
-                "-o", "logs/out." + block_name,     # Standard out file
-                "-e", "logs/error." + block_name]   # Error out file
+                "-o", LOGS_DIR + "/out." + block_name,     # Standard out file
+                "-e", LOGS_DIR + "/error." + block_name]   # Error out file
 
         elif USE_QSUB:
             command_list = ["qsub"]#,
@@ -505,7 +537,7 @@ class JobBlock(object):
                 # "-l", 'nodes=1:ppn={0},walltime={1}:00'.format(str(required_cores), required_full_time),  # Number of processors
                 # #"-l", 'walltime={0}:00'.format(self.time),             # Time in munites 1440 = 24 hours
                 # #"-l", '-mppmem={0}'.format(self.memory),               # Max memory per cpu in MB (strict - attempts to allocate more memory will fail)
-                # "-e", "logs/outerror." + block_name('_')[0],      # Error out file
+                # "-e", LOGS_DIR + "/outerror." + block_name('_')[0],      # Error out file
                 # "-j", "eo"]                                            # Join standard out file to error file
 
             # Better to use file input rather than command line inputs (according to XSEDE helpdesk)
@@ -515,7 +547,7 @@ class JobBlock(object):
                "#PBS -A hvd113\n" +
                "#PBS -q {0}\n".format(QSUB_WORK_QUEUE) +
                "#PBS -l nodes=1:ppn={0}:native,walltime={1}:00\n".format(str(MAX_CORES), self.required_full_time) +
-               "#PBS -e logs/outerror.{0}\n".format(block_name.split('_')[0]) +
+               "#PBS -e " + LOGS_DIR + "/outerror.{0}\n".format(block_name.split('_')[0]) +
                "#PBS -j eo\n")
 
         if len(dependency_set) > 0:
