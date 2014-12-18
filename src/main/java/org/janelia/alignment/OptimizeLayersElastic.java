@@ -722,6 +722,7 @@ public class OptimizeLayersElastic {
 		// Load and parse tile spec files
 		final HashMap< Integer, List< TileSpec > > layersTs = new HashMap<Integer, List<TileSpec>>();
 		final HashMap< String, Integer > tsUrlToLayerIds = new HashMap<String, Integer>();
+		final HashMap< Integer, String > layerIdToTsUrl = new HashMap<Integer, String>();
 		for ( final String tsUrl : actualTileSpecFiles )
 		{
 			final TileSpec[] tileSpecs = TileSpecUtils.readTileSpecFile( tsUrl );
@@ -731,6 +732,7 @@ public class OptimizeLayersElastic {
 
 			layersTs.put( layer, Arrays.asList( tileSpecs ) );
 			tsUrlToLayerIds.put( tsUrl, layer );
+			layerIdToTsUrl.put( layer, tsUrl );
 		}
 
 		List< String > actualCorrFiles;
@@ -774,9 +776,12 @@ public class OptimizeLayersElastic {
 			if ( skippedLayers.contains( layer ) )
 				continue;
 			
+			String jsonFilename = layerIdToTsUrl.get( layer );
+			String baseFilename = jsonFilename.substring( jsonFilename.lastIndexOf( '/' ) );
+			
 			String layerString = String.format( "%04d", layer );
 			System.out.println( "Writing layer " + layerString );
-			final File targetFile = new File( params.targetDir, "Section_" + layerString + ".json" );
+			final File targetFile = new File( params.targetDir, baseFilename );
 			final List< TileSpec > layerOutTiles = layersTs.get( layer );
 			try {
 				Writer writer = new FileWriter(targetFile);

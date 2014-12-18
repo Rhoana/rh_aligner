@@ -7,6 +7,7 @@ import ij.process.ByteProcessor;
 import ij.process.ColorProcessor;
 
 import java.awt.image.BufferedImage;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -188,7 +189,11 @@ public class Render3D {
 					image.show();
 				if ( params.targetDir != null )
 				{
-					String outFile = String.format( "%s/Section_%04d.png", params.targetDir, curLayer );
+					String jsonFilename = layerIdToTileSpecFilename.get( i );
+					String baseFilename = jsonFilename.substring( jsonFilename.lastIndexOf( File.separatorChar ) + 1 );
+					baseFilename = baseFilename.substring( 0, baseFilename.lastIndexOf( '.' ) );
+					
+					String outFile = String.format( "%s/%s.png", params.targetDir, baseFilename );
 					saveLayerImage( image, outFile );
 				}
 			}
@@ -212,7 +217,12 @@ public class Render3D {
 					image.show();
 				if ( params.targetDir != null )
 				{
-					String outFile = String.format( "%s/Section_%04d.png", params.targetDir, curLayer );
+					String jsonFilename = layerIdToTileSpecFilename.get( i );
+					String baseFilename = jsonFilename.substring( jsonFilename.lastIndexOf( '/' ) + 1 );
+					baseFilename = baseFilename.substring( 0, baseFilename.lastIndexOf( '.' ) );
+					System.out.println( baseFilename );
+					
+					String outFile = String.format( "%s/%s.png", params.targetDir, baseFilename );
 					saveLayerImage( image, outFile );
 				}
 			}
