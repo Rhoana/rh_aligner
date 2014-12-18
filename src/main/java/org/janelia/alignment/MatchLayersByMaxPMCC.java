@@ -20,6 +20,7 @@ import mpicbg.models.CoordinateTransform;
 import mpicbg.models.ErrorStatistic;
 import mpicbg.models.IdentityModel;
 import mpicbg.models.InvertibleCoordinateTransform;
+import mpicbg.models.Point;
 import mpicbg.models.PointMatch;
 import mpicbg.models.SpringMesh;
 import mpicbg.models.Vertex;
@@ -400,12 +401,24 @@ public class MatchLayersByMaxPMCC {
 					t1.connect( t2, pm12 );
 				}
 */
+				
+				// Remove Vertex (spring mesh) details from points
+				final ArrayList< PointMatch > pm12_strip = new ArrayList< PointMatch >();
+				for (PointMatch pm: pm12)
+				{
+					PointMatch actualPm = new PointMatch(
+							new Point( pm.getP1().getL(), pm.getP1().getW() ),
+							new Point( pm.getP2().getL(), pm.getP2().getW() )
+							);
+					pm12_strip.add( actualPm );
+				}
+				
 				// TODO: Export / Import master sprint mesh vertices no calculated  individually per tile (v1, v2).
 				corr_data.add(new CorrespondenceSpec(
 						mipmapLevel,
 						param.inputfile1,
 						param.inputfile2,
-						pm12,
+						pm12_strip,
 						( pm12.size() > model.getMinNumMatches() ) ));
 				
 			}
@@ -501,12 +514,23 @@ public class MatchLayersByMaxPMCC {
 					t2.connect( t1, pm21 );
 				}
 */
+				// Remove Vertex (spring mesh) details from points
+				final ArrayList< PointMatch > pm21_strip = new ArrayList< PointMatch >();
+				for (PointMatch pm: pm21)
+				{
+					PointMatch actualPm = new PointMatch(
+							new Point( pm.getP1().getL(), pm.getP1().getW() ),
+							new Point( pm.getP2().getL(), pm.getP2().getW() )
+							);
+					pm21_strip.add( actualPm );
+				}
+
 				// TODO: Export / Import master sprint mesh vertices no calculated  individually per tile (v1, v2).
 				corr_data.add(new CorrespondenceSpec(
 						mipmapLevel,
 						param.inputfile2,
 						param.inputfile1,
-						pm21,
+						pm21_strip,
 						( pm21.size() > model.getMinNumMatches() ) ));
 
 
