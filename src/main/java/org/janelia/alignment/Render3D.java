@@ -8,6 +8,7 @@ import ij.process.ColorProcessor;
 
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -119,6 +120,15 @@ public class Render3D {
 		else
 			actualTileSpecFiles = params.files;
 
+		final HashMap<Integer, String> layerIdToTileSpecFilename = new HashMap<Integer, String>();
+		for ( String tsFileName : actualTileSpecFiles )
+		{
+			// read tile spec layer
+			final TileSpec[] ts = TileSpecUtils.readTileSpecFile( tsFileName );
+			if ( ( ts != null ) && ( ts.length > 0 ) )
+				if ( ts[0].layer != -1 )
+					layerIdToTileSpecFilename.put( ts[0].layer, tsFileName );
+		}
 		
 		// Open all tiles
 		final TileSpecsImage entireImage = TileSpecsImage.createImageFromFiles( actualTileSpecFiles );
@@ -166,6 +176,10 @@ public class Render3D {
 			// Single thread execution
 			for ( int i = firstLayer; i <= lastLayer; i++ )
 			{
+				// If layer doesn't exist in the original files, just skip it
+				if ( !layerIdToTileSpecFilename.containsKey( i ) )
+					continue;
+
 				final int curLayer = i;
 				final double curScale = scale;
 
@@ -186,6 +200,10 @@ public class Render3D {
 			// TODO: create a thread for saving the layer image (an IO thread)
 			for ( int i = firstLayer; i <= lastLayer; i++ )
 			{
+				// If layer doesn't exist in the original files, just skip it
+				if ( !layerIdToTileSpecFilename.containsKey( i ) )
+					continue;
+
 				final int curLayer = i;
 				final double curScale = scale;
 
