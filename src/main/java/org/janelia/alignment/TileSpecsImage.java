@@ -26,6 +26,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
+import org.nustaq.serialization.FSTConfiguration;
+import org.nustaq.serialization.FSTObjectInput;
+import org.nustaq.serialization.FSTObjectOutput;
+
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
@@ -48,6 +52,8 @@ public class TileSpecsImage {
 	private final static boolean PRINT_TIME_PER_STEP = true;
 
 	private static final int DEFAULT_TRIANGLE_SIZE = 64;
+
+	private static final FSTConfiguration FST_CONF = FSTConfiguration.createDefaultConfiguration();
 
 	/* Data members */
 	
@@ -291,9 +297,9 @@ public class TileSpecsImage {
 				outFilename = outFilename.substring( 0, outFilename.lastIndexOf( '.' ) ) + ".ser";
 				FileOutputStream fileOut = new FileOutputStream(
 						new File( targetDir, outFilename ));
-				ObjectOutputStream out = new ObjectOutputStream(fileOut);
+				FSTObjectOutput out = FST_CONF.getObjectOutput( fileOut );
 				out.writeObject( mesh );
-				out.close();
+				out.flush();
 				fileOut.close();
 				System.out.println("Serialized data is saved in " + targetDir + "/" + outFilename );
 			}catch(IOException i)
@@ -402,9 +408,8 @@ public class TileSpecsImage {
 			{
 				FileInputStream fileIn = new FileInputStream(
 						new File( meshesDir, inFilename ));
-				ObjectInputStream in = new ObjectInputStream(fileIn);
+				FSTObjectInput in = FST_CONF.getObjectInput( fileIn );
 				mesh = (CoordinateTransformMesh) in.readObject();
-				in.close();
 				fileIn.close();
 			} catch(IOException e)
 			{
