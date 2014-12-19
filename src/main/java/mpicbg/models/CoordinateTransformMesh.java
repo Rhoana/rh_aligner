@@ -1,5 +1,6 @@
 package mpicbg.models;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.Set;
@@ -15,8 +16,13 @@ import java.util.concurrent.Future;
  * @author adisuis
  *
  */
-public class CoordinateTransformMesh extends TransformMesh
+public class CoordinateTransformMesh extends TransformMesh implements Serializable
 {
+
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 1262310752503038994L;
 
 	public CoordinateTransformMesh(
 			final CoordinateTransform t,
@@ -101,5 +107,14 @@ public class CoordinateTransformMesh extends TransformMesh
 		updateAffines();
 	}
 
+	public void applyTransformations( final CoordinateTransform t, final int threadsNum )
+	{
+		final Set< PointMatch > vertices = va.keySet();
+
+		for ( final PointMatch vertex : vertices )
+			vertex.getP2().apply( t );
+
+		updateAffines();
+	}
 
 }

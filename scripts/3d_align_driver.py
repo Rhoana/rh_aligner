@@ -16,6 +16,7 @@ import glob
 
 #from filter_tiles import filter_tiles
 #from create_sift_features import create_sift_features
+from create_meshes import create_meshes
 from create_layer_sift_features import create_layer_sift_features
 from match_layers_sift_features import match_layers_sift_features
 from filter_ransac import filter_ransac
@@ -34,8 +35,8 @@ parser.add_argument('input_dir', metavar='input_dir', type=str,
 parser.add_argument('-w', '--workspace_dir', type=str, 
                     help='a directory where the output files of the different stages will be kept (default: ./work_dir)',
                     default='./work_dir')
-parser.add_argument('-r', '--render', action='store_true',
-                    help='render final result')
+parser.add_argument('-r', '--render_meshes_first', action='store_true',
+                    help='before working with json files, "render" their transfromations (saves repeated work on large images)')
 parser.add_argument('-o', '--output_dir', type=str, 
                     help='the directory where the output to be rendered in json format files will be stored (default: ./output)',
                     default='./output')
@@ -78,6 +79,11 @@ if not args.conf_file_name is None:
     with open(args.conf_file_name, 'r') as conf_file:
         conf = json.load(conf_file)
 
+meshes_dir = ''
+if args.render_meshes_first:
+    meshes_dir = os.path.join(args.workspace_dir, "meshes")
+    create_dir(meshes_dir)
+
 #after_bbox_dir = os.path.join(args.workspace_dir, "after_bbox")
 #create_dir(after_bbox_dir)
 sifts_dir = os.path.join(args.workspace_dir, "sifts")
@@ -93,6 +99,7 @@ all_layers = []
 layer_to_sifts = {}
 layer_to_ts_json = {}
 layer_to_json_prefix = {}
+layer_meshes_dir = {}
 
 # Find all images width and height (for the mesh)
 imageWidth = None
@@ -128,12 +135,24 @@ for tiles_fname in glob.glob(os.path.join(args.input_dir, '*.json')):
     if imageHeight is None or imageHeight < bbox[3] - bbox[2]:
         imageHeight = bbox[3] - bbox[2]
 
+    if args.render_meshes_first:
+        # precompute the transformed meshes of the tiles
+        print "Creating meshes of {0}".format(tiles_fname_prefix)
+        layer_meshes_dir[layer] = os.path.join(meshes_dir, tiles_fname_prefix)
+        if not os.path.exists(layer_meshes_dir[layer]):
+            create_dir(layer_meshes_dir[layer])
+            create_meshes(tiles_fname, layer_meshes_dir[layer], args.jar_file)
+
+
     # create the sift features of these tiles
     print "Computing sift features of {0}".format(tiles_fname_prefix)
     sifts_json = os.path.join(sifts_dir, "{0}_sifts.json".format(tiles_fname_prefix))
     if not os.path.exists(sifts_json):
-        #create_layer_sift_features(after_bbox_json, sifts_json, args.jar_file, conf)
-        create_layer_sift_features(tiles_fname, sifts_json, args.jar_file, conf)
+        if args.render_meshes_first:
+            create_layer_sift_features(tiles_fname, sifts_json, args.jar_file, meshes_dir=layer_meshes_dir[layer], conf=conf)
+        else:
+            #create_layer_sift_features(after_bbox_json, sifts_json, args.jar_file, conf)
+            create_layer_sift_features(tiles_fname, sifts_json, args.jar_file, conf)
     layer_to_sifts[layer] = sifts_json
     layer_to_json_prefix[layer] = tiles_fname_prefix
     #layer_to_ts_json[layer] = after_bbox_json
@@ -189,7 +208,10 @@ for i in all_layers:
         pmcc_fname = os.path.join(matched_pmcc_dir, "{0}_{1}_match_pmcc.json".format(fname1_prefix, fname2_prefix))
         if not os.path.exists(pmcc_fname):
             print "Matching layers by Max PMCC: {0} and {1}".format(i, i + j)
-            match_layers_by_max_pmcc(args.jar_file, layer_to_ts_json[i], layer_to_ts_json[i + j], ransac_fname, imageWidth, imageHeight, [fixed_layer], pmcc_fname, conf=conf, auto_add_model=args.auto_add_model)
+            if args.render_meshes_first:
+                match_layers_by_max_pmcc(args.jar_file, layer_to_ts_json[i], layer_to_ts_json[i + j], ransac_fname, imageWidth, imageHeight, [fixed_layer], pmcc_fname, meshes_dir1=layer_meshes_dir[i], meshes_dir2=layer_meshes_dir[i + j], conf=conf, auto_add_model=args.auto_add_model)
+            else:
+                match_layers_by_max_pmcc(args.jar_file, layer_to_ts_json[i], layer_to_ts_json[i + j], ransac_fname, imageWidth, imageHeight, [fixed_layer], pmcc_fname, conf=conf, auto_add_model=args.auto_add_model)
         all_pmcc_files.append(pmcc_fname)
 
 print "All pmcc files: {0}".format(all_pmcc_files)

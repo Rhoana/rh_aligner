@@ -10,8 +10,16 @@ import utils
 
 # common functions
 
-def match_layers_by_max_pmcc(jar_file, tiles_file1, tiles_file2, models_file, image_width, image_height, fixed_layers, out_fname, conf=None, threads_num=None, auto_add_model=False):
+def match_layers_by_max_pmcc(jar_file, tiles_file1, tiles_file2, models_file, image_width, image_height,
+        fixed_layers, out_fname, meshes_dir1=None, meshes_dir2=None, conf=None, threads_num=None, auto_add_model=False):
     conf_args = utils.conf_args(conf, 'MatchLayersByMaxPMCC')
+
+    meshes_str = ''
+    if meshes_dir1 is not None:
+        meshes_str += ' --meshesDir1 "{0}"'.format(meshes_dir1)
+
+    if meshes_dir2 is not None:
+        meshes_str += ' --meshesDir2 "{0}"'.format(meshes_dir2)
 
     fixed_str = ""
     if fixed_layers != None:
@@ -26,7 +34,7 @@ def match_layers_by_max_pmcc(jar_file, tiles_file1, tiles_file2, models_file, im
         auto_add_model_str = "--autoAddModel"
 
     java_cmd = 'java -Xmx6g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.MatchLayersByMaxPMCC --inputfile1 {1} --inputfile2 {2} \
-            --modelsfile1 {3} --imageWidth {4} --imageHeight {5} {6} {7} --targetPath {8} {9} {10}'.format(
+            --modelsfile1 {3} --imageWidth {4} --imageHeight {5} {6} {7} {8} --targetPath {9} {10} {11}'.format(
         jar_file,
         utils.path2url(tiles_file1),
         utils.path2url(tiles_file2),
@@ -35,6 +43,7 @@ def match_layers_by_max_pmcc(jar_file, tiles_file1, tiles_file2, models_file, im
         int(image_height),
         threads_str,
         auto_add_model_str,
+        meshes_str,
         out_fname,
         fixed_str,
         conf_args)
@@ -71,14 +80,21 @@ def main():
                         default=None)
     parser.add_argument('--auto_add_model', action="store_true", 
                         help='automatically add the identity model, if a model is not found')
+    parser.add_argument('-md1', '--meshes_dir1', type=str, 
+                        help='the directory that contains precomputed and serialized meshes of the first layer (optional, default: None)',
+                        default=None)
+    parser.add_argument('-md2', '--meshes_dir2', type=str, 
+                        help='the directory that contains precomputed and serialized meshes of the second layer (optional, default: None)',
+                        default=None)
 
 
     args = parser.parse_args()
 
-    match_layers_by_max_pmcc(args.jar_file, args.tiles_file1, args.tiles_file2, \
-        args.models_file, args.image_width, args.image_height, \
-        args.fixed_layers, args.output_file, \
-        conf=utils.conf_args_from_file(args.conf_file_name, "MatchLayersByMaxPMCC"), \
+    match_layers_by_max_pmcc(args.jar_file, args.tiles_file1, args.tiles_file2,
+        args.models_file, args.image_width, args.image_height,
+        args.fixed_layers, args.output_file, 
+        meshes_dir1=args.meshes_dir1, meshes_dir2=args.meshes_dir2,
+        conf=utils.conf_args_from_file(args.conf_file_name, "MatchLayersByMaxPMCC"), 
         threads_num=args.threads_num,
         auto_add_model=args.auto_add_model)
 

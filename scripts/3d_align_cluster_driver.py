@@ -22,8 +22,30 @@ from job import Job
 from bounding_box import BoundingBox
 
 
+class CreateMeshes(Job):
+    def __init__(self, tiles_fname, output_dir, jar_file, threads_num=1):
+        Job.__init__(self)
+        self.already_done = False
+        self.tiles_fname = '"{0}"'.format(tiles_fname)
+        self.output_dir = '-o "{0}"'.format(output_dir)
+        self.jar_file = '-j "{0}"'.format(jar_file)
+        self.dependencies = [ ]
+        self.threads = threads_num
+        self.threads_str = "-t {0}".format(threads_num)
+        self.memory = 64000
+        self.time = 200
+        self.is_java_job = True
+        self.output = output_dir
+        #self.already_done = os.path.exists(self.output_file)
+
+    def command(self):
+        return ['python -u',
+                os.path.join(os.environ['ALIGNER'], 'scripts', 'create_meshes.py'),
+                self.output_dir, self.jar_file, self.threads_str, self.tiles_fname]
+
+
 class CreateLayerSiftFeatures(Job):
-    def __init__(self, tiles_fname, output_file, jar_file, conf_fname=None, threads_num=1):
+    def __init__(self, dependencies, tiles_fname, output_file, jar_file, meshes_dir=None, conf_fname=None, threads_num=1):
         Job.__init__(self)
         self.already_done = False
         self.tiles_fname = '"{0}"'.format(tiles_fname)
@@ -33,11 +55,15 @@ class CreateLayerSiftFeatures(Job):
             self.conf_fname = ''
         else:
             self.conf_fname = '-c "{0}"'.format(conf_fname)
-        self.dependencies = []
+        if meshes_dir is None:
+            self.meshes_dir = ''
+        else:
+            self.meshes_dir = '--meshes_dir "{0}"'.format(meshes_dir)
+        self.dependencies = dependencies
         self.threads = threads_num
         self.threads_str = "-t {0}".format(threads_num)
-        self.memory = 12000
-        self.time = 30
+        self.memory = 64000
+        self.time = 400
         self.is_java_job = True
         self.output = output_file
         #self.already_done = os.path.exists(self.output_file)
@@ -45,7 +71,7 @@ class CreateLayerSiftFeatures(Job):
     def command(self):
         return ['python -u',
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'create_layer_sift_features.py'),
-                self.output_file, self.jar_file, self.threads_str, self.conf_fname, self.tiles_fname]
+                self.output_file, self.jar_file, self.threads_str, self.meshes_dir, self.conf_fname, self.tiles_fname]
 
 class MatchLayersSiftFeatures(Job):
     def __init__(self, dependencies, tiles_fname1, features_fname1, tiles_fname2, features_fname2, corr_output_file, jar_file, conf_fname=None, threads_num=1):
@@ -64,8 +90,8 @@ class MatchLayersSiftFeatures(Job):
         self.dependencies = dependencies
         self.threads = threads_num
         self.threads_str = "-t {0}".format(threads_num)
-        self.memory = 4000
-        self.time = 10
+        self.memory = 8000
+        self.time = 30
         self.is_java_job = True
         self.output = corr_output_file
         #self.already_done = os.path.exists(self.output_file)
@@ -94,14 +120,14 @@ class FilterRansac(Job):
         else:
             self.conf_fname = '-c "{0}"'.format(conf_fname)
         self.dependencies = dependencies
-        self.memory = 4000
-        self.time = 10
+        self.memory = 8000
+        self.time = 30
         self.is_java_job = True
         self.output = output_fname
         #self.already_done = os.path.exists(self.output_file)
 
     def command(self):
-        return ['python',
+        return ['python -u',
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'filter_ransac.py'),
                 self.jar_file, self.conf_fname, self.output_file, self.corr_fname, self.tiles_fname]
 
@@ -111,7 +137,9 @@ class FilterRansac(Job):
 
 
 class MatchLayersByMaxPMCC(Job):
-    def __init__(self, dependencies, tiles_fname1, tiles_fname2, ransac_fname, image_width, image_height, fixed_layers, pmcc_output_file, jar_file, conf_fname=None, threads_num=1, auto_add_model=False):
+    def __init__(self, dependencies, tiles_fname1, tiles_fname2, ransac_fname, image_width, image_height, fixed_layers, pmcc_output_file, jar_file, 
+            meshes_dir1=None, meshes_dir2=None,
+            conf_fname=None, threads_num=1, auto_add_model=False):
         Job.__init__(self)
         self.already_done = False
         self.tiles_fname1 = '"{0}"'.format(tiles_fname1)
@@ -133,19 +161,29 @@ class MatchLayersByMaxPMCC(Job):
             self.auto_add_model = '--auto_add_model'
         else:
             self.auto_add_model = ''
+        if meshes_dir1 is None:
+            self.meshes_dir1 = ''
+        else:
+            self.meshes_dir1 = '--meshes_dir1 "{0}"'.format(meshes_dir1)
+        if meshes_dir2 is None:
+            self.meshes_dir2 = ''
+        else:
+            self.meshes_dir2 = '--meshes_dir1 "{0}"'.format(meshes_dir2)
         self.threads = threads_num
         self.threads_str = '-t {0}'.format(threads_num)
         self.dependencies = dependencies
-        self.memory = 7000
-        self.time = 30
+        self.memory = 72000
+        self.time = 600
         self.is_java_job = True
         self.output = pmcc_output_file
         #self.already_done = os.path.exists(self.output_file)
 
     def command(self):
-        return ['python',
+        return ['python -u',
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'match_layers_by_max_pmcc.py'),
-                self.output_file, self.fixed_layers, self.jar_file, self.conf_fname, self.threads_str, self.auto_add_model, self.image_width, self.image_height,
+                self.output_file, self.fixed_layers, self.jar_file, self.conf_fname, self.threads_str, self.auto_add_model,
+                self.meshes_dir1, self.meshes_dir2,
+                self.image_width, self.image_height,
                 self.tiles_fname1, self.tiles_fname2, self.ransac_fname]
 
 
@@ -180,14 +218,14 @@ class OptimizeLayersElastic(Job):
         self.threads = threads_num
         self.threads_str = '-t {0}'.format(threads_num)
         self.dependencies = dependencies
-        self.memory = 4000
-        self.time = 30
+        self.memory = 10000
+        self.time = 300
         self.is_java_job = True
         self.output = outputs
         #self.already_done = os.path.exists(self.output_file)
 
     def command(self):
-        return ['python',
+        return ['python -u',
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'optimize_layers_elastic.py'),
                 self.output_dir, self.jar_file, self.conf_fname, self.image_width, self.image_height, self.fixed_layers,
                 self.skip_layers, self.tiles_fnames, self.corr_fnames]
@@ -233,6 +271,8 @@ if __name__ == '__main__':
     parser.add_argument('-s', '--skip_layers', type=str, 
                         help='the range of layers (sections) that will not be processed e.g., "2,3,9-11,18" (default: no skipped sections)',
                         default=None)
+    parser.add_argument('-r', '--render_meshes_first', action='store_true',
+                        help='before working with json files, "render" their transfromations (saves repeated work on large images)')
     parser.add_argument('-k', '--keeprunning', action='store_true', 
                         help='Run all jobs and report cluster jobs execution stats')
     parser.add_argument('-m', '--multicore', action='store_true', 
@@ -248,6 +288,11 @@ if __name__ == '__main__':
 
     # create a workspace directory if not found
     create_dir(args.workspace_dir)
+
+    meshes_dir = ''
+    if args.render_meshes_first:
+        meshes_dir = os.path.join(args.workspace_dir, "meshes")
+        create_dir(meshes_dir)
 
     sifts_dir = os.path.join(args.workspace_dir, "sifts")
     create_dir(sifts_dir)
@@ -294,6 +339,7 @@ if __name__ == '__main__':
         if not (slayer in layers_data.keys()):
             layers_data[slayer] = {}
             jobs[slayer] = {}
+            jobs[slayer]['meshes'] = []
             jobs[slayer]['sifts'] = []
 
 
@@ -311,10 +357,27 @@ if __name__ == '__main__':
         if imageHeight is None or imageHeight < bbox[3] - bbox[2]:
             imageHeight = bbox[3] - bbox[2]
 
+        if args.render_meshes_first:
+            # precompute the transformed meshes of the tiles
+            layer_meshes_dir = os.path.join(meshes_dir, tiles_fname_prefix)
+            if not os.path.exists(layer_meshes_dir):
+                print "Creating meshes of {0}".format(tiles_fname_prefix)
+                meshes_job = CreateMeshes(f, layer_meshes_dir, args.jar_file, threads_num=32)
+                jobs[slayer]['meshes'].append(meshes_job)
+                all_running_jobs.append(meshes_job)
+            layers_data[slayer]['meshes_dir'] = layer_meshes_dir
+
         # create the sift features of these tiles
         sifts_json = os.path.join(sifts_dir, "{0}_sifts.json".format(tiles_fname_prefix))
         if not os.path.exists(sifts_json):
-            sift_job = CreateLayerSiftFeatures(f, sifts_json, args.jar_file, conf_fname=args.conf_file_name, threads_num=8)
+            sift_job = None
+            dependencies = [ ]
+            for dep in jobs[slayer]['meshes']:
+                dependencies.append(dep)
+            if args.render_meshes_first:
+                sift_job = CreateLayerSiftFeatures(dependencies, f, sifts_json, args.jar_file, meshes_dir=layers_data[slayer]['meshes_dir'], conf_fname=args.conf_file_name, threads_num=8)
+            else:
+                sift_job = CreateLayerSiftFeatures(dependencies, f, sifts_json, args.jar_file, conf_fname=args.conf_file_name, threads_num=8)
             jobs[slayer]['sifts'].append(sift_job)
             all_running_jobs.append(sift_job)
 
@@ -375,7 +438,11 @@ if __name__ == '__main__':
                 dependencies = [ ]
                 for dep in jobs[si]['sifts']:
                     dependencies.append(dep)
+                for dep in jobs[si]['meshes']:
+                    dependencies.append(dep)
                 for dep in jobs[sij]['sifts']:
+                    dependencies.append(dep)
+                for dep in jobs[sj]['meshes']:
                     dependencies.append(dep)
 
                 tiles_fname_prefix = os.path.splitext(os.path.basename(f))[0]
@@ -395,7 +462,11 @@ if __name__ == '__main__':
                     dependencies.append(job_match)
                 for dep in jobs[si]['sifts']:
                     dependencies.append(dep)
+                for dep in jobs[si]['meshes']:
+                    dependencies.append(dep)
                 for dep in jobs[sij]['sifts']:
+                    dependencies.append(dep)
+                for dep in jobs[sij]['meshes']:
                     dependencies.append(dep)
 
                 job_ransac = FilterRansac(dependencies, path2url(layers_data[si]['ts']), layers_data[si]['matched_sifts'][sij], ransac_fname, \
@@ -415,12 +486,23 @@ if __name__ == '__main__':
                     dependencies.append(job_match)
                 for dep in jobs[si]['sifts']:
                     dependencies.append(dep)
+                for dep in jobs[si]['meshes']:
+                    dependencies.append(dep)
                 for dep in jobs[sij]['sifts']:
                     dependencies.append(dep)
+                for dep in jobs[sij]['meshes']:
+                    dependencies.append(dep)
 
-                job_pmcc = MatchLayersByMaxPMCC(dependencies, layers_data[si]['ts'], layers_data[sij]['ts'], \
-                    layers_data[si]['ransac'][sij], imageWidth, imageHeight, \
-                    [ fixed_layer ], pmcc_fname, args.jar_file, conf_fname=args.conf_file_name, threads_num=16, auto_add_model=args.auto_add_model)
+                if args.render_meshes_first:
+                    job_pmcc = MatchLayersByMaxPMCC(dependencies, layers_data[si]['ts'], layers_data[sij]['ts'], 
+                        layers_data[si]['ransac'][sij], imageWidth, imageHeight, 
+                        [ fixed_layer ], pmcc_fname, args.jar_file, 
+                        meshes_dir1=layers_data[si]['meshes_dir'], meshes_dir2=layers_data[sij]['meshes_dir'],
+                        conf_fname=args.conf_file_name, threads_num=32, auto_add_model=args.auto_add_model)
+                else:
+                    job_pmcc = MatchLayersByMaxPMCC(dependencies, layers_data[si]['ts'], layers_data[sij]['ts'], 
+                        layers_data[si]['ransac'][sij], imageWidth, imageHeight, 
+                        [ fixed_layer ], pmcc_fname, args.jar_file, conf_fname=args.conf_file_name, threads_num=32, auto_add_model=args.auto_add_model)
                 #match_layers_by_max_pmcc(args.jar_file, layer_to_ts_json[i], layer_to_ts_json[i + j], ransac_fname, imageWidth, imageHeight, [fixed_layer], pmcc_fname, conf)
                 pmcc_jobs.append(job_pmcc)
                 all_running_jobs.append(job_pmcc)

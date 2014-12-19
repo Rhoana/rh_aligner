@@ -58,6 +58,12 @@ public class MatchLayersByMaxPMCC {
         @Parameter( names = "--imageHeight", description = "The height of the entire image (all layers), for consistent mesh computation", required = true )
         private int imageHeight;
 
+        @Parameter( names = "--meshesDir1", description = "The directory where the cached mesh per tile of the first image is located", required = false )
+        private String meshesDir1 = null;
+
+        @Parameter( names = "--meshesDir2", description = "The directory where the cached mesh per tile of the second image is located", required = false )
+        private String meshesDir2 = null;
+
         @Parameter( names = "--autoAddModel", description = "Automatically add the Identity model in case a model is not found", required = false )
         private boolean autoAddModel = false;
 
@@ -140,9 +146,14 @@ public class MatchLayersByMaxPMCC {
 			final FloatProcessor output,
 			final FloatProcessor alpha,
 			final int mipmapLevel,
-			final float layerScale )
+			final float layerScale,
+			final String meshesDir )
 	{
-		final ByteProcessor tp = layerTileSpecsImage.render( layer, mipmapLevel, layerScale );
+		final ByteProcessor tp;
+		if ( meshesDir == null )
+			tp = layerTileSpecsImage.render( layer, mipmapLevel, layerScale );
+		else
+			tp = layerTileSpecsImage.renderFromMeshes( meshesDir, layer, mipmapLevel, layerScale );
 		final byte[] inputPixels = ( byte[] )tp.getPixels();
 		for ( int i = 0; i < inputPixels.length; ++i )
 		{
@@ -303,8 +314,8 @@ public class MatchLayersByMaxPMCC {
 			final FloatProcessor ip2Mask = new FloatProcessor( img2Width, img2Height );
 
 			// TODO: load the tile specs to FloatProcessor objects
-			tilespecToFloatAndMask( layer1Img, layer1, ip1, ip1Mask, mipmapLevel, param.layerScale );
-			tilespecToFloatAndMask( layer2Img, layer2, ip2, ip2Mask, mipmapLevel, param.layerScale );
+			tilespecToFloatAndMask( layer1Img, layer1, ip1, ip1Mask, mipmapLevel, param.layerScale, param.meshesDir1 );
+			tilespecToFloatAndMask( layer2Img, layer2, ip2, ip2Mask, mipmapLevel, param.layerScale, param.meshesDir2 );
 			endTime = System.currentTimeMillis();
 			if ( PRINT_TIME_PER_STEP )
 				System.out.println("Creating images took: " + ((endTime - startTime) / 1000.0) + " sec");

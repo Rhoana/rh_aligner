@@ -7,8 +7,13 @@ import ij.process.ColorProcessor;
 import ij.process.ImageProcessor;
 
 import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.io.Writer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -40,8 +45,10 @@ import mpicbg.util.Util;
  */
 public class TileSpecsImage {
 
+	private final static boolean PRINT_TIME_PER_STEP = true;
+
 	private static final int DEFAULT_TRIANGLE_SIZE = 64;
-	
+
 	/* Data members */
 	
 	private List< TileSpec > tileSpecs;
@@ -209,6 +216,232 @@ public class TileSpecsImage {
 			final ImageProcessorWithMasks target = new ImageProcessorWithMasks( tp, bpMaskTarget, null );
 			final TransformMeshMappingWithMasks< TransformMesh > mapping = new TransformMeshMappingWithMasks< TransformMesh >( mesh );
 			mapping.mapInterpolated( source, target, threadsNum );
+			
+			/* convert to 24bit RGB */
+			tp.setMinAndMax( ts.minIntensity, ts.maxIntensity );
+		}
+		return tp;
+	}
+
+	public void saveMeshes( String targetDir, int layer, int mipmapLevel ) {
+
+		// Get image width and height
+		parseTileSpecs();
+		
+		for ( TileSpec ts : tileSpecs ) {
+
+			if ( ts.layer != layer )
+				continue;
+			
+			ImageAndMask tsMipmapEntry = null;
+			ImageProcessor tsIp = null;
+			ImageProcessor tsIpMipmap = null;
+
+			
+			TreeMap< String, ImageAndMask > tsMipmapLevels = ts.getMipmapLevels();
+			
+			String key = tsMipmapLevels.floorKey( String.valueOf( mipmapLevel ) );
+			if ( key == null )
+				key = tsMipmapLevels.firstKey();
+			
+			/* load image TODO use Bioformats for strange formats */
+			tsMipmapEntry = tsMipmapLevels.get( key );
+			final String imgUrl = tsMipmapEntry.imageUrl;
+			System.out.println( "Rendering tile: " + imgUrl );
+			final ImagePlus imp = Utils.openImagePlusUrl( imgUrl );
+			if ( imp == null )
+			{
+				System.err.println( "Failed to load image '" + imgUrl + "'." );
+				continue;
+			}
+			tsIp = imp.getProcessor();
+			final int currentMipmapLevel = Integer.parseInt( key );
+			if ( currentMipmapLevel >= mipmapLevel )
+			{
+				mipmapLevel = currentMipmapLevel;
+				tsIpMipmap = tsIp;
+			}
+			else
+				tsIpMipmap = Downsampler.downsampleImageProcessor( tsIp, mipmapLevel - currentMipmapLevel );
+
+			long startTime = System.currentTimeMillis();
+
+			// Create the transform
+			final CoordinateTransformList< CoordinateTransform > ctl = ts.createTransformList();
+			final CoordinateTransformList< CoordinateTransform > ctlMipmap = new CoordinateTransformList< CoordinateTransform >();
+			ctlMipmap.add( Utils.createScaleLevelTransform( mipmapLevel ) );
+			ctlMipmap.add( ctl );
+			
+			/* create mesh */
+			final CoordinateTransformMesh mesh = new CoordinateTransformMesh( 
+					ctlMipmap, 
+					( int )( boundingBox.getWidth() / triangleSize + 0.5 ), 
+					tsIpMipmap.getWidth(), 
+					tsIpMipmap.getHeight(), 
+					threadsNum );
+			long endTime = System.currentTimeMillis();
+			if ( PRINT_TIME_PER_STEP )
+				System.out.println("Creating the mesh took: " + ((endTime - startTime) / 1000.0) + " sec");
+			
+			// Save the mesh (serialize it)
+			startTime = System.currentTimeMillis();
+			try
+			{
+				String outFilename = imgUrl.substring( imgUrl.lastIndexOf( '/' ) );
+				outFilename = outFilename.substring( 0, outFilename.lastIndexOf( '.' ) ) + ".ser";
+				FileOutputStream fileOut = new FileOutputStream(
+						new File( targetDir, outFilename ));
+				ObjectOutputStream out = new ObjectOutputStream(fileOut);
+				out.writeObject( mesh );
+				out.close();
+				fileOut.close();
+				System.out.println("Serialized data is saved in " + targetDir + "/" + outFilename );
+			}catch(IOException i)
+			{
+				i.printStackTrace();
+			}
+			endTime = System.currentTimeMillis();
+			if ( PRINT_TIME_PER_STEP )
+				System.out.println("Serialization took: " + ((endTime - startTime) / 1000.0) + " sec");
+
+		}
+	}
+
+	public ByteProcessor renderFromMeshes( String meshesDir, int layer, int mipmapLevel ) {
+		return renderFromMeshes( meshesDir, layer, mipmapLevel, 1.0f );
+	}
+
+	public ByteProcessor renderFromMeshes( String meshesDir, int layer, int mipmapLevel, float scale ) {
+		// Get image width and height
+		parseTileSpecs();
+		
+		int width = boundingBox.getWidth();
+		int height = boundingBox.getHeight();
+		
+		return renderFromMeshes( meshesDir, layer, mipmapLevel, scale, width, height );
+	}
+
+	public ByteProcessor renderFromMeshes( String meshesDir, int layer, int mipmapLevel, float scale, int width, int height ) {
+		
+		/* create a target */
+		ByteProcessor tp = new ByteProcessor( (int) ( width * scale ),
+				(int) ( height * scale ) );
+				
+		for ( TileSpec ts : tileSpecs ) {
+
+			if ( ts.layer != layer )
+				continue;
+			
+			ImageAndMask tsMipmapEntry = null;
+			ImageProcessor tsIp = null;
+			ImageProcessor tsIpMipmap = null;
+
+			
+			TreeMap< String, ImageAndMask > tsMipmapLevels = ts.getMipmapLevels();
+			
+			String key = tsMipmapLevels.floorKey( String.valueOf( mipmapLevel ) );
+			if ( key == null )
+				key = tsMipmapLevels.firstKey();
+			
+			/* load image TODO use Bioformats for strange formats */
+			tsMipmapEntry = tsMipmapLevels.get( key );
+			final String imgUrl = tsMipmapEntry.imageUrl;
+			System.out.println( "Rendering tile: " + imgUrl );
+			final ImagePlus imp = Utils.openImagePlusUrl( imgUrl );
+			if ( imp == null )
+			{
+				System.err.println( "Failed to load image '" + imgUrl + "'." );
+				continue;
+			}
+			tsIp = imp.getProcessor();
+			final int currentMipmapLevel = Integer.parseInt( key );
+			if ( currentMipmapLevel >= mipmapLevel )
+			{
+				mipmapLevel = currentMipmapLevel;
+				tsIpMipmap = tsIp;
+			}
+			else
+				tsIpMipmap = Downsampler.downsampleImageProcessor( tsIp, mipmapLevel - currentMipmapLevel );
+
+			
+			/* open mask */
+			final ByteProcessor bpMaskSource;
+			final ByteProcessor bpMaskTarget;
+			final String maskUrl = tsMipmapEntry.maskUrl;
+			if ( maskUrl != null )
+			{
+				final ImagePlus impMask = Utils.openImagePlusUrl( maskUrl );
+				if ( impMask == null )
+				{
+					System.err.println( "Failed to load mask '" + maskUrl + "'." );
+					bpMaskSource = null;
+					bpMaskTarget = null;
+				}
+				else
+				{
+					/* create according mipmap level */
+					bpMaskSource = Downsampler.downsampleByteProcessor( impMask.getProcessor().convertToByteProcessor(), mipmapLevel );
+					bpMaskTarget = new ByteProcessor( tp.getWidth(), tp.getHeight() );
+				}
+			}
+			else
+			{
+				bpMaskSource = null;
+				bpMaskTarget = null;
+			}
+			
+			
+			
+			// Load full scale mesh
+			CoordinateTransformMesh mesh = null; 
+			String inFilename = imgUrl.substring( imgUrl.lastIndexOf( '/' ) );
+			inFilename = inFilename.substring( 0, inFilename.lastIndexOf( '.' ) ) + ".ser";
+			System.out.println("DeSerializing data from " + meshesDir + "/" + inFilename );
+			long startTime = System.currentTimeMillis();
+			try
+			{
+				FileInputStream fileIn = new FileInputStream(
+						new File( meshesDir, inFilename ));
+				ObjectInputStream in = new ObjectInputStream(fileIn);
+				mesh = (CoordinateTransformMesh) in.readObject();
+				in.close();
+				fileIn.close();
+			} catch(IOException e)
+			{
+				System.err.printf("Error when DeSerializing data from " + meshesDir + "/" + inFilename );
+				e.printStackTrace();
+				throw new RuntimeException( e );
+			} catch (ClassNotFoundException e) {
+				System.err.printf("Error when DeSerializing data from " + meshesDir + "/" + inFilename );
+				e.printStackTrace();
+				throw new RuntimeException( e );
+			}
+			long endTime = System.currentTimeMillis();
+			if ( PRINT_TIME_PER_STEP )
+				System.out.println("Deserialization took: " + ((endTime - startTime) / 1000.0) + " sec");
+
+
+			// Scale down the image
+			startTime = System.currentTimeMillis();
+			final CoordinateTransformList< CoordinateTransform > ctl = ts.createTransformList();
+			final AffineModel2D scaleTransform = new AffineModel2D();
+			scaleTransform.set( ( float )scale, 0, 0, ( float )scale, -( float )( 0 * scale ), -( float )( 0 * scale ) );
+			ctl.add( scaleTransform );
+
+			//mesh.scale( scale, threadsNum );
+			mesh.applyTransformations( ctl, threadsNum );
+			endTime = System.currentTimeMillis();
+			if ( PRINT_TIME_PER_STEP )
+				System.out.println("Scaling took: " + ((endTime - startTime) / 1000.0) + " sec");
+
+			startTime = System.currentTimeMillis();
+			final ImageProcessorWithMasks source = new ImageProcessorWithMasks( tsIpMipmap, bpMaskSource, null );
+			final ImageProcessorWithMasks target = new ImageProcessorWithMasks( tp, bpMaskTarget, null );
+			final TransformMeshMappingWithMasks< TransformMesh > mapping = new TransformMeshMappingWithMasks< TransformMesh >( mesh );
+			mapping.mapInterpolated( source, target, threadsNum );
+			endTime = System.currentTimeMillis();
+			if ( PRINT_TIME_PER_STEP )
+				System.out.println("Interpolating took: " + ((endTime - startTime) / 1000.0) + " sec");
 			
 			/* convert to 24bit RGB */
 			tp.setMinAndMax( ts.minIntensity, ts.maxIntensity );

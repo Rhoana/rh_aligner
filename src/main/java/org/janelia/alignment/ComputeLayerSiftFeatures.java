@@ -35,7 +35,10 @@ public class ComputeLayerSiftFeatures {
 
         @Parameter( names = "--url", description = "URL to JSON tile spec", required = true )
         private String url;
-        
+
+        @Parameter( names = "--meshesDir", description = "The directory where the cached mesh per tile is located", required = false )
+        private String meshesDir = null;
+
         @Parameter( names = "--initialSigma", description = "Initial Gaussian blur sigma", required = false )
         private float initialSigma = 1.6f;
         
@@ -193,7 +196,11 @@ public class ComputeLayerSiftFeatures {
 
 		// Render the image
 		System.out.println( "Sift Features computation: layer scale: " + scale );
-		ByteProcessor tp = singleTileImage.render( layerIndex, mipmapLevel, ( float )scale );
+		ByteProcessor tp;
+		if ( params.meshesDir == null )
+			tp = singleTileImage.render( layerIndex, mipmapLevel, ( float )scale );
+		else
+			tp = singleTileImage.renderFromMeshes( params.meshesDir, layerIndex, mipmapLevel, ( float )scale );
 		System.out.println( "Image rendering of layer " + layerIndex + " is done, computing sift features." );
 		final List< Feature > fs = ComputeSiftFeatures.computeImageSiftFeatures( tp, siftParam );
 		System.out.println( "Found " + fs.size() + " features in the layer" );
