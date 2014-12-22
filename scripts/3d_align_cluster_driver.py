@@ -442,7 +442,7 @@ if __name__ == '__main__':
                     dependencies.append(dep)
                 for dep in jobs[sij]['sifts']:
                     dependencies.append(dep)
-                for dep in jobs[sj]['meshes']:
+                for dep in jobs[sij]['meshes']:
                     dependencies.append(dep)
 
                 tiles_fname_prefix = os.path.splitext(os.path.basename(f))[0]
