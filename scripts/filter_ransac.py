@@ -6,7 +6,7 @@ import utils
 
 def filter_ransac(corr_file, compared_url, out_fname, jar_file, conf=None):
     # When matching layers, no need to take bounding box into account
-    conf_args = utils.conf_args(conf, 'FilterRansac')
+    conf_args = utils.conf_args_from_file(conf, 'FilterRansac')
 
     java_cmd = 'java -Xmx3g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.FilterRansac --inputfile {1} --comparedUrl {2} \
             --targetPath {3} {4}'.format(
@@ -40,7 +40,7 @@ def main():
 
     filter_ransac(args.corr_file, args.compared_url, \
         args.output_file, args.jar_file, \
-        conf=utils.conf_args_from_file(args.conf_file_name, "FilterRansac"))
+        conf=args.conf_file_name)
 
 if __name__ == '__main__':
     main()

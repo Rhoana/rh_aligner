@@ -11,7 +11,7 @@ import utils
 # common functions
 
 def optimize_layers_elastic(tile_files, corr_files, image_width, image_height, fixed_layers, out_dir, jar_file, conf=None, skip_layers=None, threads_num=4):
-    conf_args = utils.conf_args(conf, 'OptimizeLayersElastic')
+    conf_args = utils.conf_args_from_file(conf, 'OptimizeLayersElastic')
 
     fixed_str = ""
     if fixed_layers != None:
@@ -75,7 +75,7 @@ def main():
 
     optimize_layers_elastic(args.tile_files, args.corr_files, \
         args.image_width, args.image_height, args.fixed_layers, args.output_dir, args.jar_file, \
-        conf=utils.conf_args_from_file(args.conf_file_name, "OptimizeLayersElastic"), 
+        conf=args.conf_file_name, 
         skip_layers=args.skip_layers, threads_num=args.threads_num)
 
 if __name__ == '__main__':

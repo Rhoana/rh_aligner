@@ -12,7 +12,7 @@ import utils
 
 def match_layers_by_max_pmcc(jar_file, tiles_file1, tiles_file2, models_file, image_width, image_height,
         fixed_layers, out_fname, meshes_dir1=None, meshes_dir2=None, conf=None, threads_num=None, auto_add_model=False):
-    conf_args = utils.conf_args(conf, 'MatchLayersByMaxPMCC')
+    conf_args = utils.conf_args_from_file(conf, 'MatchLayersByMaxPMCC')
 
     meshes_str = ''
     if meshes_dir1 is not None:
@@ -94,7 +94,7 @@ def main():
         args.models_file, args.image_width, args.image_height,
         args.fixed_layers, args.output_file, 
         meshes_dir1=args.meshes_dir1, meshes_dir2=args.meshes_dir2,
-        conf=utils.conf_args_from_file(args.conf_file_name, "MatchLayersByMaxPMCC"), 
+        conf=args.conf_file_name, 
         threads_num=args.threads_num,
         auto_add_model=args.auto_add_model)
 

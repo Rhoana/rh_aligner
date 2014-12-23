@@ -12,7 +12,7 @@ import utils
 
 def match_layers_sift_features(tiles_file1, features_file1, tiles_file2, features_file2, out_fname, jar_file, conf=None, threads_num=4):
     # When matching layers, no need to take bounding box into account
-    conf_args = utils.conf_args(conf, 'MatchSiftFeatures')
+    conf_args = utils.conf_args_from_file(conf, 'MatchSiftFeatures')
 
     java_cmd = 'java -Xmx3g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.MatchLayersSiftFeatures --threads {1} --tilespec1 {2} \
             --featurefile1 {3} --tilespec2 {4} --featurefile2 {5} --targetPath {6} {7}'.format(
@@ -56,7 +56,7 @@ def main():
 
     match_layers_sift_features(args.tiles_file1, args.features_file1, \
         args.tiles_file2, args.features_file2, args.output_file, args.jar_file, \
-        conf=utils.conf_args_from_file(args.conf_file_name, "MatchSiftFeatures"), threads_num=args.threads_num)
+        conf=args.conf_file_name, threads_num=args.threads_num)
 
 if __name__ == '__main__':
     main()
