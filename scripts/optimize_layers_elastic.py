@@ -22,7 +22,7 @@ def optimize_layers_elastic(tile_files, corr_files, image_width, image_height, f
         skip_str = "--skipLayers {0}".format(skip_layers)
 
 
-    java_cmd = 'java -Xmx4g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.OptimizeLayersElastic --tilespecFiles {1} --corrFiles {2} \
+    java_cmd = 'java -Xmx9g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.OptimizeLayersElastic --tilespecFiles {1} --corrFiles {2} \
             {3} --imageWidth {4} --imageHeight {5} --threads {6} {7} --targetDir {8} {9}'.format(
         jar_file,
         " ".join(utils.path2url(f) for f in tile_files),
