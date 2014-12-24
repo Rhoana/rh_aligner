@@ -228,7 +228,7 @@ class OptimizeLayersElastic(Job):
         return ['python -u',
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'optimize_layers_elastic.py'),
                 self.output_dir, self.jar_file, self.conf_fname, self.image_width, self.image_height, self.fixed_layers,
-                self.skip_layers, self.tiles_fnames, self.corr_fnames]
+                self.threads_str, self.skip_layers, self.tiles_fnames, self.corr_fnames]
 
 
 
