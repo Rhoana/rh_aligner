@@ -38,7 +38,7 @@ class UpdateBoundingBox(Job):
         #self.already_done = os.path.exists(self.output_file)
 
     def command(self):
-        return ['python',
+        return ['python -u',
                 os.path.join(os.environ['RENDERER'], 'scripts', 'update_bounding_box.py'),
                 self.output_dir, self.jar_file, self.threads_str, self.tiles_fname]
 
@@ -58,7 +58,7 @@ class NormalizeCoordinates(Job):
         #self.already_done = os.path.exists(self.output_file)
 
     def command(self):
-        return ['python',
+        return ['python -u',
                 os.path.join(os.environ['RENDERER'], 'scripts', 'normalize_coordinates.py'),
                 self.output_dir, self.jar_file, self.tiles_fnames]
 
