@@ -9,7 +9,7 @@ import utils
 # single file bounding box updater
 def update_bounding_box(tiles_fname, output_dir, jar_file, threads_num=1):
     tiles_url = utils.path2url(tiles_fname)
-    java_cmd = 'java -Xmx3g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.UpdateBoundingBox --threads {1} --targetDir {2} {3}'.format(\
+    java_cmd = 'java -Xmx9g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.UpdateBoundingBox --threads {1} --targetDir {2} {3}'.format(\
         jar_file, threads_num, output_dir, tiles_url)
     utils.execute_shell_command(java_cmd)
 

@@ -31,8 +31,8 @@ class UpdateBoundingBox(Job):
         self.dependencies = []
         self.threads = threads_num
         self.threads_str = "-t {0}".format(threads_num)
-        self.memory = 4000
-        self.time = 30
+        self.memory = 10000
+        self.time = 300
         self.is_java_job = True
         self.output = output_file
         #self.already_done = os.path.exists(self.output_file)
@@ -51,8 +51,8 @@ class NormalizeCoordinates(Job):
         self.output_dir = '-o "{0}"'.format(output_dir)
         self.jar_file = '-j "{0}"'.format(jar_file)
         self.dependencies = dependencies
-        self.memory = 3000
-        self.time = 15
+        self.memory = 4000
+        self.time = 100
         self.is_java_job = True
         self.output = outputs
         #self.already_done = os.path.exists(self.output_file)
@@ -78,8 +78,8 @@ class Render3D(Job):
         self.dependencies = dependencies
         self.threads = threads_num
         self.threads_str = "-t {0}".format(threads_num)
-        self.memory = 15000
-        self.time = 90
+        self.memory = 33000
+        self.time = 300
         self.is_java_job = True
         self.output = output_file
         #self.already_done = os.path.exists(self.output_file)
@@ -175,7 +175,7 @@ if __name__ == '__main__':
 
         # Create the job
         if not os.path.exists(bbox_out_file):
-            bbox_job = UpdateBoundingBox(f, bbox_dir, args.jar_file, bbox_out_file, threads_num=1)
+            bbox_job = UpdateBoundingBox(f, bbox_dir, args.jar_file, bbox_out_file, threads_num=8)
             jobs['bbox'].append(bbox_job)
             bbox_and_norm_jobs.append(bbox_job)
 
@@ -215,7 +215,7 @@ if __name__ == '__main__':
 
         if not os.path.exists(render_out_file):
             # print "Adding job for output file: {0}".format(render_out_file)
-            render_job = Render3D(bbox_and_norm_jobs, norm_list_file, args.output_dir, layer, quality_width, args.jar_file, render_out_file, threads_num=1)
+            render_job = Render3D(bbox_and_norm_jobs, norm_list_file, args.output_dir, layer, quality_width, args.jar_file, render_out_file, threads_num=8)
             jobs['render'].append(render_job)
 
 
