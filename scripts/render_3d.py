@@ -6,36 +6,10 @@ from subprocess import call
 import utils
 
 
-def render_3d(tile_fnames_or_dir, output_dir, from_layer, to_layer, width, jar_file, threads_num=1):
+def render_3d(tile_fnames_or_dir_fname, output_dir, from_layer, to_layer, width, jar_file, threads_num=1):
 
-    all_files = []
 
-    for file_or_dir in tile_fnames_or_dir:
-        if not os.path.exists(file_or_dir):
-            print "{0} does not exist (file/directory), skipping".format(file_or_dir)
-            continue
-
-        if os.path.isdir(file_or_dir):
-            actual_dir_files = glob.glob(os.path.join(file_or_dir, '*.json'))
-            all_files.extend(actual_dir_files)
-        else:
-            all_files.append(file_or_dir)
-
-    if len(all_files) == 0:
-        print "No files for rendering found. Exiting."
-        return
-
-    print "Rendering {0} files".format(all_files)
-
-    files_urls = []
-    for file_name in all_files:
-        tiles_url = utils.path2url(file_name)
-        files_urls.append(tiles_url)
-
-    list_file = os.path.join(output_dir, "all_files.txt")
-    utils.write_list_to_file(list_file, files_urls)
-
-    list_file_url = utils.path2url(list_file)
+    list_file_url = utils.path2url(tile_fnames_or_dir_fname)
 
     java_cmd = 'java -Xmx32g -XX:ParallelGCThreads=1 -cp "{0}" org.janelia.alignment.Render3D --targetDir {1} --width {2} \
         --threads {3} --fromLayer {4} --toLayer {5} --hide {6}'.format(\
@@ -46,8 +20,8 @@ def render_3d(tile_fnames_or_dir, output_dir, from_layer, to_layer, width, jar_f
 def main():
     # Command line parser
     parser = argparse.ArgumentParser(description='Given a list of tilespec file names, normalizes all the tilepecs to a single coordinate system starting from (0,0).')
-    parser.add_argument('tile_files_or_dirs', metavar='tile_files_or_dirs', type=str, nargs='+',
-                        help='a list of json files that need to be normalized or a directories of json files')
+    parser.add_argument('tile_files_or_dirs_fname', metavar='tile_files_or_dirs_fname', type=str, nargs='+',
+                        help='a list of json files that need to be normalized or a file that contains the list of json files')
     parser.add_argument('-o', '--output_dir', type=str, 
                         help='an output directory (default: ./after_render)',
                         default='./after_render')
@@ -85,7 +59,7 @@ def main():
             width = 100
 
     print "args: from_layer {0}, to_layer {1}".format(args.from_layer, args.to_layer)
-    render_3d(args.tile_files_or_dirs, args.output_dir, args.from_layer, args.to_layer, width, args.jar_file, args.threads_num)
+    render_3d(args.tile_files_or_dirs_fname, args.output_dir, args.from_layer, args.to_layer, width, args.jar_file, args.threads_num)
 
 if __name__ == '__main__':
     main()
