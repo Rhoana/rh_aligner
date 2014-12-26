@@ -76,8 +76,7 @@ create_dir(args.workspace_dir)
 
 conf = None
 if not args.conf_file_name is None:
-    with open(args.conf_file_name, 'r') as conf_file:
-        conf = json.load(conf_file)
+    conf = args.conf_file_name
 
 meshes_dir = ''
 if args.render_meshes_first:
@@ -152,7 +151,7 @@ for tiles_fname in glob.glob(os.path.join(args.input_dir, '*.json')):
             create_layer_sift_features(tiles_fname, sifts_json, args.jar_file, meshes_dir=layer_meshes_dir[layer], conf=conf)
         else:
             #create_layer_sift_features(after_bbox_json, sifts_json, args.jar_file, conf)
-            create_layer_sift_features(tiles_fname, sifts_json, args.jar_file, conf)
+            create_layer_sift_features(tiles_fname, sifts_json, args.jar_file, conf=conf)
     layer_to_sifts[layer] = sifts_json
     layer_to_json_prefix[layer] = tiles_fname_prefix
     #layer_to_ts_json[layer] = after_bbox_json
