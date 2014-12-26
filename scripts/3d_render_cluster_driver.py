@@ -65,10 +65,10 @@ class NormalizeCoordinates(Job):
 
 
 class Render3D(Job):
-    def __init__(self, dependencies, tiles_fname, output_dir, layer, quality_width, jar_file, output_file, threads_num=1):
+    def __init__(self, dependencies, norm_dir, output_dir, layer, quality_width, jar_file, output_file, threads_num=1):
         Job.__init__(self)
         self.already_done = False
-        self.tiles_fname = '"{0}"'.format(tiles_fname)
+        self.norm_dir = '"{0}"'.format(norm_dir)
         self.output_dir = '-o "{0}"'.format(output_dir)
         self.jar_file = '-j "{0}"'.format(jar_file)
         # Make the from-layer and to-layer the same layer
@@ -87,7 +87,7 @@ class Render3D(Job):
     def command(self):
         return ['python -u',
                 os.path.join(os.environ['RENDERER'], 'scripts', 'render_3d.py'),
-                self.output_dir, self.jar_file, self.from_layer, self.to_layer, self.quality_width, self.threads_str, self.tiles_fname]
+                self.output_dir, self.jar_file, self.from_layer, self.to_layer, self.quality_width, self.threads_str, self.norm_dir]
 
 
 
@@ -191,8 +191,8 @@ if __name__ == '__main__':
         norm_job = NormalizeCoordinates(jobs['bbox'], bbox_files, norm_dir, args.jar_file, norm_files)
         bbox_and_norm_jobs.append(norm_job)
 
-    norm_list_file = os.path.join(args.workspace_dir, "all_norm_files.txt")
-    write_list_to_file(norm_list_file, norm_files)
+    #norm_list_file = os.path.join(args.workspace_dir, "all_norm_files.txt")
+    #write_list_to_file(norm_list_file, norm_files)
 
     # Perform the rendering
     for f in json_files.keys():
@@ -211,11 +211,12 @@ if __name__ == '__main__':
         # norm_file = os.path.join(norm_dir, tiles_fname)
 
         tiles_fname_prefix = os.path.splitext(tiles_fname)[0]
-        render_out_file = os.path.join(args.output_dir, tiles_fname_prefix + ".tif")
+        render_out_file = os.path.join(args.output_dir, tiles_fname_prefix + ".png")
 
         if not os.path.exists(render_out_file):
             # print "Adding job for output file: {0}".format(render_out_file)
-            render_job = Render3D(bbox_and_norm_jobs, norm_list_file, args.output_dir, layer, quality_width, args.jar_file, render_out_file, threads_num=8)
+            #render_job = Render3D(bbox_and_norm_jobs, norm_list_file, args.output_dir, layer, quality_width, args.jar_file, render_out_file, threads_num=8)
+            render_job = Render3D(bbox_and_norm_jobs, norm_dir, args.output_dir, layer, quality_width, args.jar_file, render_out_file, threads_num=8)
             jobs['render'].append(render_job)
 
 
