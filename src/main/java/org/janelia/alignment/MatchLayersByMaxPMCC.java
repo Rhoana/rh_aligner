@@ -554,6 +554,49 @@ public class MatchLayersByMaxPMCC {
 		return corr_data;
 	}
 	
+	private static List<CorrespondenceSpec> createEmptyCorrespondece(
+			final int layer1,
+			final int layer2,
+			final Params param,
+			final int mipmapLevel,
+			final List<Integer> fixedLayers )
+	{
+		final List< CorrespondenceSpec > corr_data = new ArrayList< CorrespondenceSpec >();
+
+		final boolean layer1Fixed = fixedLayers.contains( layer1 );
+		final boolean layer2Fixed = fixedLayers.contains( layer2 );
+
+		if ( layer1Fixed && layer2Fixed )
+		{
+			// Both layers are fixed, nothing to do...
+			// Returns an empty correspondence spec list
+			return corr_data;
+		}
+
+		if ( ! layer1Fixed )
+		{
+			corr_data.add(new CorrespondenceSpec(
+					mipmapLevel,
+					param.inputfile1,
+					param.inputfile2,
+					null,
+					false ));
+		}
+
+		if ( ! layer2Fixed )
+		{
+			corr_data.add(new CorrespondenceSpec(
+					mipmapLevel,
+					param.inputfile2,
+					param.inputfile1,
+					null,
+					false ));
+		}
+
+		return corr_data;
+	}
+	
+
 	
 	public static void main( final String[] args )
 	{
@@ -577,6 +620,15 @@ public class MatchLayersByMaxPMCC {
         	jc.usage(); 
         	return;
         }
+
+		// The mipmap level to work on
+		// TODO: Should be a parameter from the user,
+		//       and decide whether or not to create the mipmaps if they are missing
+		int mipmapLevel = 0;
+
+		/* Open the tilespecs */
+		TileSpec[] tilespecs1 = TileSpecUtils.readTileSpecFile( params.inputfile1 );
+		TileSpec[] tilespecs2 = TileSpecUtils.readTileSpecFile( params.inputfile2 );
 		
 		/* open the models */
 		long startTime = System.currentTimeMillis();
@@ -602,7 +654,26 @@ public class MatchLayersByMaxPMCC {
 				if ( params.autoAddModel )
 					model = new IdentityModel();
 				else
-					throw new RuntimeException( "Error: model between the given two tilespecs was not found. ");
+				{
+					// Write an "empty" file
+					final List< CorrespondenceSpec > corr_data = createEmptyCorrespondece(
+							tilespecs1[0].layer, tilespecs2[0].layer,
+							params, mipmapLevel, params.fixedLayers );
+					System.out.println( "Writing an empty correspondece match file between layers: " + params.inputfile1 + " and " + params.inputfile2 );
+					try {
+						Writer writer = new FileWriter(params.targetPath);
+				        //Gson gson = new GsonBuilder().create();
+				        Gson gsonOut = new GsonBuilder().setPrettyPrinting().create();
+				        gsonOut.toJson(corr_data, writer);
+				        writer.close();
+				        return;
+				    }
+					catch ( final IOException e )
+					{
+						System.err.println( "Error writing JSON file: " + params.targetPath );
+						e.printStackTrace( System.err );
+					}
+				}
 			}
 		}
 		catch ( final MalformedURLException e )
@@ -623,13 +694,6 @@ public class MatchLayersByMaxPMCC {
 			return;
 		}
 		
-		// The mipmap level to work on
-		// TODO: Should be a parameter from the user,
-		//       and decide whether or not to create the mipmaps if they are missing
-		int mipmapLevel = 0;
-
-		TileSpec[] tilespecs1 = TileSpecUtils.readTileSpecFile( params.inputfile1 );
-		TileSpec[] tilespecs2 = TileSpecUtils.readTileSpecFile( params.inputfile2 );
 		long endTime = System.currentTimeMillis();
 		System.out.println("Parsing files took: " + ((endTime - startTime) / 1000.0) + " ms");
 		
@@ -660,5 +724,5 @@ public class MatchLayersByMaxPMCC {
 		System.out.println("Writing output took: " + ((endTime - startTime) / 1000.0) + " ms");
 
 	}
-	
+
 }
