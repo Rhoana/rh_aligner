@@ -28,6 +28,7 @@ import java.io.FileWriter;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
 import mpicbg.imagefeatures.Feature;
@@ -112,6 +113,9 @@ public class ComputeSiftFeatures
 
         @Parameter( names = "--claheFast", description = "Use a fast CLAHE filter (faster)", required = false )
         public boolean claheFast = false;
+
+        @Parameter( names = "--distanceFromBoundariesPercent", description = "Only save features that are located in a given L1 distance from one of the image boundaries (default: any distance)", required = false )
+        public float distanceFromBoundariesPercent = 0f;
 
         /*
         @Parameter( names = "--avoidTileScale", description = "Avoid automatic scale of all tiles according to the bounding box width and height", required = false )
@@ -376,6 +380,47 @@ public class ComputeSiftFeatures
 					ctl.applyInPlace(feature.location);				
 				}*/
 		
+                // Filter out features that are not close to the boundary
+                if ( params.distanceFromBoundariesPercent != 0f )
+                {
+                	float[] leftRightX = { 0f, 0f }; 
+                	float[] topBottomY = { 0f, 0f }; 
+                	if ( scale == 1.0f )
+                	{
+                		// Set X
+                		leftRightX[0] = params.distanceFromBoundariesPercent * imp.getWidth();
+                		leftRightX[1] = imp.getWidth() - params.distanceFromBoundariesPercent * imp.getWidth();
+
+                		// Set Y
+                		topBottomY[0] = params.distanceFromBoundariesPercent * imp.getHeight();
+                		topBottomY[1] = imp.getWidth() - params.distanceFromBoundariesPercent * imp.getHeight();
+                	}
+                	else
+                	{
+	                	int scaledImageWidth = (int)(maxWidth * scale);
+	                	int scaledImageHeight = (int)(maxHeight * scale);
+                		// Set X
+                		leftRightX[0] = params.distanceFromBoundariesPercent * scaledImageWidth;
+                		leftRightX[1] = scaledImageWidth - params.distanceFromBoundariesPercent * scaledImageWidth;
+
+                		// Set Y
+                		topBottomY[0] = params.distanceFromBoundariesPercent * scaledImageHeight;
+                		topBottomY[1] = scaledImageHeight - params.distanceFromBoundariesPercent * scaledImageHeight;
+                	}
+                	
+                	Iterator<Feature> it = fs.iterator();
+                	while ( it.hasNext() )
+                	{
+                		Feature f = it.next();
+                		float[] location = f.location;
+                		if ( ( location[0] > leftRightX[0] ) && ( location[0] < leftRightX[1] ) &&
+                			 ( location[1] > topBottomY[0] ) && ( location[1] < topBottomY[1] ) )
+                			it.remove();
+                	}
+                	
+                    System.out.println( "Found " + fs.size() + " features in the layer after filtering non-boundary matches (" + params.distanceFromBoundariesPercent + ")" );
+                }
+                
 				feature_data.add(new FeatureSpec( String.valueOf( mipmapLevel ), imageUrl, scale, fs));
 			}
 		}
