@@ -42,7 +42,7 @@ def main():
     args = parser.parse_args()
 
     #print args
-    create_dir(args.output_dir)
+    utils.create_dir(args.output_dir)
 
     create_meshes(args.tiles_fname, args.output_dir, args.jar_file, threads_num=args.threads_num)
 
