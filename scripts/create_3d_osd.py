@@ -17,6 +17,8 @@ import cv2
 
 def get_tile_size(tile_file):
     img = cv2.imread(tile_file, 0)
+    if img is None:
+        return -1
     return img.shape[0]
 
 
@@ -52,8 +54,15 @@ def create_3d_osd(sections_dir):
 
     for d in all_dirs:
         print "Parsing directory: {}".format(d)
-        first_tile = glob.glob(os.path.join(os.path.join(d, '0'), 'tile_0_0.*'))[0]
+        dir_tiles = glob.glob(os.path.join(os.path.join(d, '0'), 'tile_0_0.*'))
+        if len(dir_tiles) == 0:
+            print "No tiles found, skipping section"
+            continue
+        first_tile = dir_tiles[0]
         tile_size = get_tile_size(first_tile)
+        if tile_size == -1:
+            print "Cannot read tile {}, skipping section".format(tile_size)
+            continue
 
         # get number of rows and columns used for full resolution
         initial_rows = len(glob.glob(os.path.join(os.path.join(d, '0'), 'tile_*_0.*')))
