@@ -5,6 +5,7 @@ import urlparse, urllib
 from subprocess import call
 import sys
 import json
+import time
 
 def path2url(path):
     return urlparse.urljoin('file:', urllib.pathname2url(os.path.abspath(path)))
@@ -71,3 +72,17 @@ def parse_range(s):
             x = part.split('-')
             result.update(range(int(x[0]), int(x[-1]) + 1))
     return sorted(result)
+
+def wait_after_file(filename, timeout_seconds):
+    if timeout_seconds > 0:
+        cur_time = time.time()
+        mod_time = os.path.getmtime(filename)
+        end_wait_time = mod_time + timeout_seconds
+        while cur_time < end_wait_time:
+            print "Waiting for file: {}".format(filename)
+            cur_time = time.time()
+            mod_time = os.path.getmtime(filename)
+            end_wait_time = mod_time + timeout_seconds
+            if cur_time < end_wait_time:
+                time.sleep(end_wait_time - cur_time)
+

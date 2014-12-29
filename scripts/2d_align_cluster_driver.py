@@ -47,7 +47,7 @@ class CreateSiftFeatures(Job):
                 self.output_file, self.jar_file, self.threads_str, self.conf_fname, self.tiles_fname]
 
 class MatchSiftFeaturesAndFilter(Job):
-    def __init__(self, dependencies, tiles_fname, features_fname, corr_output_file, jar_file, conf_fname=None):
+    def __init__(self, dependencies, tiles_fname, features_fname, corr_output_file, jar_file, wait_time=None, conf_fname=None):
         Job.__init__(self)
         self.already_done = False
         self.tiles_fname = '"{0}"'.format(tiles_fname)
@@ -58,6 +58,10 @@ class MatchSiftFeaturesAndFilter(Job):
             self.conf_fname = ''
         else:
             self.conf_fname = '-c "{0}"'.format(conf_fname)
+        if wait_time is None:
+            self.wait_time = ''
+        else:
+            self.wait_time = '-w {0}'.format(wait_time)
         self.dependencies = dependencies
         #self.threads = threads_num
         #self.threads_str = "-t {0}".format(threads_num)
@@ -70,7 +74,7 @@ class MatchSiftFeaturesAndFilter(Job):
     def command(self):
         return ['python -u',
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'match_sift_features_and_filter.py'),
-                self.output_file, self.jar_file, self.conf_fname, self.tiles_fname, self.features_fname]
+                self.output_file, self.jar_file, self.wait_time, self.conf_fname, self.tiles_fname, self.features_fname]
 
 class OptimizeMontageTransform(Job):
     def __init__(self, dependencies, tiles_fname, corr_fname, fixed_tiles, opt_output_file, jar_file, conf_fname=None, threads_num=1):
@@ -285,7 +289,7 @@ if __name__ == '__main__':
                 dependencies.append(job_sift)
             job_match = MatchSiftFeaturesAndFilter(dependencies, layers_data[slayer]['ts'], \
                 layers_data[slayer]['sifts'], match_json, \
-                args.jar_file, conf_fname=args.conf_file_name)
+                args.jar_file, wait_time=30, conf_fname=args.conf_file_name)
         layers_data[slayer]['matched_sifts'] = match_json
 
 

@@ -84,10 +84,15 @@ def main():
     parser.add_argument('-c', '--conf_file_name', type=str, 
                         help='the configuration file with the parameters for each step of the alignment process in json format (uses default parameters, if not supplied)',
                         default=None)
+    parser.add_argument('-w', '--wait_time', type=int, 
+                        help='the time to wait since the last modification date of the features_file (default: None)',
+                        default=0)
 
 
     args = parser.parse_args()
 
+
+    utils.wait_after_file(args.features_file, args.wait_time)
 
     try:
         match_sift_features_and_filter(args.tiles_file, args.features_file, args.output_file, args.jar_file, \
