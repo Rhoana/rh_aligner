@@ -16,6 +16,7 @@
  */
 package org.janelia.alignment;
 
+import ij.ImageJ;
 import ij.ImagePlus;
 import ij.process.ByteProcessor;
 import ij.process.ImageProcessor;
@@ -32,6 +33,7 @@ import java.util.List;
 import mpicbg.imagefeatures.Feature;
 import mpicbg.imagefeatures.FloatArray2DSIFT;
 import mpicbg.ij.SIFT;
+import mpicbg.ij.clahe.Flat;
 import mpicbg.models.CoordinateTransform;
 import mpicbg.models.CoordinateTransformList;
 import mpicbg.models.CoordinateTransformMesh;
@@ -95,6 +97,21 @@ public class ComputeSiftFeatures
         
         @Parameter( names = "--res", description = " Mesh resolution, specified by the desired size of a triangle in pixels", required = false )
         public int res = 64;
+
+        @Parameter( names = "--useClaheFilter", description = "useClaheFilter", required = false )
+        public boolean useClaheFilter = false;
+
+        @Parameter( names = "--claheBlockSize", description = "The block size in pixels for the CLAHE filter", required = false )
+        public int claheBlockSize = 127;
+
+        @Parameter( names = "--claheHistBins", description = "The number of histogram bins for the CLAHE filter", required = false )
+        public int claheHistBins = 256;
+
+        @Parameter( names = "--claheMaxSlope", description = "The maximum slope for the CLAHE filter (lower number -> less filtering)", required = false )
+        public float claheMaxSlope = 3.0f;
+
+        @Parameter( names = "--claheFast", description = "Use a fast CLAHE filter (faster)", required = false )
+        public boolean claheFast = false;
 
         /*
         @Parameter( names = "--avoidTileScale", description = "Avoid automatic scale of all tiles according to the bounding box width and height", required = false )
@@ -279,6 +296,8 @@ public class ComputeSiftFeatures
 				}
 			}
         }
+        
+		//new ImageJ();
 
 		for (int idx = start_index; idx < end_index; idx = idx + 1) {
 			TileSpec ts = tileSpecs[idx];
@@ -332,6 +351,20 @@ public class ComputeSiftFeatures
                 	scaledImp = imp.getProcessor();
                 else
                 	scaledImp = imp.getProcessor().resize( (int)(maxWidth * scale), (int)(maxHeight * scale) );
+                
+				if ( params.useClaheFilter )
+				{
+					System.out.println( "Applying CLAHE filter" );
+					//new ImagePlus("before", scaledImp).show();
+					
+					if ( params.claheFast )
+						Flat.getFastInstance().run( new ImagePlus("", scaledImp), params.claheBlockSize, params.claheHistBins, params.claheMaxSlope, null, false);
+					else
+						Flat.getInstance().run( new ImagePlus("", scaledImp), params.claheBlockSize, params.claheHistBins, params.claheMaxSlope, null, false);
+					System.out.println( "Applying CLAHE filter - Done" );
+					//new ImagePlus("after", scaledImp).show();
+				}
+
                 final List< Feature > fs = ComputeSiftFeatures.computeImageSiftFeatures( scaledImp, siftParam );
                 System.out.println( "Found " + fs.size() + " features in the layer" );
 				//ijSIFT.extractFeatures( imp.getProcessor(), fs );
