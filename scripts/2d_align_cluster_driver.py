@@ -65,7 +65,7 @@ class MatchSiftFeaturesAndFilter(Job):
         self.dependencies = dependencies
         #self.threads = threads_num
         #self.threads_str = "-t {0}".format(threads_num)
-        self.memory = 4000
+        self.memory = 7000
         self.time = 240
         self.is_java_job = True
         self.output = corr_output_file
