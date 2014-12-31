@@ -94,11 +94,8 @@ def main():
 
     utils.wait_after_file(args.features_file, args.wait_time)
 
-    try:
-        match_sift_features_and_filter(args.tiles_file, args.features_file, args.output_file, args.jar_file, \
-            conf_fname=args.conf_file_name)
-    except:
-        sys.exit("Error while executing: {0}".format(sys.argv))
+    match_sift_features_and_filter(args.tiles_file, args.features_file, args.output_file, args.jar_file, \
+        conf_fname=args.conf_file_name)
 
 
 if __name__ == '__main__':
