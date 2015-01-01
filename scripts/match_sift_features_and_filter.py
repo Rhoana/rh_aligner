@@ -12,16 +12,19 @@ import utils
 
 
 
-def match_multiple_sift_features_and_filter(tiles_file, features_file, index_pairs, jar, out_fname, conf_fname=None):
+def match_multiple_sift_features_and_filter(tiles_file, features_file, jar, out_fname, index_pairs=None, conf_fname=None):
     tiles_url = utils.path2url(os.path.abspath(tiles_file))
 
     conf_args = utils.conf_args_from_file(conf_fname, 'MatchSiftFeaturesAndFilter')
+    indices = '--all'
+    if index_pairs is not None:
+        indices = " ".join("--indices {}:{}".format(a, b) for a, b in index_pairs)
 
     java_cmd = 'java -Xmx6g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.MatchSiftFeaturesAndFilter --tilespecfile {1} --featurefile {2} {3} --targetPath {4} {5}'.format(
         jar,
         tiles_url,
         features_file,
-        " ".join("--indices {}:{}".format(a, b) for a, b in index_pairs),
+        indices,
         out_fname,
         conf_args)
     utils.execute_shell_command(java_cmd)
@@ -41,32 +44,32 @@ def load_data_files(tile_file, features_file):
 
 def match_sift_features_and_filter(tiles_file, features_file, out_fname, jar_file, conf_fname=None):
 
-    tilespecs, feature_indices = load_data_files(tiles_file, features_file)
-    for k, v in feature_indices.iteritems():
-        print k, v
+    # tilespecs, feature_indices = load_data_files(tiles_file, features_file)
+    # for k, v in feature_indices.iteritems():
+    #     print k, v
 
-    # TODO: add all tiles to a kd-tree so it will be faster to find overlap between tiles
-    # TODO: limit searches for matches to overlap area of bounding boxes
+    # # TODO: add all tiles to a kd-tree so it will be faster to find overlap between tiles
+    # # TODO: limit searches for matches to overlap area of bounding boxes
 
-    # iterate over the tiles, and for each tile, find intersecting tiles that overlap,
-    # and match their features
-    # Nested loop:
-    #    for each tile_i in range[0..N):
-    #        for each tile_j in range[tile_i..N)]
-    indices = []
-    for pair in itertools.combinations(tilespecs, 2):
-        # if the two tiles intersect, match them
-        bbox1 = BoundingBox.fromList(pair[0]["bbox"])
-        bbox2 = BoundingBox.fromList(pair[1]["bbox"])
-        if bbox1.overlap(bbox2):
-            imageUrl1 = pair[0]["mipmapLevels"]["0"]["imageUrl"]
-            imageUrl2 = pair[1]["mipmapLevels"]["0"]["imageUrl"]
-            print "Matching sift of tiles: {0} and {1}".format(imageUrl1, imageUrl2)
-            idx1 = feature_indices[imageUrl1]
-            idx2 = feature_indices[imageUrl2]
-            indices.append((idx1, idx2))
+    # # iterate over the tiles, and for each tile, find intersecting tiles that overlap,
+    # # and match their features
+    # # Nested loop:
+    # #    for each tile_i in range[0..N):
+    # #        for each tile_j in range[tile_i..N)]
+    # indices = []
+    # for pair in itertools.combinations(tilespecs, 2):
+    #     # if the two tiles intersect, match them
+    #     bbox1 = BoundingBox.fromList(pair[0]["bbox"])
+    #     bbox2 = BoundingBox.fromList(pair[1]["bbox"])
+    #     if bbox1.overlap(bbox2):
+    #         imageUrl1 = pair[0]["mipmapLevels"]["0"]["imageUrl"]
+    #         imageUrl2 = pair[1]["mipmapLevels"]["0"]["imageUrl"]
+    #         print "Matching sift of tiles: {0} and {1}".format(imageUrl1, imageUrl2)
+    #         idx1 = feature_indices[imageUrl1]
+    #         idx2 = feature_indices[imageUrl2]
+    #         indices.append((idx1, idx2))
 
-    match_multiple_sift_features_and_filter(tiles_file, features_file, indices, jar_file, out_fname, conf_fname)
+    match_multiple_sift_features_and_filter(tiles_file, features_file, jar_file, out_fname, index_pairs=None, conf_fname=conf_fname)
 
 def main():
     # Command line parser
