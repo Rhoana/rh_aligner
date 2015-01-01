@@ -48,8 +48,11 @@ public class MatchSiftFeaturesAndFilter {
         @Parameter( names = "--targetPath", description = "Path for the output correspondences", required = true )
         public String targetPath;
 
-        @Parameter( names = "--indices", description = "Pair of indices within feature file, comma separated (each pair is separated by a colon)", required = true )
+        @Parameter( names = "--indices", description = "Pair of indices within feature file, comma separated (each pair is separated by a colon)", required = false )
         public List<String> indices = new ArrayList<String>();
+
+        @Parameter( names = "--all", description = "Compute for all tiles", required = false )
+        private boolean all = false;
 
         @Parameter( names = "--threads", description = "Number of threads to be used", required = false )
         public int numThreads = Runtime.getRuntime().availableProcessors();
@@ -129,6 +132,15 @@ public class MatchSiftFeaturesAndFilter {
 		return modelFound;
 	}
 	
+	private static boolean checkBBoxOverlapping( float[] bbox1, float[] bbox2 )
+	{
+		//Returns true if there is intersection between the bboxes or a full containment
+		if (( bbox1[0] < bbox2[1] ) && ( bbox1[1] > bbox2[0] ) &&
+			( bbox1[2] < bbox2[3] ) && ( bbox1[3] > bbox2[2] ) )
+				return true;
+		return false;
+	}
+	
 	public static void main( final String[] args )
 	{
 
@@ -141,6 +153,12 @@ public class MatchSiftFeaturesAndFilter {
         		jc.usage();
                 return;
             }
+        	
+        	if ( ( !params.all ) && ( params.indices.size() == 0 ) )
+        	{
+        		System.err.println( "Either \"--all\" flag must be set or a list of index pair (using \"--indices\")");
+        		return;
+        	}
         }
         catch ( final Exception e )
         {
@@ -204,6 +222,19 @@ public class MatchSiftFeaturesAndFilter {
 
 		List< CorrespondenceSpec > corr_data = new ArrayList< CorrespondenceSpec >();
 
+		if ( params.all ) {
+			// Check if the bounding box of each two tiles is overlapping, and if so, add them to the indices
+			params.indices.clear();
+			for ( int i = 0; i < tileSpecs.length; i++ ) {
+				float[] bboxI = tileSpecs[i].bbox;
+				for ( int j = i + 1; j < tileSpecs.length; j++ ) {
+					float[] bboxJ = tileSpecs[j].bbox;
+					if ( checkBBoxOverlapping( bboxI, bboxJ ) )
+						params.indices.add( i + ":" + j );
+				}
+			}
+		}
+		
 		for (String idx_pair : params.indices) {
 			String[] vals = idx_pair.split(":");
 			if (vals.length != 2)
