@@ -230,10 +230,16 @@ public class MatchLayersSiftFeatures
 		{
 			final ImageAndFeatures iaf = fs.getMipmapImageAndFeatures( mipmapLevel );
 			if ( res == -1.0 )
+			{
 				res = iaf.scale;
+				return res;
+			}
+			/*
+			// For debug
 			else
 				if ( res != iaf.scale )
 					throw new RuntimeException( "Error: different scales of sift features in a single file" );
+			*/
 		}
 		
 		return res;
@@ -305,8 +311,13 @@ public class MatchLayersSiftFeatures
 
 		System.out.println( "Found " + candidates.size() + " matching candidates, scaling..." );
 
+		/*
 		final double pointMatchScale1 = params.layerScale / getScale( featureSpecs2, mipmapLevel );
 		final double pointMatchScale2 = params.layerScale / getScale( featureSpecs1, mipmapLevel );
+		*/
+		// Scale match points to the no-scale level (1.0 scale) 
+		final double pointMatchScale1 = 1.0 / getScale( featureSpecs2, mipmapLevel );
+		final double pointMatchScale2 = 1.0 / getScale( featureSpecs1, mipmapLevel );
 
 		/* scale the candidates */
 		for ( final PointMatch pm : candidates )

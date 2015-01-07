@@ -177,11 +177,11 @@ public class DebugFilterRansac {
 
 				// Save the first image
 				final String outputFile1 = params.targetDir + File.separatorChar + inFileName + "_entry" + i + "_0";
-				saveImage( tilespec1, params.layerScale, mipmapLevel, model, outputFile1, params.showResults );
+				saveImage( tilespec1, params.layerScale, mipmapLevel, null, outputFile1, params.showResults );
 				
 				// Save the second image
 				final String outputFile2 = params.targetDir + File.separatorChar + inFileName + "_entry" + i + "_1";
-				saveImage( tilespec2, params.layerScale, mipmapLevel, null, outputFile2, params.showResults );
+				saveImage( tilespec2, params.layerScale, mipmapLevel, model, outputFile2, params.showResults );
 			}
 
 		}

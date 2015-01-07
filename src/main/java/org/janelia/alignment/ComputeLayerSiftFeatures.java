@@ -202,7 +202,7 @@ public class ComputeLayerSiftFeatures {
 		else
 			tp = singleTileImage.renderFromMeshes( params.meshesDir, layerIndex, mipmapLevel, ( float )scale );
 		System.out.println( "Image rendering of layer " + layerIndex + " is done, computing sift features." );
-		final List< Feature > fs = ComputeSiftFeatures.computeImageSiftFeatures( tp, siftParam );
+		final List< Feature > fs = computeImageSiftFeatures( tp, siftParam );
 		System.out.println( "Found " + fs.size() + " features in the layer" );
 
 		//final List< Feature > fs = computeTileSiftFeatures( imageUrl, siftParam );

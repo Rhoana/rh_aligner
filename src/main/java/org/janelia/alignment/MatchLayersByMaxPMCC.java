@@ -4,6 +4,7 @@ import ij.process.ByteProcessor;
 import ij.process.ColorProcessor;
 import ij.process.FloatProcessor;
 
+import java.awt.geom.AffineTransform;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -17,14 +18,17 @@ import java.util.concurrent.ExecutionException;
 import mpicbg.ij.blockmatching.BlockMatching;
 import mpicbg.models.AbstractModel;
 import mpicbg.models.CoordinateTransform;
+import mpicbg.models.CoordinateTransformList;
 import mpicbg.models.ErrorStatistic;
 import mpicbg.models.IdentityModel;
 import mpicbg.models.InvertibleCoordinateTransform;
+import mpicbg.models.NoninvertibleModelException;
 import mpicbg.models.Point;
 import mpicbg.models.PointMatch;
 import mpicbg.models.SpringMesh;
 import mpicbg.models.Vertex;
 import mpicbg.trakem2.align.Util;
+import mpicbg.trakem2.transform.AffineModel2D;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
@@ -121,6 +125,9 @@ public class MatchLayersByMaxPMCC {
 		
         @Parameter( names = "--maxStretchSpringMesh", description = "maxStretchSpringMesh", required = false )
         public float maxStretchSpringMesh = 2000.0f;
+
+        @Parameter( names = "--springLengthSpringMesh", description = "spring_length", required = false )
+        public float springLengthSpringMesh = 100.0f;
         
         @Parameter( names = "--threads", description = "Number of threads to be used", required = false )
         public int numThreads = Runtime.getRuntime().availableProcessors();
@@ -173,6 +180,30 @@ public class MatchLayersByMaxPMCC {
 			output.setf( i,  ( float )( inputPixels[ i ] / 255.0f ));
 			alpha.setf( i,  1.0f );
 		}
+	}
+
+	/**
+	 * Receives a single layer, applies the transformations, and outputs the ip and mask
+	 * of the given level (render the ip and ipMask)
+	 * 
+	 * @param layerTileSpecs
+	 * @param ip
+	 * @param ipMask
+	 * @param mipmapLevel
+	 */
+	private static FloatProcessor tilespecToFloatAndMask(
+			final TileSpecsImage layerTileSpecsImage,
+			final int layer,
+			final int mipmapLevel,
+			final float layerScale,
+			final String meshesDir )
+	{
+		final ByteProcessor tp;
+		if ( meshesDir == null )
+			tp = layerTileSpecsImage.render( layer, mipmapLevel, layerScale );
+		else
+			tp = layerTileSpecsImage.renderFromMeshes( meshesDir, layer, mipmapLevel, layerScale );
+		return tp.convertToFloatProcessor();
 	}
 
 /*
@@ -237,11 +268,21 @@ public class MatchLayersByMaxPMCC {
 		// Compute bounding box of the two layers
 		
 		
+		long startTime = System.currentTimeMillis();
+		// Create the meshes for the tiles
+		/*
+		final List< TileSpec[] > tsList = new ArrayList< TileSpec[] >();
+		tsList.add( ts1 );
+		tsList.add( ts2 );
+		
+		final List< SpringMesh > meshes = Utils.createMeshes(
+				tsList, param.imageWidth, param.imageHeight,
+				param.springLengthSpringMesh, param.stiffnessSpringMesh,
+				param.maxStretchSpringMesh, param.layerScale, param.dampSpringMesh );
+		*/
+		
 		final int meshWidth = ( int )Math.ceil( param.imageWidth * param.layerScale );
 		final int meshHeight = ( int )Math.ceil( param.imageHeight * param.layerScale );
-
-		
-		long startTime = System.currentTimeMillis();
 		final SpringMesh[] meshes = new SpringMesh[2];
 		for ( int i = 0; i < meshes.length; i++ )
 			meshes[i] = new SpringMesh(
@@ -251,6 +292,7 @@ public class MatchLayersByMaxPMCC {
 					param.stiffnessSpringMesh,
 					param.maxStretchSpringMesh * param.layerScale,
 					param.dampSpringMesh );
+		
 		long endTime = System.currentTimeMillis();
 		if ( PRINT_TIME_PER_STEP )
 			System.out.println("Creating mesh took: " + ((endTime - startTime) / 1000.0) + " sec");
@@ -264,13 +306,17 @@ public class MatchLayersByMaxPMCC {
 		else
 			param_blockRadius = param.blockRadius;
 		final int blockRadius = Math.max( 16, mpicbg.util.Util.roundPos( param.layerScale * param_blockRadius ) );
+//		final int blockRadius = Math.max( mpicbg.util.Util.roundPos( 16 / param.layerScale ), param.blockRadius );
 		
 		System.out.println( "effective block radius = " + blockRadius );
 		
 		/* scale pixel distances */
 		final int searchRadius = ( int )Math.round( param.layerScale * param.searchRadius );
+//		final int searchRadius = param.searchRadius;
 		final float localRegionSigma = param.layerScale * param.localRegionSigma;
 		final float maxLocalEpsilon = param.layerScale * param.maxLocalEpsilon;
+//		final float localRegionSigma = param.localRegionSigma;
+//		final float maxLocalEpsilon = param.maxLocalEpsilon;
 		
 		startTime = System.currentTimeMillis();
 		final AbstractModel< ? > localSmoothnessFilterModel = Util.createModel( param.localModelIndex );
@@ -279,8 +325,8 @@ public class MatchLayersByMaxPMCC {
 			System.out.println("Creating model took: " + ((endTime - startTime) / 1000.0) + " sec");
 
 		
-		final SpringMesh m1 = meshes[0];
-		final SpringMesh m2 = meshes[1];
+		final SpringMesh m1 = meshes[ 0 ];
+		final SpringMesh m2 = meshes[ 1 ];
 
 		final ArrayList< PointMatch > pm12 = new ArrayList< PointMatch >();
 		final ArrayList< PointMatch > pm21 = new ArrayList< PointMatch >();
@@ -300,6 +346,7 @@ public class MatchLayersByMaxPMCC {
 			layer1Img.setThreadsNum( param.numThreads );
 			layer2Img.setThreadsNum( param.numThreads );
 			
+			/*
 			final BoundingBox layer1BBox = layer1Img.getBoundingBox();
 			final BoundingBox layer2BBox = layer2Img.getBoundingBox();
 			
@@ -312,15 +359,36 @@ public class MatchLayersByMaxPMCC {
 			final FloatProcessor ip2 = new FloatProcessor( img2Width, img2Height );
 			final FloatProcessor ip1Mask = new FloatProcessor( img1Width, img1Height );
 			final FloatProcessor ip2Mask = new FloatProcessor( img2Width, img2Height );
-
+			*/
+			
 			// TODO: load the tile specs to FloatProcessor objects
-			tilespecToFloatAndMask( layer1Img, layer1, ip1, ip1Mask, mipmapLevel, param.layerScale, param.meshesDir1 );
-			tilespecToFloatAndMask( layer2Img, layer2, ip2, ip2Mask, mipmapLevel, param.layerScale, param.meshesDir2 );
+			final FloatProcessor ip1 = tilespecToFloatAndMask( layer1Img, layer1, mipmapLevel, param.layerScale, param.meshesDir1 );
+			final FloatProcessor ip2 = tilespecToFloatAndMask( layer2Img, layer2, mipmapLevel, param.layerScale, param.meshesDir2 );
+//			tilespecToFloatAndMask( layer1Img, layer1, ip1, ip1Mask, mipmapLevel, param.layerScale, param.meshesDir1 );
+//			tilespecToFloatAndMask( layer2Img, layer2, ip2, ip2Mask, mipmapLevel, param.layerScale, param.meshesDir2 );
 			endTime = System.currentTimeMillis();
 			if ( PRINT_TIME_PER_STEP )
 				System.out.println("Creating images took: " + ((endTime - startTime) / 1000.0) + " sec");
 			
 			//final float springConstant  = 1.0f / ( layer2 - layer1 );
+			
+
+			// Scale the affine transformation
+			final AffineTransform scaleDown = new AffineTransform();
+			scaleDown.scale( param.layerScale, param.layerScale );
+			final AffineModel2D scaleDownModel = new AffineModel2D();
+			scaleDownModel.set( scaleDown );
+			
+			final CoordinateTransformList< CoordinateTransform > scaledModel = new CoordinateTransformList< CoordinateTransform >();
+			scaledModel.add( scaleDownModel.createInverse() );
+			scaledModel.add( ( AffineModel2D )model );
+			scaledModel.add( scaleDownModel );
+			
+			final CoordinateTransformList< CoordinateTransform > scaledInverseModel = new CoordinateTransformList< CoordinateTransform >();
+			scaledInverseModel.add( scaleDownModel.createInverse() );
+			scaledInverseModel.add( ( ( InvertibleCoordinateTransform )model ).createInverse() );
+			scaledInverseModel.add( scaleDownModel );
+
 			
 			if ( ! layer1Fixed )
 			{
@@ -333,7 +401,7 @@ public class MatchLayersByMaxPMCC {
 							null,//ip1Mask,
 							null,//ip2Mask,
 							1.0f,
-							( ( InvertibleCoordinateTransform )model ).createInverse(),
+							scaledInverseModel, //( ( InvertibleCoordinateTransform )model ).createInverse(),
 							blockRadius,
 							blockRadius,
 							searchRadius,
@@ -368,6 +436,7 @@ public class MatchLayersByMaxPMCC {
 	
 				if ( param.useLocalSmoothnessFilter )
 				{
+
 					startTime = System.currentTimeMillis();
 					System.out.println( layer1 + " > " + layer2 + ": found " + pm12.size() + " correspondence candidates." );
 					localSmoothnessFilterModel.localSmoothnessFilter( pm12, pm12, localRegionSigma, maxLocalEpsilon, param.maxLocalTrust );
@@ -418,11 +487,17 @@ public class MatchLayersByMaxPMCC {
 				final ArrayList< PointMatch > pm12_strip = new ArrayList< PointMatch >();
 				for (PointMatch pm: pm12)
 				{
-					PointMatch actualPm = new PointMatch(
-							new Point( pm.getP1().getL(), pm.getP1().getW() ),
-							new Point( pm.getP2().getL(), pm.getP2().getW() )
-							);
-					pm12_strip.add( actualPm );
+					PointMatch actualPm;
+					try {
+						actualPm = new PointMatch(
+								new Point( pm.getP1().getL(), scaleDownModel.applyInverse( pm.getP1().getW() ) ),
+								new Point( pm.getP2().getL(), scaleDownModel.applyInverse( pm.getP2().getW() ) )
+								);
+						pm12_strip.add( actualPm );
+					} catch (NoninvertibleModelException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
 				}
 				
 				// TODO: Export / Import master sprint mesh vertices no calculated  individually per tile (v1, v2).
@@ -446,7 +521,7 @@ public class MatchLayersByMaxPMCC {
 							null,//ip2Mask,
 							null,//ip1Mask,
 							1.0f,
-							model,
+							scaledModel, //model,
 							blockRadius,
 							blockRadius,
 							searchRadius,
@@ -530,11 +605,17 @@ public class MatchLayersByMaxPMCC {
 				final ArrayList< PointMatch > pm21_strip = new ArrayList< PointMatch >();
 				for (PointMatch pm: pm21)
 				{
-					PointMatch actualPm = new PointMatch(
-							new Point( pm.getP1().getL(), pm.getP1().getW() ),
-							new Point( pm.getP2().getL(), pm.getP2().getW() )
-							);
-					pm21_strip.add( actualPm );
+					PointMatch actualPm;
+					try {
+						actualPm = new PointMatch(
+								new Point( pm.getP1().getL(), scaleDownModel.applyInverse( pm.getP1().getW() ) ),
+								new Point( pm.getP2().getL(), scaleDownModel.applyInverse( pm.getP2().getW() ) )
+								);
+						pm21_strip.add( actualPm );
+					} catch (NoninvertibleModelException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
 				}
 
 				// TODO: Export / Import master sprint mesh vertices no calculated  individually per tile (v1, v2).

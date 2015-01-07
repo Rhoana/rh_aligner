@@ -6,6 +6,7 @@ import ij.process.ColorProcessor;
 
 import java.awt.Color;
 import java.awt.Graphics2D;
+import java.awt.Polygon;
 import java.awt.image.BufferedImage;
 import java.awt.image.WritableRaster;
 import java.io.File;
@@ -71,11 +72,16 @@ public class DebugCorrespondence {
 		ColorProcessor cp = bp.convertToColorProcessor();
 		
 		System.out.println( "The output image size: " + cp.getWidth() + ", " + cp.getHeight() );
-		
+		final int width = cp.getWidth();
+		final int height = cp.getHeight();
+
 		// Mark the correspondence points
-		final int radius = 10;
+		int radius = (int)(Math.max( width, height ) * 0.005);
+		radius = Math.max( radius, 10 );
 		Random rng = new Random( 0 );
-		for ( int i = 0; i < candidates.size(); i++ )
+		int[] minMaxX = { Integer.MAX_VALUE, Integer.MIN_VALUE };
+		int[] minMaxY = { Integer.MAX_VALUE, Integer.MIN_VALUE };
+        for ( int i = 0; i < candidates.size(); i++ )
 		{
 			PointMatch pm = candidates.get( i );
 			Point p = null;
@@ -84,8 +90,13 @@ public class DebugCorrespondence {
 			else if ( candidateNum == 1 )
 				p = pm.getP2();
 			
-			int x = (int)p.getL()[0];
-			int y = (int)p.getL()[1];
+			int x = (int)(p.getW()[0] * scale);
+			int y = (int)(p.getW()[1] * scale);
+
+			minMaxX[0] = Math.min( minMaxX[0], x);
+			minMaxX[1] = Math.max( minMaxX[1], x);
+			minMaxY[0] = Math.min( minMaxY[0], y);
+			minMaxY[1] = Math.max( minMaxY[1], y);
 
 			Color curColor = new Color(
 					Math.abs(rng.nextInt()) % 256,
@@ -98,8 +109,25 @@ public class DebugCorrespondence {
 //					0 );
 
 			cp.setColor( curColor );
-			System.out.println("Outputting oval at: " + (x - radius) + ", " + (y - radius));
-			cp.fillOval( x - radius, y - radius, 2 * radius, 2 * radius );
+			int actualRadius = radius;
+			if ( x - radius < 0 )
+				actualRadius = Math.min(actualRadius, x - 1);
+			if ( x + radius >= width )
+				actualRadius = Math.min(actualRadius, width - x - 1);
+			if ( y - radius < 0 )
+				actualRadius = Math.min(actualRadius, y - 1);
+			if ( y + radius >= height )
+				actualRadius = Math.min(actualRadius, height - y - 1);
+
+			// Cannot draw oval when dealing with large images (bug in ImageProcessor.fillOval)
+//			System.out.println("Outputting oval at: " + (x - radius) + ", " + (y - radius));
+//			cp.fillOval( x - radius, y - radius, 2 * radius, 2 * radius );
+			System.out.println("Outputting square at: " + (x - actualRadius) + ", " + (y - actualRadius));
+			Polygon po = new Polygon(
+					new int[] { x - actualRadius, x + actualRadius, x + actualRadius, x - actualRadius },
+					new int[] { y - actualRadius, y - actualRadius, y + actualRadius, y + actualRadius },
+					4 );
+			cp.fillPolygon(po);
 		}
 		
 		final BufferedImage image = new BufferedImage( cp.getWidth(), cp.getHeight(), BufferedImage.TYPE_INT_RGB );

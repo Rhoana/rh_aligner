@@ -582,5 +582,36 @@ public class Utils
 		
 		return res;
 	}
+	
+	public static List< SpringMesh > createMeshes( List< TileSpec[] > tileSpecs,
+			int imageWidth, int imageHeight,
+			float springLengthSpringMesh, float stiffnessSpringMesh, float maxStretchSpringMesh,
+			float layerScale, float dampSpringMesh )
+	{
+		final float springTriangleHeightTwice = 2 * ( float )Math.sqrt( 0.75f * springLengthSpringMesh * springLengthSpringMesh );
+
+		final ArrayList< SpringMesh > meshes = new ArrayList< SpringMesh >( tileSpecs.size() );
+		final double w = imageWidth;
+		final double h = imageHeight;
+		for ( int i = 0; i < tileSpecs.size(); i++ )
+		{
+			final int numX = Math.max( 2, ( int )Math.ceil( w / springLengthSpringMesh ) + 1 );
+			final int numY = Math.max( 2, ( int )Math.ceil( h / springTriangleHeightTwice ) + 1 );
+			final float wMesh = ( numX - 1 ) * springLengthSpringMesh;
+			final float hMesh = ( numY - 1 ) * springTriangleHeightTwice;
+
+			final SpringMesh mesh = new SpringMesh(
+					numX,
+					numY,
+					wMesh,
+					hMesh,
+					stiffnessSpringMesh,
+					maxStretchSpringMesh * layerScale,
+					dampSpringMesh );
+			meshes.add( mesh );
+		}
+
+		return meshes;
+	}
 
 }

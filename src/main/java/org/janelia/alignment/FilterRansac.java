@@ -169,7 +169,7 @@ public class FilterRansac
 								candidates,
 								inliers,
 								1000,
-								params.maxEpsilon * params.layerScale,
+								params.maxEpsilon, //params.maxEpsilon * params.layerScale,
 								params.minInlierRatio,
 								params.minNumInliers,
 								3 );
@@ -177,7 +177,8 @@ public class FilterRansac
 					{
 						final ArrayList< Point > points = new ArrayList< Point >();
 						PointMatch.sourcePoints( inliers, points );
-						if ( Transforms.isIdentity( model, points, params.identityTolerance *  params.layerScale ) )
+						//if ( Transforms.isIdentity( model, points, params.identityTolerance *  params.layerScale ) )
+						if ( Transforms.isIdentity( model, points, params.identityTolerance ) )
 						{
 							System.out.println( "Identity transform for " + inliers.size() + " matches rejected." );
 							//IJ.log( "Identity transform for " + inliers.size() + " matches rejected." );
@@ -196,7 +197,8 @@ public class FilterRansac
 			
 			if ( modelFound )
 			{
-				System.out.println( layerNameB + " -> " + layerNameA + ": " + inliers.size() + " corresponding features with an average displacement of " + ( PointMatch.meanDistance( inliers ) / params.layerScale ) + "px identified." );
+				//System.out.println( layerNameB + " -> " + layerNameA + ": " + inliers.size() + " corresponding features with an average displacement of " + ( PointMatch.meanDistance( inliers ) / params.layerScale ) + "px identified." );
+				System.out.println( layerNameB + " -> " + layerNameA + ": " + inliers.size() + " corresponding features with an average displacement of " + ( PointMatch.meanDistance( inliers ) ) + "px identified." );
 				System.out.println( "Estimated transformation model: " + model );
 				//models.set( ti, new Triple< Integer, Integer, AbstractModel< ? > >( sliceA, sliceB, model ) );
 				resultModel = model;

@@ -436,7 +436,7 @@ public class ElasticLayerAlignment {
 			
 			TileSpecsImage layerImage = new TileSpecsImage( layerTileSpecs );
 			ByteProcessor bp = layerImage.render( layerIndex, mipmapLevel, ( float )scale );
-			final List< Feature > fs = ComputeSiftFeatures.computeImageSiftFeatures( bp, siftParam );
+			final List< Feature > fs = ComputeLayerSiftFeatures.computeImageSiftFeatures( bp, siftParam );
 			System.out.println( "Found " + fs.size() + " features in the layer" );
 			sifts.put( layerIndex, fs );
 			
@@ -608,7 +608,7 @@ J:			for ( int j = layeri + 1; j < range; )
 
 									corr_data.add(new CorrespondenceSpec( 0,
 											layerNameA,
-											layerNameA,
+											layerNameB,
 											candidates));
 
 									if (corr_data.size() > 0) {
