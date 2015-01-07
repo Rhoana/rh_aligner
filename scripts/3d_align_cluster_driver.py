@@ -62,7 +62,7 @@ class CreateLayerSiftFeatures(Job):
         self.dependencies = dependencies
         self.threads = threads_num
         self.threads_str = "-t {0}".format(threads_num)
-        self.memory = 64000
+        self.memory = 13000
         self.time = 400
         self.is_java_job = True
         self.output = output_file
@@ -90,7 +90,7 @@ class MatchLayersSiftFeatures(Job):
         self.dependencies = dependencies
         self.threads = threads_num
         self.threads_str = "-t {0}".format(threads_num)
-        self.memory = 8000
+        self.memory = 5000
         self.time = 30
         self.is_java_job = True
         self.output = corr_output_file
@@ -120,7 +120,7 @@ class FilterRansac(Job):
         else:
             self.conf_fname = '-c "{0}"'.format(conf_fname)
         self.dependencies = dependencies
-        self.memory = 8000
+        self.memory = 5000
         self.time = 30
         self.is_java_job = True
         self.output = output_fname
@@ -172,7 +172,7 @@ class MatchLayersByMaxPMCC(Job):
         self.threads = threads_num
         self.threads_str = '-t {0}'.format(threads_num)
         self.dependencies = dependencies
-        self.memory = 72000
+        self.memory = 20000
         self.time = 600
         self.is_java_job = True
         self.output = pmcc_output_file
@@ -218,7 +218,7 @@ class OptimizeLayersElastic(Job):
         self.threads = threads_num
         self.threads_str = '-t {0}'.format(threads_num)
         self.dependencies = dependencies
-        self.memory = 35000
+        self.memory = 36000
         self.time = 300
         self.is_java_job = True
         self.output = outputs
