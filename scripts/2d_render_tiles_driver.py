@@ -36,6 +36,8 @@ parser.add_argument('-t', '--threads_num', type=int,
 parser.add_argument('-s', '--tile_size', type=int, 
                     help='the size (square side) of each tile (default: 512)',
                     default=512)
+parser.add_argument('--avoid_mipmaps', action="store_true", 
+                    help='Do not create mipmaps after the full scale tiling')
 
 
 
@@ -63,6 +65,7 @@ if not os.path.exists(out_0_dir):
     render_tiles_2d(norm_json, out_0_dir, args.tile_size, args.jar_file, args.threads_num)
 
 # create the zoomed tiles
-out_1_dir = os.path.join(args.output_dir, "1")
-if not os.path.exists(out_1_dir):
-    create_zoomed_tiles(args.output_dir, True, args.threads_num)
+if not args.avoid_mipmaps:
+    out_1_dir = os.path.join(args.output_dir, "1")
+    if not os.path.exists(out_1_dir):
+        create_zoomed_tiles(args.output_dir, True, args.threads_num)

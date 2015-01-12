@@ -116,6 +116,8 @@ if __name__ == '__main__':
     parser.add_argument('-s', '--skip_layers', type=str, 
                         help='the range of layers (sections) that will not be processed e.g., "2,3,9-11,18" (default: no skipped sections)',
                         default=None)
+    parser.add_argument('--avoid_mipmaps', action="store_true", 
+                        help='Do not create mipmaps after the full scale tiling')
     parser.add_argument('-k', '--keeprunning', action='store_true', 
                         help='Run all jobs and report cluster jobs execution stats')
     parser.add_argument('-m', '--multicore', action='store_true', 
@@ -182,14 +184,15 @@ if __name__ == '__main__':
             job_render = RenderTiles2D(dependencies, norm_json, out_0_dir, args.tile_size, args.jar_file, threads_num=32)
 
         # Create zoomed tiles
-        out_1_dir = os.path.join(out_dir, "1")
-        if not os.path.exists(out_1_dir):
-            dependencies = [ ]
-            if job_normalize != None:
-                dependencies.append(job_normalize)
-            if job_render != None:
-                dependencies.append(job_render)
-            job_tile = CreateZoomedTiles(dependencies, out_dir, True, processes_num=16)
+        if not args.avoid_mipmaps:
+            out_1_dir = os.path.join(out_dir, "1")
+            if not os.path.exists(out_1_dir):
+                dependencies = [ ]
+                if job_normalize != None:
+                    dependencies.append(job_normalize)
+                if job_render != None:
+                    dependencies.append(job_render)
+                job_tile = CreateZoomedTiles(dependencies, out_dir, True, processes_num=16)
 
 
 
