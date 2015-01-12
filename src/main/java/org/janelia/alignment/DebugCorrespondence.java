@@ -6,6 +6,7 @@ import ij.process.ImageProcessor;
 
 import java.awt.Color;
 import java.awt.Graphics2D;
+import java.awt.Polygon;
 import java.awt.image.BufferedImage;
 import java.awt.image.WritableRaster;
 import java.io.File;
@@ -72,7 +73,7 @@ public class DebugCorrespondence {
 			final List< PointMatch > candidates,
 			final String targetPath,
 			final int candidateNum,
-			final InvertibleCoordinateTransform revTransform,
+			//final InvertibleCoordinateTransform revTransform,
 			final boolean showResults,
 			final boolean renderEntireTile )
 	{
@@ -117,7 +118,7 @@ public class DebugCorrespondence {
 			else if ( candidateNum == 1 )
 				p = pm.getP2();
 			
-			revTransform.applyInPlace( p.getL() );
+			//revTransform.applyInPlace( p.getL() );
 			
 			int x = (int)p.getL()[0];
 			int y = (int)p.getL()[1];
@@ -131,15 +132,31 @@ public class DebugCorrespondence {
 					Math.abs(rng.nextInt()) % 256,
 					Math.abs(rng.nextInt()) % 256,
 					Math.abs(rng.nextInt()) % 256 );
-					
+			
 //			Color curColor = new Color(
-//					255,
+//					0,
 //					0,
 //					0 );
 
 			cp.setColor( curColor );
-			System.out.println("Outputting oval at: " + (x - radius) + ", " + (y - radius));
-			cp.fillOval( x - radius, y - radius, 2 * radius, 2 * radius );
+			int actualRadius = radius;
+			if ( x - radius < 0 )
+				actualRadius = Math.min(actualRadius, x - 1);
+			if ( x + radius >= width )
+				actualRadius = Math.min(actualRadius, width - x - 1);
+			if ( y - radius < 0 )
+				actualRadius = Math.min(actualRadius, y - 1);
+			if ( y + radius >= height )
+				actualRadius = Math.min(actualRadius, height - y - 1);
+			// Cannot draw oval when dealing with large images (bug in ImageProcessor.fillOval)
+//			System.out.println("Outputting oval at: " + (x - actualRadius) + ", " + (y - actualRadius));
+//			cp.fillOval( x - actualRadius, y - actualRadius, 2 * actualRadius, 2 * actualRadius );
+			System.out.println("Outputting square at: " + (x - actualRadius) + ", " + (y - actualRadius));
+			Polygon po = new Polygon(
+					new int[] { x - actualRadius, x + actualRadius, x + actualRadius, x - actualRadius },
+					new int[] { y - actualRadius, y - actualRadius, y + actualRadius, y + actualRadius },
+					4 );
+			cp.fillPolygon(po);
 		}
 		
 		final BufferedImage image;
@@ -208,7 +225,7 @@ public class DebugCorrespondence {
 //		final Graphics2D targetGraphics = targetImage.createGraphics();
 //		targetGraphics.drawImage( image, 0, 0, null );
 //		
-		String fileName = targetPath + ".png";
+		String fileName = targetPath + ".jpg";
 		Utils.saveImage( image, fileName, fileName.substring( fileName.lastIndexOf( '.' ) + 1 ) );
 	}
 	
@@ -267,6 +284,7 @@ public class DebugCorrespondence {
 
 		
 		// Create a map between an imageUrl and its corresponding reverse transformation
+		/*
 		final HashMap< String, InvertibleCoordinateTransform > imageToRevTransform = new HashMap< String, InvertibleCoordinateTransform >();
 		for ( TileSpec ts : tileSpecs )
 		{
@@ -275,7 +293,7 @@ public class DebugCorrespondence {
 			final InvertibleCoordinateTransform revTransform = (( InvertibleCoordinateTransform )ctl.get(0)).createInverse();
 			imageToRevTransform.put( imageUrl, revTransform );
 		}
-		
+		*/
 		
 		final CorrespondenceSpec[] corr_data;
 		try
@@ -323,14 +341,14 @@ public class DebugCorrespondence {
 			final String outputFile2 = params.targetDir + File.separatorChar + inFileName + "_entry" + i + "_1";
 			markAndSave( imageUrl2, params.layerScale, mipmapLevel, 
 					corrSpec.correspondencePointPairs, outputFile2, 1 - index, 
-					imageToRevTransform.get( imageUrl2 ), 
+					//imageToRevTransform.get( imageUrl2 ), 
 					params.showResults, params.renderEntireTiles );
 
 			// Save the second image
 			final String outputFile1 = params.targetDir + File.separatorChar + inFileName + "_entry" + i + "_0";
 			markAndSave( imageUrl1, params.layerScale, mipmapLevel, 
 					corrSpec.correspondencePointPairs, outputFile1, index, 
-					imageToRevTransform.get( imageUrl1 ), 
+					//imageToRevTransform.get( imageUrl1 ), 
 					params.showResults, params.renderEntireTiles );
 			
 		}
