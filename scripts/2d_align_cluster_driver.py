@@ -35,7 +35,7 @@ class CreateSiftFeatures(Job):
         self.dependencies = []
         self.threads = threads_num
         self.threads_str = "-t {0}".format(threads_num)
-        self.memory = 16000
+        self.memory = 9000
         self.time = 300
         self.is_java_job = True
         self.output = output_file
