@@ -57,7 +57,7 @@ class RenderTiles2D(Job):
         else:
             self.blend_type = '-b {0}'.format(blend_type)
         self.dependencies = dependencies
-        self.memory = 55000
+        self.memory = 14000
         self.time = 600
         self.is_java_job = True
         self.output = out_dir

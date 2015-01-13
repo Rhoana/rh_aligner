@@ -18,7 +18,7 @@ def render_tiles_2d(tiles_fname, output_dir, tile_size, jar_file, blend_type=Non
     if blend_type is not None:
         blend_str = "--blendType {}".format(blend_type)
 
-    java_cmd = 'java -Xmx50g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.RenderTiles --targetDir {1} --tileSize {2} \
+    java_cmd = 'java -Xmx12g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.RenderTiles --targetDir {1} --tileSize {2} \
         {3} {4} --url {5}'.format(\
             jar_file, output_dir, tile_size, threads_str, blend_str, tiles_url)
     utils.execute_shell_command(java_cmd)
