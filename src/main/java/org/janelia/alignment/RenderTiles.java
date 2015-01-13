@@ -11,6 +11,7 @@ import java.io.InputStreamReader;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.TreeMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -26,8 +27,10 @@ import mpicbg.trakem2.transform.TransformMeshMappingWithMasks;
 import mpicbg.trakem2.transform.TranslationModel2D;
 import mpicbg.trakem2.transform.TransformMeshMappingWithMasks.ImageProcessorWithMasks;
 
+import com.beust.jcommander.IStringConverter;
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
+import com.beust.jcommander.ParameterException;
 import com.beust.jcommander.Parameters;
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
@@ -61,8 +64,29 @@ public class RenderTiles {
         @Parameter( names = "--tileSize", description = "The size of a tile (one side of the square)", required = false )
         public int tileSize = 512;
 
+//        @Parameter( names = "--blendType", description = "The type of image blending to use (BLEND_WEIGHTED_SIMPLE, BLEND_LINEAR)", required = false, converter = BlendTypeConverter.class, arity = 1 )
+        @Parameter( names = "--blendType", description = "The type of image blending to use (BLEND_WEIGHTED_SIMPLE, BLEND_LINEAR)", required = false,  arity = 1 )
+        public BlendType blendType = BlendType.BLEND_WEIGHTED_SIMPLE;
+
 	}
 
+	public enum BlendType
+	{
+		BLEND_WEIGHTED_SIMPLE,
+		BLEND_LINEAR;
+
+		// converter that will be used later
+		public static BlendType fromString( String code ) {
+			System.out.println( "here1" );
+			for ( BlendType type : BlendType.values() ) {
+				if ( type.toString().equalsIgnoreCase( code ) ) {
+					return type;
+				}
+			}
+
+			return null;
+		}
+	}
 	
 	private static class SingleTileSpecRender {
 		
@@ -235,7 +259,6 @@ public class RenderTiles {
 	
 	private RenderTiles() {}
 	
-	
 	final static Params parseParams( final String[] args )
 	{
 		final Params params = new Params();
@@ -264,11 +287,126 @@ public class RenderTiles {
 		return params;
 	}	
 	
+	private static void setOutputPixelBlendSimple(
+			final SingleTileSpecRender[] origTiles,
+			final ByteProcessor targetBp,
+			final int globalPixelCol,
+			final int globalPixelRow,
+			final int tilePixelCol,
+			final int tilePixelRow )
+	{
+		int sumPixelValue = 0;
+		int overlapPixelCount = 0;
+		
+		// Iterate over all tiles that this pixel is part of, and the average of
+		// this pixel's values will be used as the output value
+		// Find the original tiles that are needed for the output tile
+		for ( int origTileIdx = 0; origTileIdx < origTiles.length; origTileIdx++ ) {
+			BoundingBox origTileBBox = origTiles[ origTileIdx ].getBoundingBox();
+			if ( origTileBBox.containsPoint( globalPixelCol, globalPixelRow ) ) {
+				ByteProcessor origTileBp = origTiles[ origTileIdx ].render();
+				int translatedX = globalPixelCol - origTileBBox.getStartPoint().getX();
+				int translatedY = globalPixelRow - origTileBBox.getStartPoint().getY();
+				if ( origTileBp.get( translatedX, translatedY ) != 0 ) {
+					sumPixelValue += origTileBp.get( translatedX, translatedY );
+					overlapPixelCount++;
+				}
+			}
+		}
+		
+		if ( overlapPixelCount != 0 ) {
+			targetBp.set(
+					tilePixelCol,
+					tilePixelRow,
+					(sumPixelValue / overlapPixelCount) );
+		}
+
+	}
+
+	private static void setOutputPixelBlendLinear(
+			final SingleTileSpecRender[] origTiles,
+			final ByteProcessor targetBp,
+			final int globalPixelCol,
+			final int globalPixelRow,
+			final int tilePixelCol,
+			final int tilePixelRow )
+	{
+		List< Integer > pixelValuesList = new ArrayList< Integer >(); 
+		List< Integer > pixelDistancesList = new ArrayList< Integer >();
+		int sumDistance = 0;
+		
+		// Iterate over all tiles that this pixel is part of, and the average of
+		// this pixel's values will be used as the output value
+		// Find the original tiles that are needed for the output tile
+		for ( int origTileIdx = 0; origTileIdx < origTiles.length; origTileIdx++ ) {
+			BoundingBox origTileBBox = origTiles[ origTileIdx ].getBoundingBox();
+			if ( origTileBBox.containsPoint( globalPixelCol, globalPixelRow ) ) {
+				ByteProcessor origTileBp = origTiles[ origTileIdx ].render();
+				int translatedX = globalPixelCol - origTileBBox.getStartPoint().getX();
+				int translatedY = globalPixelRow - origTileBBox.getStartPoint().getY();
+				pixelValuesList.add( origTileBp.get( translatedX, translatedY ) );
+				// Add 1 to make sure that the distance is at least 1
+				int minDist = origTileBBox.getMinimalL1DistanceToBBox( globalPixelCol, globalPixelRow ) + 1;
+				pixelDistancesList.add( minDist );
+				sumDistance = sumDistance + minDist;
+			}
+		}
+		
+		if ( pixelValuesList.size() == 1 ) {
+			targetBp.set(
+					tilePixelCol,
+					tilePixelRow,
+					pixelValuesList.get( 0 ) );
+		} else if ( pixelValuesList.size() > 1 ) {
+			double pixelValue = 0.0;
+			for ( int i = 0; i < pixelValuesList.size(); i++ ) {
+				// Normalize the pixel value according to the distance from each boundary
+				pixelValue = pixelValue + ( pixelValuesList.get( i ) * ( (double)pixelDistancesList.get( i ) / sumDistance ) );
+			}
+			targetBp.set(
+					tilePixelCol,
+					tilePixelRow,
+					( int )pixelValue );
+		}
+
+	}
+
+	private static void setOutputPixel(
+			final SingleTileSpecRender[] origTiles,
+			final ByteProcessor targetBp,
+			final int globalPixelCol,
+			final int globalPixelRow,
+			final int tilePixelCol,
+			final int tilePixelRow,
+			final BlendType blendType )
+	{
+		switch (blendType)
+		{
+		case BLEND_WEIGHTED_SIMPLE:
+			setOutputPixelBlendSimple(
+					origTiles, targetBp,
+					globalPixelCol, globalPixelRow,
+					tilePixelCol, tilePixelRow );
+			break;
+			
+		case BLEND_LINEAR:
+			setOutputPixelBlendLinear(
+					origTiles, targetBp,
+					globalPixelCol, globalPixelRow,
+					tilePixelCol, tilePixelRow );
+			break;
+			
+		default:
+			System.err.println( "Unknown blending type selected" );	
+		}
+	}
+	
 	private static void saveAsTiles( 
 			final SingleTileSpecRender[] origTiles,
 			final BoundingBox entireImageBBox,
 			final int tileSize,
-			final String outputDir )
+			final String outputDir,
+			final BlendType blendType )
 	{
 		BufferedImage targetImage = new BufferedImage( tileSize, tileSize, BufferedImage.TYPE_BYTE_GRAY );
 		ByteProcessor targetBp = new ByteProcessor( targetImage );
@@ -287,6 +425,13 @@ public class RenderTiles {
 				// Set each pixel of the output tile
 				for ( int pixelRow = row; pixelRow < tileMaxRow; pixelRow++ ) {
 					for ( int pixelCol = col; pixelCol < tileMaxCol; pixelCol++ ) {
+						setOutputPixel( 
+								origTiles, targetBp,
+								pixelCol, pixelRow,
+								pixelCol - col, pixelRow - row,
+								blendType );
+
+						/*
 						int sumPixelValue = 0;
 						int overlapPixelCount = 0;
 						
@@ -312,12 +457,14 @@ public class RenderTiles {
 									pixelRow - row,
 									(sumPixelValue / overlapPixelCount) );
 						}
+						*/
 					}
 					
 				}
 												
 				// Save the image to disk
 				String outFile = outputDir + File.separatorChar + "tile_" + (row / tileSize) + "_" + (col / tileSize) + ".jpg";
+				System.out.println( "Saving file: " + outFile );
 				Utils.saveImage( targetImage, outFile, "jpg" );
 				
 				// Clear the output image
@@ -331,6 +478,7 @@ public class RenderTiles {
 			final BoundingBox entireImageBBox,
 			final int tileSize,
 			final String outputDir,
+			final BlendType blendType,
 			final int threadsNum )
 	{
 		// Divide the rows between the threads
@@ -368,6 +516,13 @@ public class RenderTiles {
 							// Set each pixel of the output tile
 							for ( int pixelRow = row; pixelRow < tileMaxRow; pixelRow++ ) {
 								for ( int pixelCol = col; pixelCol < tileMaxCol; pixelCol++ ) {
+									setOutputPixel( 
+											origTiles, targetBp,
+											pixelCol, pixelRow,
+											pixelCol - col, pixelRow - row,
+											blendType );
+
+									/*
 									int sumPixelValue = 0;
 									int overlapPixelCount = 0;
 									
@@ -393,12 +548,14 @@ public class RenderTiles {
 												pixelRow - row,
 												(sumPixelValue / overlapPixelCount) );
 									}
+									*/
 								}
 								
 							}
 															
 							// Save the image to disk
 							String outFile = outputDir + File.separatorChar + "tile_" + (row / tileSize) + "_" + (col / tileSize) + ".jpg";
+							System.out.println( "Saving file: " + outFile );
 							Utils.saveImage( targetImage, outFile, "jpg" );
 							
 							// Clear the output image
@@ -490,13 +647,15 @@ public class RenderTiles {
 					origTilesRendered,
 					entireImageBBox,
 					params.tileSize, 
-					params.targetDir );
+					params.targetDir,
+					params.blendType );
 		} else {
 			saveAsTiles( 
 					origTilesRendered,
 					entireImageBBox,
 					params.tileSize, 
 					params.targetDir,
+					params.blendType,
 					params.numThreads );
 		}
 		

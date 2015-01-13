@@ -6,7 +6,7 @@ from subprocess import call
 import utils
 
 
-def render_tiles_2d(tiles_fname, output_dir, tile_size, jar_file, threads_num=None):
+def render_tiles_2d(tiles_fname, output_dir, tile_size, jar_file, blend_type=None, threads_num=None):
 
     tiles_url = utils.path2url(tiles_fname)
 
@@ -14,9 +14,13 @@ def render_tiles_2d(tiles_fname, output_dir, tile_size, jar_file, threads_num=No
     if threads_num is not None:
         threads_str = "--threads {}".format(threads_num)
 
+    blend_str = ""
+    if blend_type is not None:
+        blend_str = "--blendType {}".format(blend_type)
+
     java_cmd = 'java -Xmx50g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.RenderTiles --targetDir {1} --tileSize {2} \
-        {3} --url {4}'.format(\
-            jar_file, output_dir, tile_size, threads_str, tiles_url)
+        {3} {4} --url {5}'.format(\
+            jar_file, output_dir, tile_size, threads_str, blend_str, tiles_url)
     utils.execute_shell_command(java_cmd)
 
 
@@ -37,13 +41,16 @@ def main():
     parser.add_argument('-s', '--tile_size', type=int, 
                         help='the size (square side) of each tile (default: 512)',
                         default=512)
+    parser.add_argument('-b', '--blend_type', type=str, 
+                        help='the mosaics blending type',
+                        default=None)
 
     args = parser.parse_args()
 
 
     utils.create_dir(args.output_dir)
 
-    render_tiles_2d(args.tiles_file, args.output_dir, args.tile_size, args.jar_file, args.threads_num)
+    render_tiles_2d(args.tiles_file, args.output_dir, args.tile_size, args.jar_file, args.blend_type, args.threads_num)
 
 if __name__ == '__main__':
     main()

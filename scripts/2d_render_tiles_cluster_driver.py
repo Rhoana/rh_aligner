@@ -43,7 +43,7 @@ class NormalizeCoordinates(Job):
 
 
 class RenderTiles2D(Job):
-    def __init__(self, dependencies, tiles_fname, out_dir, tile_size, jar_file, threads_num=1):
+    def __init__(self, dependencies, tiles_fname, out_dir, tile_size, jar_file, blend_type=None, threads_num=1):
         Job.__init__(self)
         self.already_done = False
         self.tiles_fname = '"{0}"'.format(tiles_fname)
@@ -52,6 +52,10 @@ class RenderTiles2D(Job):
         self.tile_size = '-s {0}'.format(tile_size)
         self.threads = threads_num
         self.threads_str = '-t {0}'.format(threads_num)
+        if blend_type is None:
+            self.blend_type = ''
+        else:
+            self.blend_type = '-b {0}'.format(blend_type)
         self.dependencies = dependencies
         self.memory = 55000
         self.time = 600
@@ -62,7 +66,7 @@ class RenderTiles2D(Job):
     def command(self):
         return ['python -u',
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'render_tiles_2d.py'),
-                self.output_dir, self.jar_file, self.tile_size, self.threads_str, self.tiles_fname]
+                self.output_dir, self.jar_file, self.tile_size, self.blend_type, self.threads_str, self.tiles_fname]
 
 
 class CreateZoomedTiles(Job):
@@ -118,6 +122,9 @@ if __name__ == '__main__':
                         default=None)
     parser.add_argument('--avoid_mipmaps', action="store_true", 
                         help='Do not create mipmaps after the full scale tiling')
+    parser.add_argument('-b', '--blend_type', type=str, 
+                        help='the mosaics blending type',
+                        default=None)
     parser.add_argument('-k', '--keeprunning', action='store_true', 
                         help='Run all jobs and report cluster jobs execution stats')
     parser.add_argument('-m', '--multicore', action='store_true', 
@@ -181,7 +188,7 @@ if __name__ == '__main__':
             dependencies = [ ]
             if job_normalize != None:
                 dependencies.append(job_normalize)
-            job_render = RenderTiles2D(dependencies, norm_json, out_0_dir, args.tile_size, args.jar_file, threads_num=32)
+            job_render = RenderTiles2D(dependencies, norm_json, out_0_dir, args.tile_size, args.jar_file, blend_type=args.blend_type, threads_num=32)
 
         # Create zoomed tiles
         if not args.avoid_mipmaps:

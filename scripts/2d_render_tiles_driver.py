@@ -38,6 +38,9 @@ parser.add_argument('-s', '--tile_size', type=int,
                     default=512)
 parser.add_argument('--avoid_mipmaps', action="store_true", 
                     help='Do not create mipmaps after the full scale tiling')
+parser.add_argument('-b', '--blend_type', type=str, 
+                    help='the mosaics blending type',
+                    default=None)
 
 
 
@@ -62,7 +65,7 @@ if not os.path.exists(norm_json):
 # Render the normalized json file
 out_0_dir = os.path.join(args.output_dir, "0")
 if not os.path.exists(out_0_dir):
-    render_tiles_2d(norm_json, out_0_dir, args.tile_size, args.jar_file, args.threads_num)
+    render_tiles_2d(norm_json, out_0_dir, args.tile_size, args.jar_file, args.blend_type, args.threads_num)
 
 # create the zoomed tiles
 if not args.avoid_mipmaps:
