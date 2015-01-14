@@ -66,8 +66,8 @@ public class ComputeLayerSiftFeatures {
 //        @Parameter( names = "--res", description = " Mesh resolution, specified by the desired size of a triangle in pixels", required = false )
 //        public int res = 64;
 
-        @Parameter( names = "--avoidTileScale", description = "Avoid automatic scale of all tiles according to the bounding box width and height", required = false )
-        private boolean avoidTileScale = false;
+        @Parameter( names = "--scale", description = "Layer scale (if given, avoids automatic layer scale)", required = false )
+        public float scale = -1.0f;
 
 	}
 	
@@ -188,8 +188,8 @@ public class ComputeLayerSiftFeatures {
 		final int layerIndex = bbox.getStartPoint().getZ();
 		
 		final double scale;
-		if ( params.avoidTileScale )
-			scale = 1.0f;
+		if ( params.scale != -1.0f )
+			scale = params.scale;
 		else
 			scale = Math.min( 1.0, Math.min( ( double )params.maxOctaveSize / ( double )bbox.getWidth(), ( double )params.maxOctaveSize / ( double )bbox.getHeight() ) );
 		
