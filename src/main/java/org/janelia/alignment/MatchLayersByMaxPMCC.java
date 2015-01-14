@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 import mpicbg.ij.blockmatching.BlockMatching;
+import mpicbg.models.AbstractAffineModel2D;
 import mpicbg.models.AbstractModel;
 import mpicbg.models.CoordinateTransform;
 import mpicbg.models.CoordinateTransformList;
@@ -25,6 +26,7 @@ import mpicbg.models.InvertibleCoordinateTransform;
 import mpicbg.models.NoninvertibleModelException;
 import mpicbg.models.Point;
 import mpicbg.models.PointMatch;
+import mpicbg.models.RigidModel2D;
 import mpicbg.models.SpringMesh;
 import mpicbg.models.Vertex;
 import mpicbg.trakem2.align.Util;
@@ -381,7 +383,7 @@ public class MatchLayersByMaxPMCC {
 			
 			final CoordinateTransformList< CoordinateTransform > scaledModel = new CoordinateTransformList< CoordinateTransform >();
 			scaledModel.add( scaleDownModel.createInverse() );
-			scaledModel.add( ( AffineModel2D )model );
+			scaledModel.add( ( CoordinateTransform )model );
 			scaledModel.add( scaleDownModel );
 			
 			final CoordinateTransformList< CoordinateTransform > scaledInverseModel = new CoordinateTransformList< CoordinateTransform >();
