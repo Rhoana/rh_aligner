@@ -85,23 +85,22 @@ public class DebugFilterRansac {
 		final BoundingBox bbox = singleTileImage.getBoundingBox();
 		final int layerIndex = bbox.getStartPoint().getZ();
 		ByteProcessor bp = singleTileImage.render( layerIndex, mipmapLevel, scale );
-		ColorProcessor cp = bp.convertToColorProcessor();
 
-		System.out.println( "The output image size: " + cp.getWidth() + ", " + cp.getHeight() );
+		System.out.println( "The output image size: " + bp.getWidth() + ", " + bp.getHeight() );
 
-		final BufferedImage image = new BufferedImage( cp.getWidth(), cp.getHeight(), BufferedImage.TYPE_INT_RGB );
+		final BufferedImage image = new BufferedImage( bp.getWidth(), bp.getHeight(), BufferedImage.TYPE_BYTE_GRAY );
 		final WritableRaster raster = image.getRaster();
-		raster.setDataElements( 0, 0, cp.getWidth(), cp.getHeight(), cp.getPixels() );
+		raster.setDataElements( 0, 0, bp.getWidth(), bp.getHeight(), bp.getPixels() );
 		
 		// Save the rendered image
 		if ( showResults )
-			new ImagePlus( "debug", cp ).show();
+			new ImagePlus( "debug", bp ).show();
 
-		final BufferedImage targetImage = new BufferedImage( cp.getWidth(), cp.getHeight(), BufferedImage.TYPE_INT_RGB );
+		final BufferedImage targetImage = new BufferedImage( bp.getWidth(), bp.getHeight(), BufferedImage.TYPE_BYTE_GRAY );
 		final Graphics2D targetGraphics = targetImage.createGraphics();
 		targetGraphics.drawImage( image, 0, 0, null );
 		
-		String fileName = targetPath + ".png";
+		String fileName = targetPath + ".jpg";
 		Utils.saveImage( targetImage, fileName, fileName.substring( fileName.lastIndexOf( '.' ) + 1 ) );
 
 	}
