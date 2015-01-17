@@ -268,7 +268,7 @@ public class OptimizeLayersElastic {
 			final int startLayer,
 			final int endLayer )
 	{
-		//System.out.println( "Fixing the point matches vertices between layers: " + startLayer + " - " + endLayer );
+		System.out.println( "Fixing the point matches vertices between layers: " + startLayer + " - " + endLayer );
 
 		final int meshWidth = ( int )Math.ceil( param.imageWidth * param.layerScale );
 		final int meshHeight = ( int )Math.ceil( param.imageHeight * param.layerScale );
@@ -314,9 +314,9 @@ public class OptimizeLayersElastic {
 		System.out.println( "Fixing the point matches vertices with " + threadsNum + " threads" );
 		
 		// Single thread execution
-		//if ( threadsNum == 1 )
+		if ( threadsNum == 1 )
 			return fixSubAllPointMatchVertices( param, layersCorrs, startLayer, endLayer );
-		/*
+		
 		// Create thread pool and partition the layers between the threads
 		final ExecutorService exec = Executors.newFixedThreadPool( threadsNum );
 		final ArrayList< Future< ArrayList< SpringMesh > > > tasks = new ArrayList< Future< ArrayList< SpringMesh > > >();
@@ -362,7 +362,6 @@ public class OptimizeLayersElastic {
 		exec.shutdown();
 		
 		return meshes;
-		*/
 	}
 
 	
