@@ -117,53 +117,63 @@ public class OptimizeLayersElastic {
 			final List< String > fileUrls,
 			final HashMap< String, Integer > tsUrlToLayerIds )
 	{
+		System.out.println( "Parsing correspondence files" );
 		HashMap< Integer, HashMap< Integer, CorrespondenceSpec > > layersCorrs = new HashMap<Integer, HashMap<Integer,CorrespondenceSpec>>();
 		
 		for ( String fileUrl : fileUrls )
 		{
-			// Open and parse the json file
-			final CorrespondenceSpec[] corr_data;
 			try
 			{
-				final Gson gson = new Gson();
-				URL url = new URL( fileUrl );
-				corr_data = gson.fromJson( new InputStreamReader( url.openStream() ), CorrespondenceSpec[].class );
-			}
-			catch ( final MalformedURLException e )
-			{
-				System.err.println( "URL malformed." );
-				e.printStackTrace( System.err );
-				throw new RuntimeException( e );
-			}
-			catch ( final JsonSyntaxException e )
-			{
-				System.err.println( "JSON syntax malformed." );
-				e.printStackTrace( System.err );
-				throw new RuntimeException( e );
-			}
-			catch ( final Exception e )
-			{
-				e.printStackTrace( System.err );
-				throw new RuntimeException( e );
-			}
-
-			for ( final CorrespondenceSpec corr : corr_data )
-			{
-				final int layer1Id = tsUrlToLayerIds.get( corr.url1 );
-				final int layer2Id = tsUrlToLayerIds.get( corr.url2 );
-				final HashMap< Integer, CorrespondenceSpec > innerMapping;
-
-				if ( layersCorrs.containsKey( layer1Id ) )
+				// Open and parse the json file
+				final CorrespondenceSpec[] corr_data;
+				try
 				{
-					innerMapping = layersCorrs.get( layer1Id );
+					final Gson gson = new Gson();
+					URL url = new URL( fileUrl );
+					corr_data = gson.fromJson( new InputStreamReader( url.openStream() ), CorrespondenceSpec[].class );
 				}
-				else
+				catch ( final MalformedURLException e )
 				{
-					innerMapping = new HashMap<Integer, CorrespondenceSpec>();
-					layersCorrs.put( layer1Id, innerMapping );
+					System.err.println( "URL malformed." );
+					e.printStackTrace( System.err );
+					throw new RuntimeException( e );
 				}
-				// Assuming that no two files have the same correspondence spec url values
-				innerMapping.put( layer2Id,  corr );
+				catch ( final JsonSyntaxException e )
+				{
+					System.err.println( "JSON syntax malformed." );
+					e.printStackTrace( System.err );
+					throw new RuntimeException( e );
+				}
+				catch ( final Exception e )
+				{
+					e.printStackTrace( System.err );
+					throw new RuntimeException( e );
+				}
+	
+				for ( final CorrespondenceSpec corr : corr_data )
+				{
+					final int layer1Id = tsUrlToLayerIds.get( corr.url1 );
+					final int layer2Id = tsUrlToLayerIds.get( corr.url2 );
+					final HashMap< Integer, CorrespondenceSpec > innerMapping;
+	
+					if ( layersCorrs.containsKey( layer1Id ) )
+					{
+						innerMapping = layersCorrs.get( layer1Id );
+					}
+					else
+					{
+						innerMapping = new HashMap<Integer, CorrespondenceSpec>();
+						layersCorrs.put( layer1Id, innerMapping );
+					}
+					// Assuming that no two files have the same correspondence spec url values
+					innerMapping.put( layer2Id,  corr );
+				}
+			}
+			catch (RuntimeException e)
+			{
+				System.err.println( "Error while reading file: " + fileUrl );
+				e.printStackTrace( System.err );
+				throw e;
 			}
 		}
 		
@@ -172,6 +182,8 @@ public class OptimizeLayersElastic {
 	
 	private static ArrayList< Tile< ? > > createLayersModels( int layersNum, int desiredModelIndex )
 	{
+		System.out.println( "Creating default models for each layer" );
+
 		/* create tiles and models for all layers */
 		final ArrayList< Tile< ? > > tiles = new ArrayList< Tile< ? > >();
 		for ( int i = 0; i < layersNum; ++i )
@@ -248,6 +260,8 @@ public class OptimizeLayersElastic {
 			final int startLayer,
 			final int endLayer )
 	{
+		System.out.println( "Fixing tht point matches vertices" );
+
 		final int meshWidth = ( int )Math.ceil( param.imageWidth * param.layerScale );
 		final int meshHeight = ( int )Math.ceil( param.imageHeight * param.layerScale );
 		
@@ -317,6 +331,8 @@ public class OptimizeLayersElastic {
 		final ArrayList< SpringMesh > meshes = fixAllPointMatchVertices(
 				param, layersCorrs, startLayer, endLayer );
 		
+		System.out.println( "Matching layers" );
+
 		for ( int layerA = startLayer; layerA < endLayer; layerA++ )
 		{
 			if ( skippedLayers.contains( layerA ) )
@@ -557,8 +573,9 @@ public class OptimizeLayersElastic {
 //				System.out.println( layerId + " <> " + corrLayerId + " spring constant = " + springConstant );
 //			}
 //		}
-		
+
 		/* pre-align by optimizing a piecewise linear model */
+		System.out.println( "Pre-aligning by optimizing piecewise linear model" );
 		try
 		{
 			initMeshes.optimize(
@@ -570,6 +587,7 @@ public class OptimizeLayersElastic {
 		{
 			throw new RuntimeException( e );
 		}
+		System.out.println( "Initializing meshes using models" );
 		for ( int i = startLayer; i <= endLayer; ++i )
 			meshes.get( i - startLayer ).init( tiles.get( i - startLayer ).getModel() );
 		
@@ -719,6 +737,8 @@ public class OptimizeLayersElastic {
 		else
 			actualTileSpecFiles = params.tileSpecFiles;
 		
+		System.out.println( "Reading tilespecs" );
+
 		// Load and parse tile spec files
 		final HashMap< Integer, List< TileSpec > > layersTs = new HashMap<Integer, List<TileSpec>>();
 		final HashMap< String, Integer > tsUrlToLayerIds = new HashMap<String, Integer>();
@@ -747,6 +767,7 @@ public class OptimizeLayersElastic {
 		layersCorrs = parseCorrespondenceFiles( actualCorrFiles, tsUrlToLayerIds );
 
 		// Find bounding box
+		System.out.println( "Finding bounding box" );
 		final TileSpecsImage entireImage = TileSpecsImage.createImageFromFiles( actualTileSpecFiles );
 		final BoundingBox bbox = entireImage.getBoundingBox();
 		

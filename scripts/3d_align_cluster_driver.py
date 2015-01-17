@@ -218,8 +218,8 @@ class OptimizeLayersElastic(Job):
         self.threads = threads_num
         self.threads_str = '-t {0}'.format(threads_num)
         self.dependencies = dependencies
-        self.memory = 36000
-        self.time = 300
+        self.memory = 51000
+        self.time = 500
         self.is_java_job = True
         self.output = outputs
         #self.already_done = os.path.exists(self.output_file)
