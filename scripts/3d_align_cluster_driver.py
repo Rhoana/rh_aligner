@@ -194,7 +194,7 @@ class MatchLayersByMaxPMCC(Job):
 
 
 class OptimizeLayersElastic(Job):
-    def __init__(self, dependencies, outputs, tiles_fnames, corr_fnames, image_width, image_height, fixed_layers, output_dir, jar_file, conf_fname=None, skip_layers=None, threads_num=1):
+    def __init__(self, dependencies, outputs, tiles_fnames, corr_fnames, image_width, image_height, fixed_layers, output_dir, max_layer_distance, jar_file, conf_fname=None, skip_layers=None, threads_num=1):
         Job.__init__(self)
         self.already_done = False
         self.tiles_fnames = '--tile_files {0}'.format(" ".join(tiles_fnames))
@@ -215,6 +215,7 @@ class OptimizeLayersElastic(Job):
             self.skip_layers = ''
         else:
             self.skip_layers = '-s "{0}"'.format(skip_layers)
+        self.max_layer_distance = '-d {}'.format(max_layer_distance)
         self.threads = threads_num
         self.threads_str = '-t {0}'.format(threads_num)
         self.dependencies = dependencies
@@ -228,7 +229,7 @@ class OptimizeLayersElastic(Job):
         return ['python -u',
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'optimize_layers_elastic.py'),
                 self.output_dir, self.jar_file, self.conf_fname, self.image_width, self.image_height, self.fixed_layers,
-                self.threads_str, self.skip_layers, self.tiles_fnames, self.corr_fnames]
+                self.max_layer_distance, self.threads_str, self.skip_layers, self.tiles_fnames, self.corr_fnames]
 
 
 
@@ -530,7 +531,7 @@ if __name__ == '__main__':
 
     dependencies = all_running_jobs
     job_optimize = OptimizeLayersElastic(dependencies, sections_outputs, [ ts_list_file ], [ pmcc_list_file ], \
-        imageWidth, imageHeight, [ fixed_layer ], args.output_dir, args.jar_file, conf_fname=args.conf_file_name,
+        imageWidth, imageHeight, [ fixed_layer ], args.output_dir, args.max_layer_distance, args.jar_file, conf_fname=args.conf_file_name,
         skip_layers=args.skip_layers, threads_num=16)
     #optimize_layers_elastic(all_ts_files, all_pmcc_files, imageWidth, imageHeight, [fixed_layer], args.output_dir, args.jar_file, conf)
 

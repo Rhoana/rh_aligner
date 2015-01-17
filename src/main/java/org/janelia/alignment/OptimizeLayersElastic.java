@@ -12,6 +12,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import mpicbg.models.AffineModel2D;
 import mpicbg.models.HomographyModel2D;
@@ -60,6 +65,9 @@ public class OptimizeLayersElastic {
 
         @Parameter( names = "--targetDir", description = "Directory to output the new tilespec files", required = true )
         public String targetDir;
+
+        @Parameter( names = "--maxLayersDistance", description = "The number of neighboring layers to match", required = false )
+        private int maxLayersDistance;               
 
         @Parameter( names = "--modelIndex", description = "Model Index: 0=Translation, 1=Rigid, 2=Similarity, 3=Affine, 4=Homography", required = false )
         private int modelIndex = 1;
@@ -254,13 +262,13 @@ public class OptimizeLayersElastic {
 		return newPms;
 	}
 
-	private static ArrayList< SpringMesh > fixAllPointMatchVertices(
+	private static ArrayList< SpringMesh > fixSubAllPointMatchVertices(
 			final Params param,
 			final HashMap< Integer, HashMap< Integer, CorrespondenceSpec > > layersCorrs,
 			final int startLayer,
 			final int endLayer )
 	{
-		System.out.println( "Fixing tht point matches vertices" );
+		//System.out.println( "Fixing the point matches vertices between layers: " + startLayer + " - " + endLayer );
 
 		final int meshWidth = ( int )Math.ceil( param.imageWidth * param.layerScale );
 		final int meshHeight = ( int )Math.ceil( param.imageHeight * param.layerScale );
@@ -296,6 +304,67 @@ public class OptimizeLayersElastic {
 		return meshes;
 	}
 
+	private static ArrayList< SpringMesh > fixAllPointMatchVertices(
+			final Params param,
+			final HashMap< Integer, HashMap< Integer, CorrespondenceSpec > > layersCorrs,
+			final int startLayer,
+			final int endLayer,
+			final int threadsNum )
+	{
+		System.out.println( "Fixing the point matches vertices with " + threadsNum + " threads" );
+		
+		// Single thread execution
+		//if ( threadsNum == 1 )
+			return fixSubAllPointMatchVertices( param, layersCorrs, startLayer, endLayer );
+		/*
+		// Create thread pool and partition the layers between the threads
+		final ExecutorService exec = Executors.newFixedThreadPool( threadsNum );
+		final ArrayList< Future< ArrayList< SpringMesh > > > tasks = new ArrayList< Future< ArrayList< SpringMesh > > >();
+
+		final int layersPerThreadNum = ( endLayer - startLayer + 1 ) / threadsNum;
+		for ( int i = 0; i < threadsNum; i++ )
+		{
+			final int fromIndex = startLayer + i * layersPerThreadNum;
+			final int lastIndex;
+			if ( i == threadsNum - 1 ) // lastThread
+				lastIndex = endLayer;
+			else
+				lastIndex = fromIndex + layersPerThreadNum - 1;
+
+			tasks.add( exec.submit( new Callable< ArrayList< SpringMesh > >() {
+
+				@Override
+				public ArrayList<SpringMesh> call() throws Exception {
+					return fixSubAllPointMatchVertices( param, layersCorrs, fromIndex, lastIndex );
+				}
+				
+			}));
+		}
+
+
+		final ArrayList< SpringMesh > meshes = new ArrayList< SpringMesh >( endLayer - startLayer + 1 );
+
+		for ( Future< ArrayList< SpringMesh > > task : tasks )
+		{
+			try {
+				
+				final ArrayList< SpringMesh > curMeshes = task.get();
+				//System.out.println( "curMeshes size: " + curMeshes.size() );
+				meshes.addAll( curMeshes );
+			} catch (InterruptedException e) {
+				exec.shutdownNow();
+				e.printStackTrace();
+			} catch (ExecutionException e) {
+				exec.shutdownNow();
+				e.printStackTrace();
+			}
+		}
+		exec.shutdown();
+		
+		return meshes;
+		*/
+	}
+
 	
 	
 	/**
@@ -320,7 +389,8 @@ public class OptimizeLayersElastic {
 			final int endLayer,
 			final int startX,
 			final int startY,
-			final List<Integer> skippedLayers )
+			final List<Integer> skippedLayers,
+			final int maxDistance )
 	{
 		final ArrayList< Tile< ? > > tiles = createLayersModels( endLayer - startLayer + 1, param.modelIndex );
 		
@@ -329,19 +399,25 @@ public class OptimizeLayersElastic {
 		initMeshes.setThreadsNum( param.numThreads );
 				
 		final ArrayList< SpringMesh > meshes = fixAllPointMatchVertices(
-				param, layersCorrs, startLayer, endLayer );
+				param, layersCorrs, startLayer, endLayer, param.numThreads );
 		
 		System.out.println( "Matching layers" );
 
 		for ( int layerA = startLayer; layerA < endLayer; layerA++ )
 		{
+			//if ( skippedLayers.contains( layerA ) || !layersCorrs.containsKey( layerA ) )
 			if ( skippedLayers.contains( layerA ) )
 			{
 				System.out.println( "Skipping optimization of layer " + layerA );
 				continue;
 			}
-			for ( int layerB = layerA + 1; layerB <= endLayer; layerB++ )
+			//for ( Integer layerB : layersCorrs.get( layerA ).keySet() )
+			//for ( int layerB = layerA + 1; layerB <= endLayer; layerB++ )
+			for ( int layerB = layerA + 1; layerB <= layerA + maxDistance; layerB++ )
 			{
+				// We later both directions, so just do forward matching
+				if ( layerB < layerA )
+					continue;
 
 				if ( skippedLayers.contains( layerB ) )
 				{
@@ -786,7 +862,8 @@ public class OptimizeLayersElastic {
 			params.fixedLayers,
 			firstLayer, lastLayer,
 			bbox.getStartPoint().getX(), bbox.getStartPoint().getY(),
-			skippedLayers );
+			skippedLayers,
+			params.maxLayersDistance );
 
 		// Save new tilespecs
 		System.out.println( "Optimization complete. Generating tile transforms.");

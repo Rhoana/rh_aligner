@@ -228,5 +228,5 @@ pmcc_list_file = os.path.join(args.workspace_dir, "all_pmcc_files.txt")
 write_list_to_file(pmcc_list_file, actual_pmcc_files)
 
 #optimize_layers_elastic(all_ts_files, actual_pmcc_files, imageWidth, imageHeight, [fixed_layer], args.output_dir, args.jar_file, conf)
-optimize_layers_elastic([ ts_list_file ], [ pmcc_list_file ], imageWidth, imageHeight, [fixed_layer], args.output_dir, args.jar_file, conf, args.skip_layers)
+optimize_layers_elastic([ ts_list_file ], [ pmcc_list_file ], imageWidth, imageHeight, [fixed_layer], args.output_dir, args.max_layer_distance, args.jar_file, conf, args.skip_layers)
 

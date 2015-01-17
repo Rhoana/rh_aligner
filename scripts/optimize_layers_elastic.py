@@ -10,7 +10,7 @@ import utils
 
 # common functions
 
-def optimize_layers_elastic(tile_files, corr_files, image_width, image_height, fixed_layers, out_dir, jar_file, conf=None, skip_layers=None, threads_num=4):
+def optimize_layers_elastic(tile_files, corr_files, image_width, image_height, fixed_layers, out_dir, max_layer_distance, jar_file, conf=None, skip_layers=None, threads_num=4):
     conf_args = utils.conf_args_from_file(conf, 'OptimizeLayersElastic')
 
     fixed_str = ""
@@ -23,7 +23,7 @@ def optimize_layers_elastic(tile_files, corr_files, image_width, image_height, f
 
 
     java_cmd = 'java -Xmx48g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.OptimizeLayersElastic --tilespecFiles {1} --corrFiles {2} \
-            {3} --imageWidth {4} --imageHeight {5} --threads {6} {7} --targetDir {8} {9}'.format(
+            {3} --imageWidth {4} --imageHeight {5} --threads {6} --maxLayersDistance {7} {8} --targetDir {9} {10}'.format(
         jar_file,
         " ".join(utils.path2url(f) for f in tile_files),
         " ".join(utils.path2url(f) for f in corr_files),
@@ -31,6 +31,7 @@ def optimize_layers_elastic(tile_files, corr_files, image_width, image_height, f
         int(image_width),
         int(image_height),
         threads_num,
+        max_layer_distance,
         skip_str,
         out_dir,
         conf_args)
@@ -66,6 +67,9 @@ def main():
     parser.add_argument('-s', '--skip_layers', type=str, 
                         help='the range of layers (sections) that will not be processed e.g., "2,3,9-11,18" (default: no skipped sections)',
                         default=None)
+    parser.add_argument('-d', '--max_layer_distance', type=int, 
+                        help='the largest distance between two layers to be matched (default: 1)',
+                        default=1)
 
 
     args = parser.parse_args()
@@ -73,8 +77,9 @@ def main():
     print "tile_files: {0}".format(args.tile_files)
     print "corr_files: {0}".format(args.corr_files)
 
-    optimize_layers_elastic(args.tile_files, args.corr_files, \
-        args.image_width, args.image_height, args.fixed_layers, args.output_dir, args.jar_file, \
+    optimize_layers_elastic(args.tile_files, args.corr_files,
+        args.image_width, args.image_height, args.fixed_layers, args.output_dir, args.max_layer_distance,
+        args.jar_file,
         conf=args.conf_file_name, 
         skip_layers=args.skip_layers, threads_num=args.threads_num)
 
