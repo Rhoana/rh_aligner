@@ -219,7 +219,7 @@ class OptimizeLayersElastic(Job):
         self.threads = threads_num
         self.threads_str = '-t {0}'.format(threads_num)
         self.dependencies = dependencies
-        self.memory = 51000
+        self.memory = 100000
         self.time = 500
         self.is_java_job = True
         self.output = outputs
@@ -532,7 +532,7 @@ if __name__ == '__main__':
     dependencies = all_running_jobs
     job_optimize = OptimizeLayersElastic(dependencies, sections_outputs, [ ts_list_file ], [ pmcc_list_file ], \
         imageWidth, imageHeight, [ fixed_layer ], args.output_dir, args.max_layer_distance, args.jar_file, conf_fname=args.conf_file_name,
-        skip_layers=args.skip_layers, threads_num=16)
+        skip_layers=args.skip_layers, threads_num=32)
     #optimize_layers_elastic(all_ts_files, all_pmcc_files, imageWidth, imageHeight, [fixed_layer], args.output_dir, args.jar_file, conf)
 
 
