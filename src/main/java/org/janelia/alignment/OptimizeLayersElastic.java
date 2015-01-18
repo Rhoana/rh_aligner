@@ -12,7 +12,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -121,12 +123,12 @@ public class OptimizeLayersElastic {
 	
 	private OptimizeLayersElastic() {}
 	
-	private static HashMap< Integer, HashMap< Integer, CorrespondenceSpec > > parseCorrespondenceFiles(
+	private static Map< Integer, Map< Integer, CorrespondenceSpec > > parseCorrespondenceFiles(
 			final List< String > fileUrls,
 			final HashMap< String, Integer > tsUrlToLayerIds )
 	{
 		System.out.println( "Parsing correspondence files" );
-		HashMap< Integer, HashMap< Integer, CorrespondenceSpec > > layersCorrs = new HashMap<Integer, HashMap<Integer,CorrespondenceSpec>>();
+		Map< Integer, Map< Integer, CorrespondenceSpec > > layersCorrs = new HashMap<Integer, Map<Integer,CorrespondenceSpec>>();
 		
 		for ( String fileUrl : fileUrls )
 		{
@@ -162,7 +164,7 @@ public class OptimizeLayersElastic {
 				{
 					final int layer1Id = tsUrlToLayerIds.get( corr.url1 );
 					final int layer2Id = tsUrlToLayerIds.get( corr.url2 );
-					final HashMap< Integer, CorrespondenceSpec > innerMapping;
+					final Map< Integer, CorrespondenceSpec > innerMapping;
 	
 					if ( layersCorrs.containsKey( layer1Id ) )
 					{
@@ -187,6 +189,127 @@ public class OptimizeLayersElastic {
 		
 		return layersCorrs;
 	}
+
+	private static Map< Integer, Map< Integer, CorrespondenceSpec > > parseCorrespondenceFiles(
+			final List< String > fileUrls,
+			final HashMap< String, Integer > tsUrlToLayerIds,
+			final int threadsNum )
+	{
+		System.out.println( "Parsing correspondence files with " + threadsNum + " threads" );
+		
+		// Single thread case
+		if ( threadsNum == 1 )
+		{
+			return parseCorrespondenceFiles( fileUrls, tsUrlToLayerIds );
+		}
+		
+		final ConcurrentHashMap< Integer, Map< Integer, CorrespondenceSpec > > layersCorrs = new ConcurrentHashMap<Integer, Map<Integer,CorrespondenceSpec>>();
+		
+		// Initialize threads
+		final ExecutorService exec = Executors.newFixedThreadPool( threadsNum );
+		final ArrayList< Future< ? > > tasks = new ArrayList< Future< ? > >();
+
+		final int filesPerThreadNum = fileUrls.size() / threadsNum;
+		for ( int i = 0; i < threadsNum; i++ )
+		{
+			final int fromIndex = i * filesPerThreadNum;
+			final int lastIndex;
+			if ( i == threadsNum - 1 ) // lastThread
+				lastIndex = fileUrls.size();
+			else
+				lastIndex = fromIndex + filesPerThreadNum;
+
+			tasks.add( exec.submit( new Runnable() {
+				
+				@Override
+				public void run() {
+					// TODO Auto-generated method stub
+					
+					for ( int i = fromIndex; i < lastIndex; i++ )
+					{
+						final String fileUrl = fileUrls.get( i );
+						try
+						{
+							// Open and parse the json file
+							final CorrespondenceSpec[] corr_data;
+							try
+							{
+								final Gson gson = new Gson();
+								URL url = new URL( fileUrl );
+								corr_data = gson.fromJson( new InputStreamReader( url.openStream() ), CorrespondenceSpec[].class );
+							}
+							catch ( final MalformedURLException e )
+							{
+								System.err.println( "URL malformed." );
+								e.printStackTrace( System.err );
+								throw new RuntimeException( e );
+							}
+							catch ( final JsonSyntaxException e )
+							{
+								System.err.println( "JSON syntax malformed." );
+								e.printStackTrace( System.err );
+								throw new RuntimeException( e );
+							}
+							catch ( final Exception e )
+							{
+								e.printStackTrace( System.err );
+								throw new RuntimeException( e );
+							}
+				
+							for ( final CorrespondenceSpec corr : corr_data )
+							{
+								final int layer1Id = tsUrlToLayerIds.get( corr.url1 );
+								final int layer2Id = tsUrlToLayerIds.get( corr.url2 );
+								Map< Integer, CorrespondenceSpec > innerMapping;
+								
+								if ( layersCorrs.containsKey( layer1Id ) )
+								{
+									innerMapping = layersCorrs.get( layer1Id );
+								}
+								else
+								{
+									innerMapping = new ConcurrentHashMap<Integer, CorrespondenceSpec>();
+									Map<Integer, CorrespondenceSpec> curValue = layersCorrs.putIfAbsent( layer1Id, innerMapping );
+									// If by the time we executed put, some other thread already put something instead 
+									if ( curValue != null )
+										innerMapping = layersCorrs.get( layer1Id );
+								}
+								// Assuming that no two files have the same correspondence spec url values
+								innerMapping.put( layer2Id,  corr );
+							}
+						}
+						catch (RuntimeException e)
+						{
+							System.err.println( "Error while reading file: " + fileUrl );
+							e.printStackTrace( System.err );
+							throw e;
+						}
+					}
+
+				}
+			}));
+
+			
+		}
+
+		for ( Future< ? > task : tasks )
+		{
+			try {
+				task.get();
+			} catch (InterruptedException e) {
+				exec.shutdownNow();
+				e.printStackTrace();
+			} catch (ExecutionException e) {
+				exec.shutdownNow();
+				e.printStackTrace();
+			}
+		}
+		exec.shutdown();
+
+		
+		return layersCorrs;
+	}
+
 	
 	private static ArrayList< Tile< ? > > createLayersModels( int layersNum, int desiredModelIndex )
 	{
@@ -264,7 +387,7 @@ public class OptimizeLayersElastic {
 
 	private static ArrayList< SpringMesh > fixSubAllPointMatchVertices(
 			final Params param,
-			final HashMap< Integer, HashMap< Integer, CorrespondenceSpec > > layersCorrs,
+			final Map< Integer, Map< Integer, CorrespondenceSpec > > layersCorrs,
 			final int startLayer,
 			final int endLayer )
 	{
@@ -287,7 +410,7 @@ public class OptimizeLayersElastic {
 			
 			if ( layersCorrs.containsKey( i ) )
 			{
-				HashMap< Integer, CorrespondenceSpec > layerICorrs = layersCorrs.get( i );
+				Map< Integer, CorrespondenceSpec > layerICorrs = layersCorrs.get( i );
 				for ( CorrespondenceSpec corrspec : layerICorrs.values() )
 				{
 					final List< PointMatch > pms = corrspec.correspondencePointPairs;
@@ -306,7 +429,7 @@ public class OptimizeLayersElastic {
 
 	private static ArrayList< SpringMesh > fixAllPointMatchVertices(
 			final Params param,
-			final HashMap< Integer, HashMap< Integer, CorrespondenceSpec > > layersCorrs,
+			final Map< Integer, Map< Integer, CorrespondenceSpec > > layersCorrs,
 			final int startLayer,
 			final int endLayer,
 			final int threadsNum )
@@ -382,7 +505,7 @@ public class OptimizeLayersElastic {
 	private static void optimizeElastic(
 			final Params param,
 			final HashMap< Integer, List< TileSpec > > layersTs,
-			final HashMap< Integer, HashMap< Integer, CorrespondenceSpec > > layersCorrs,
+			final Map< Integer, Map< Integer, CorrespondenceSpec > > layersCorrs,
 			final List< Integer > fixedLayers,
 			final int startLayer,
 			final int endLayer,
@@ -838,7 +961,7 @@ public class OptimizeLayersElastic {
 			actualCorrFiles = params.corrFiles;
 
 		// Load and parse correspondence spec files
-		final HashMap< Integer, HashMap< Integer, CorrespondenceSpec > > layersCorrs;
+		final Map< Integer, Map< Integer, CorrespondenceSpec > > layersCorrs;
 		layersCorrs = parseCorrespondenceFiles( actualCorrFiles, tsUrlToLayerIds );
 
 		// Find bounding box
