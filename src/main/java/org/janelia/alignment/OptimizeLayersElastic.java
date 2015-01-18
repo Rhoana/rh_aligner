@@ -488,40 +488,17 @@ public class OptimizeLayersElastic {
 	}
 
 	
-	
-	/**
-	 * Optimizes the layers using elastic transformation,
-	 * and updates the transformations of the tile-specs in the given layerTs.
-	 * 
-	 * @param param
-	 * @param layersTs
-	 * @param layersCorrs
-	 * @param fixedLayers
-	 * @param startLayer
-	 * @param endLayer
-	 * @param startX
-	 * @param startY
-	 */
-	private static void optimizeElastic(
-			final Params param,
-			final HashMap< Integer, List< TileSpec > > layersTs,
+	private static void matchLayers(
+			final ArrayList< SpringMesh > meshes,
+			final ArrayList< Tile< ? > > tiles,
+			final TileConfiguration initMeshes,
 			final Map< Integer, Map< Integer, CorrespondenceSpec > > layersCorrs,
 			final List< Integer > fixedLayers,
 			final int startLayer,
 			final int endLayer,
-			final int startX,
-			final int startY,
 			final List<Integer> skippedLayers,
 			final int maxDistance )
 	{
-		final ArrayList< Tile< ? > > tiles = createLayersModels( endLayer - startLayer + 1, param.modelIndex );
-		
-		/* Initialization */
-		final TileConfiguration initMeshes = new TileConfiguration();
-		initMeshes.setThreadsNum( param.numThreads );
-				
-		final ArrayList< SpringMesh > meshes = fixAllPointMatchVertices(
-				param, layersCorrs, startLayer, endLayer, param.numThreads );
 		
 		System.out.println( "Matching layers" );
 
@@ -669,7 +646,273 @@ public class OptimizeLayersElastic {
 			
 		}
 
+	}
+	
+	private static void matchLayers(
+			final ArrayList< SpringMesh > meshes,
+			final ArrayList< Tile< ? > > tiles,
+			final TileConfiguration initMeshes,
+			final Map< Integer, Map< Integer, CorrespondenceSpec > > layersCorrs,
+			final List< Integer > fixedLayers,
+			final int startLayer,
+			final int endLayer,
+			final List<Integer> skippedLayers,
+			final int maxDistance,
+			final int threadsNum )
+	{		
+		System.out.println( "Matching layers with " + threadsNum + " threads" );
+
+		if ( threadsNum == 1 )
+		{
+			matchLayers( meshes, tiles, initMeshes,
+					layersCorrs, fixedLayers, startLayer, endLayer,
+					skippedLayers, maxDistance, threadsNum );
+			return;
+		}
 		
+		// Initialize threads
+		final ExecutorService exec = Executors.newFixedThreadPool( threadsNum );
+		final ArrayList< Future< ? > > tasks = new ArrayList< Future< ? > >();
+
+		final int layersPerThreadNum = (endLayer - startLayer + 1) / threadsNum;
+		for ( int i = 0; i < threadsNum; i++ )
+		{
+			final int fromIndex = startLayer + i * layersPerThreadNum;
+			final int lastIndex;
+			if ( i == threadsNum - 1 ) // lastThread
+				lastIndex = endLayer;
+			else
+				lastIndex = fromIndex + layersPerThreadNum;
+
+			tasks.add( exec.submit( new Runnable() {
+				
+				@Override
+				public void run() {
+					for ( int layerA = fromIndex; layerA < lastIndex; layerA++ )
+					{
+						//if ( skippedLayers.contains( layerA ) || !layersCorrs.containsKey( layerA ) )
+						if ( skippedLayers.contains( layerA ) )
+						{
+							System.out.println( "Skipping optimization of layer " + layerA );
+							continue;
+						}
+						//for ( Integer layerB : layersCorrs.get( layerA ).keySet() )
+						//for ( int layerB = layerA + 1; layerB <= endLayer; layerB++ )
+						for ( int layerB = layerA + 1; layerB <= layerA + maxDistance; layerB++ )
+						{
+							// We later both directions, so just do forward matching
+							if ( layerB < layerA )
+								continue;
+
+							if ( skippedLayers.contains( layerB ) )
+							{
+								System.out.println( "Skipping optimization of layer " + layerB );
+								continue;
+							}
+
+							final boolean layer1Fixed = fixedLayers.contains( layerA );
+							final boolean layer2Fixed = fixedLayers.contains( layerB );
+
+							final CorrespondenceSpec corrspec12;
+							final List< PointMatch > pm12;
+							final CorrespondenceSpec corrspec21;
+							final List< PointMatch > pm21;
+
+							if ( !layersCorrs.containsKey( layerA ) || !layersCorrs.get( layerA ).containsKey( layerB ) )
+							{
+								corrspec12 = null;
+								pm12 = null;
+							}
+							else
+							{
+								corrspec12 = layersCorrs.get( layerA ).get( layerB );
+								pm12 = corrspec12.correspondencePointPairs;
+							}
+
+							if ( !layersCorrs.containsKey( layerB ) || !layersCorrs.get( layerB ).containsKey( layerA ) )
+							{
+								corrspec21 = null;
+								pm21 = null;
+							}
+							else
+							{
+								corrspec21 = layersCorrs.get( layerB ).get( layerA );
+								pm21 = corrspec21.correspondencePointPairs;
+							}
+
+							// Check if there are corresponding layers to this layer, otherwise skip
+							if ( pm12 == null && pm21 == null )
+								continue;
+
+							
+							
+//							System.out.println( "Comparing layer " + layerA + " (fixed=" + layer1Fixed + ") to layer " +
+//									layerB + " (fixed=" + layer2Fixed + ")" );
+							
+							if ( ( layer1Fixed && layer2Fixed ) )
+								continue;
+
+							final SpringMesh m1 = meshes.get( layerA - startLayer );
+							final SpringMesh m2 = meshes.get( layerB - startLayer );
+
+							// TODO: Load point matches
+							
+							final Tile< ? > t1 = tiles.get( layerA - startLayer );
+							final Tile< ? > t2 = tiles.get( layerB - startLayer );
+
+							final float springConstant  = 1.0f / ( layerB - layerA );
+
+							synchronized ( m1 )
+							{
+								synchronized ( m2 )
+								{
+							
+
+									if ( layer1Fixed )
+									{
+										synchronized ( initMeshes )
+										{
+											initMeshes.fixTile( t1 );
+										}
+									}
+									else
+									{
+										if ( ( pm12 != null ) && ( pm12.size() > 1 ) )
+										{
+											//final List< PointMatch > pm12Fixed = fixPointMatchVertices( pm12, m1.getVertices() );
+											
+											for ( final PointMatch pm : pm12 )
+											{
+												final Vertex p1 = ( Vertex )pm.getP1();
+												final Vertex p2 = new Vertex( pm.getP2() );
+												p1.addSpring( p2, new Spring( 0, springConstant ) );
+												m2.addPassiveVertex( p2 );
+											}
+											
+											/*
+											 * adding Tiles to the initialing TileConfiguration, adding a Tile
+											 * multiple times does not harm because the TileConfiguration is
+											 * backed by a Set. 
+											 */
+											if ( corrspec12.shouldConnect )
+											{
+												synchronized ( initMeshes )
+												{
+													initMeshes.addTile( t1 );
+													initMeshes.addTile( t2 );
+												}
+												t1.connect( t2, pm12 );
+											}
+		
+										}
+		
+									}
+		
+									if ( layer2Fixed )
+									{
+										synchronized ( initMeshes )
+										{
+											initMeshes.fixTile( t2 );
+										}
+									}
+									else
+									{
+										if ( ( pm21 != null ) && ( pm21.size() > 1 ) )
+										{
+											//final List< PointMatch > pm21Fixed = fixPointMatchVertices( pm21, m2.getVertices() );
+		
+											for ( final PointMatch pm : pm21 )
+											{
+												final Vertex p1 = ( Vertex )pm.getP1();
+												final Vertex p2 = new Vertex( pm.getP2() );
+												p1.addSpring( p2, new Spring( 0, springConstant ) );
+												m1.addPassiveVertex( p2 );
+											}
+											
+											/*
+											 * adding Tiles to the initialing TileConfiguration, adding a Tile
+											 * multiple times does not harm because the TileConfiguration is
+											 * backed by a Set. 
+											 */
+											if ( corrspec21.shouldConnect )
+											{
+												synchronized ( initMeshes )
+												{
+													initMeshes.addTile( t1 );
+													initMeshes.addTile( t2 );
+												}
+												t2.connect( t1, pm21 );
+											}
+										}
+		
+									}
+								}// end synchronized ( m2 )
+							}// end synchronized ( m1 )
+						
+							System.out.println( layerA + " <> " + layerB + " spring constant = " + springConstant );
+
+						}
+						
+					}
+				}
+			}));
+		}
+		
+		for ( Future< ? > task : tasks )
+		{
+			try {
+				task.get();
+			} catch (InterruptedException e) {
+				exec.shutdownNow();
+				e.printStackTrace();
+			} catch (ExecutionException e) {
+				exec.shutdownNow();
+				e.printStackTrace();
+			}
+		}
+		exec.shutdown();
+
+	}
+	
+	/**
+	 * Optimizes the layers using elastic transformation,
+	 * and updates the transformations of the tile-specs in the given layerTs.
+	 * 
+	 * @param param
+	 * @param layersTs
+	 * @param layersCorrs
+	 * @param fixedLayers
+	 * @param startLayer
+	 * @param endLayer
+	 * @param startX
+	 * @param startY
+	 */
+	private static void optimizeElastic(
+			final Params param,
+			final HashMap< Integer, List< TileSpec > > layersTs,
+			final Map< Integer, Map< Integer, CorrespondenceSpec > > layersCorrs,
+			final List< Integer > fixedLayers,
+			final int startLayer,
+			final int endLayer,
+			final int startX,
+			final int startY,
+			final List<Integer> skippedLayers,
+			final int maxDistance )
+	{
+		final ArrayList< Tile< ? > > tiles = createLayersModels( endLayer - startLayer + 1, param.modelIndex );
+		
+		/* Initialization */
+		final TileConfiguration initMeshes = new TileConfiguration();
+		initMeshes.setThreadsNum( param.numThreads );
+				
+		final ArrayList< SpringMesh > meshes = fixAllPointMatchVertices(
+				param, layersCorrs, startLayer, endLayer, param.numThreads );
+		
+
+		
+		matchLayers( meshes, tiles, initMeshes,
+				layersCorrs, fixedLayers, startLayer, endLayer,
+				skippedLayers, maxDistance, param.numThreads );
 		
 		
 		
