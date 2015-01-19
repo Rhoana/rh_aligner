@@ -162,8 +162,17 @@ public class OptimizeLayersElastic {
 	
 				for ( final CorrespondenceSpec corr : corr_data )
 				{
-					final int layer1Id = tsUrlToLayerIds.get( corr.url1 );
-					final int layer2Id = tsUrlToLayerIds.get( corr.url2 );
+					final int layer1Id;
+					final int layer2Id;
+					if ( tsUrlToLayerIds.containsKey( corr.url1 ) )
+						layer1Id = tsUrlToLayerIds.get( corr.url1 );
+					else
+						layer1Id = readLayerFromFile( corr.url1 );
+					if ( tsUrlToLayerIds.containsKey( corr.url2 ) )
+						layer2Id = tsUrlToLayerIds.get( corr.url2 );
+					else
+						layer2Id = readLayerFromFile( corr.url2 );
+
 					final Map< Integer, CorrespondenceSpec > innerMapping;
 	
 					if ( layersCorrs.containsKey( layer1Id ) )
@@ -189,6 +198,16 @@ public class OptimizeLayersElastic {
 		
 		return layersCorrs;
 	}
+
+	private static int readLayerFromFile( String tsUrl )
+	{
+		final TileSpec[] tileSpecs = TileSpecUtils.readTileSpecFile( tsUrl );
+		int layer = tileSpecs[0].layer;
+		if ( layer == -1 )
+			throw new RuntimeException( "Error: a tile spec json file (" + tsUrl + ") has a tilespec without a layer " );
+		return layer;
+	}
+	
 
 	private static Map< Integer, Map< Integer, CorrespondenceSpec > > parseCorrespondenceFiles(
 			final List< String > fileUrls,
@@ -258,8 +277,17 @@ public class OptimizeLayersElastic {
 				
 							for ( final CorrespondenceSpec corr : corr_data )
 							{
-								final int layer1Id = tsUrlToLayerIds.get( corr.url1 );
-								final int layer2Id = tsUrlToLayerIds.get( corr.url2 );
+								final int layer1Id;
+								final int layer2Id;
+								if ( tsUrlToLayerIds.containsKey( corr.url1 ) )
+									layer1Id = tsUrlToLayerIds.get( corr.url1 );
+								else
+									layer1Id = readLayerFromFile( corr.url1 );
+								if ( tsUrlToLayerIds.containsKey( corr.url2 ) )
+									layer2Id = tsUrlToLayerIds.get( corr.url2 );
+								else
+									layer2Id = readLayerFromFile( corr.url2 );
+
 								Map< Integer, CorrespondenceSpec > innerMapping;
 								
 								if ( layersCorrs.containsKey( layer1Id ) )
@@ -1146,7 +1174,6 @@ public class OptimizeLayersElastic {
 		
 	}
 	
-	
 
 	public static void main( final String[] args )
 	{
@@ -1205,7 +1232,7 @@ public class OptimizeLayersElastic {
 
 		// Load and parse correspondence spec files
 		final Map< Integer, Map< Integer, CorrespondenceSpec > > layersCorrs;
-		layersCorrs = parseCorrespondenceFiles( actualCorrFiles, tsUrlToLayerIds );
+		layersCorrs = parseCorrespondenceFiles( actualCorrFiles, tsUrlToLayerIds, params.numThreads );
 
 		// Find bounding box
 		System.out.println( "Finding bounding box" );
