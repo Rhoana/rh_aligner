@@ -32,7 +32,10 @@ import mpicbg.models.SpringMesh;
 import mpicbg.models.Tile;
 import mpicbg.models.TranslationModel2D;
 import mpicbg.models.Vertex;
+import mpicbg.trakem2.transform.CoordinateTransform;
+import mpicbg.trakem2.transform.CoordinateTransformList;
 import mpicbg.trakem2.transform.MovingLeastSquaresTransform2;
+import mpicbg.trakem2.transform.RestrictedMovingLeastSquaresTransform2;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
@@ -413,6 +416,19 @@ public class OptimizeLayersElastic {
 		return newPms;
 	}
 
+	private static void adjustTargetPointMatchVertices(
+			final List< PointMatch > pms,
+			final SpringMesh mesh )
+	{		
+		for ( final PointMatch pm : pms )
+		{
+			Point p = pm.getP2();
+			mesh.applyInPlace( p.getL() );
+			mesh.applyInPlace( p.getW() );
+		}
+	}
+
+	
 	private static ArrayList< SpringMesh > fixSubAllPointMatchVertices(
 			final Params param,
 			final Map< Integer, Map< Integer, CorrespondenceSpec > > layersCorrs,
@@ -546,6 +562,9 @@ public class OptimizeLayersElastic {
 				if ( layerB < layerA )
 					continue;
 
+				if ( layerB > endLayer )
+					continue;
+				
 				if ( skippedLayers.contains( layerB ) )
 				{
 					System.out.println( "Skipping optimization of layer " + layerB );
@@ -694,7 +713,7 @@ public class OptimizeLayersElastic {
 		{
 			matchLayers( meshes, tiles, initMeshes,
 					layersCorrs, fixedLayers, startLayer, endLayer,
-					skippedLayers, maxDistance, threadsNum );
+					skippedLayers, maxDistance );
 			return;
 		}
 		
@@ -732,6 +751,9 @@ public class OptimizeLayersElastic {
 							if ( layerB < layerA )
 								continue;
 
+							if ( layerB > endLayer )
+								continue;
+							
 							if ( skippedLayers.contains( layerB ) )
 							{
 								System.out.println( "Skipping optimization of layer " + layerB );
@@ -935,113 +957,11 @@ public class OptimizeLayersElastic {
 				
 		final ArrayList< SpringMesh > meshes = fixAllPointMatchVertices(
 				param, layersCorrs, startLayer, endLayer, param.numThreads );
-		
 
-		
 		matchLayers( meshes, tiles, initMeshes,
 				layersCorrs, fixedLayers, startLayer, endLayer,
 				skippedLayers, maxDistance, param.numThreads );
 		
-		
-		
-//		
-//		
-//		final Set< Integer > layersIds = layersTs.keySet();
-//		for ( final Integer layerId : layersIds )
-//		{
-//			// Check if there are corresponding layers to this layer, otherwise skip
-//			if ( !layersCorrs.containsKey( layerId ) )
-//				continue;
-//			
-//			final Set< Integer > corrLayerIds = layersCorrs.get( layerId ).keySet();
-//			for ( final Integer corrLayerId : corrLayerIds )
-//			{
-//				// Only looking for forward comparisons
-//				if ( corrLayerId.intValue() < layerId.intValue() )
-//				{
-//					System.out.println( "Skipping on comparing layers: " + layerId + " to " + corrLayerId );
-//					continue;
-//				}
-//				
-//				final boolean layer1Fixed = fixedLayers.contains( layerId );
-//				final boolean layer2Fixed = fixedLayers.contains( corrLayerId );
-//
-//				System.out.println( "Comparing layer " + layerId + " (fixed=" + layer1Fixed + ") to layer " +
-//						corrLayerId + " (fixed=" + layer2Fixed + ")" );
-//				
-//				if ( ( layer1Fixed && layer2Fixed ) )
-//					continue;
-//
-//				final SpringMesh m1 = meshes.get( layerId - startLayer );
-//				final SpringMesh m2 = meshes.get( corrLayerId - startLayer );
-//
-//				// TODO: Load point matches
-//				
-//				final Tile< ? > t1 = tiles.get( layerId - startLayer );
-//				final Tile< ? > t2 = tiles.get( corrLayerId - startLayer );
-//
-//				final float springConstant  = 1.0f / ( corrLayerId - layerId );
-//
-//				if ( layer1Fixed )
-//					initMeshes.fixTile( t1 );
-//				else
-//				{
-//					final CorrespondenceSpec corrspec12 = layersCorrs.get( layerId ).get( corrLayerId );
-//					final List< PointMatch > pm12 = corrspec12.correspondencePointPairs;
-//					
-//					for ( final PointMatch pm : pm12 )
-//					{
-//						final Vertex p1 = new Vertex( pm.getP1() );
-//						final Vertex p2 = new Vertex( pm.getP2() );
-//						p1.addSpring( p2, new Spring( 0, springConstant ) );
-//						m2.addPassiveVertex( p2 );
-//					}
-//					
-//					/*
-//					 * adding Tiles to the initialing TileConfiguration, adding a Tile
-//					 * multiple times does not harm because the TileConfiguration is
-//					 * backed by a Set. 
-//					 */
-//					if ( corrspec12.shouldConnect )
-//					{
-//						initMeshes.addTile( t1 );
-//						initMeshes.addTile( t2 );
-//						t1.connect( t2, pm12 );
-//					}
-//
-//				}
-//
-//				if ( layer2Fixed )
-//					initMeshes.fixTile( t2 );
-//				else
-//				{
-//					final CorrespondenceSpec corrspec21 = layersCorrs.get( corrLayerId ).get( layerId );
-//					final List< PointMatch > pm21 = corrspec21.correspondencePointPairs;
-//
-//					for ( final PointMatch pm : pm21 )
-//					{
-//						final Vertex p1 = new Vertex( pm.getP1() );
-//						final Vertex p2 = new Vertex( pm.getP2() );
-//						p1.addSpring( p2, new Spring( 0, springConstant ) );
-//						m1.addPassiveVertex( p2 );
-//					}
-//					
-//					/*
-//					 * adding Tiles to the initialing TileConfiguration, adding a Tile
-//					 * multiple times does not harm because the TileConfiguration is
-//					 * backed by a Set. 
-//					 */
-//					if ( corrspec21.shouldConnect )
-//					{
-//						initMeshes.addTile( t1 );
-//						initMeshes.addTile( t2 );
-//						t2.connect( t1, pm21 );
-//					}
-//				}
-//
-//				System.out.println( layerId + " <> " + corrLayerId + " spring constant = " + springConstant );
-//			}
-//		}
 
 		/* pre-align by optimizing a piecewise linear model */
 		System.out.println( "Pre-aligning by optimizing piecewise linear model" );
@@ -1130,50 +1050,64 @@ public class OptimizeLayersElastic {
 			
 			System.out.println( "Updating tiles in layer " + i );
 			
-			for ( TileSpec ts : layer )
-			{
-				// bounding box after transformations are applied [left, right, top, bottom] possibly with extra entries for [front, back, etc.]
-				final float[] meshMin = new float[ 2 ];
-				final float[] meshMax = new float[ 2 ];
-				mesh.bounds( meshMin, meshMax );			
-				ts.bbox = new float[] {
-						/*meshMin[0] * param.layerScale,
-						meshMax[0] * param.layerScale,
-						meshMin[1] * param.layerScale,
-						meshMax[1] * param.layerScale */
-						meshMin[0],
-						meshMax[0],
-						meshMin[1],
-						meshMax[1]
-					};
-				
+			
+			
+			
+			final RestrictedMovingLeastSquaresTransform2 rmlt = new RestrictedMovingLeastSquaresTransform2();
+			try {
+				rmlt.setModel( AffineModel2D.class );
+				rmlt.setAlpha( 2.0f );
+				rmlt.setMatches( mesh.getVA().keySet() );
+				rmlt.setRadius( rmlt.computeDefaultRadius() );
 
-				try
+
+				for ( TileSpec ts : layer )
 				{
+					/*
 					final MovingLeastSquaresTransform2 mlt = new MovingLeastSquaresTransform2();
 					mlt.setModel( AffineModel2D.class );
 					mlt.setAlpha( 2.0f );
 					mlt.setMatches( mesh.getVA().keySet() );
-		
+					*/
+					final RestrictedMovingLeastSquaresTransform2 boundedRMLT = rmlt.boundToBoundingBox( ts.bbox );
+					
 				    Transform addedTransform = new Transform();				    
-				    addedTransform.className = mlt.getClass().getCanonicalName().toString();
-				    addedTransform.dataString = mlt.toDataString();
+				    addedTransform.className = boundedRMLT.getClass().getCanonicalName().toString();
+				    addedTransform.dataString = boundedRMLT.toDataString();
 				    
 					ArrayList< Transform > outTransforms = new ArrayList< Transform >(Arrays.asList(ts.transforms));
 					outTransforms.add(addedTransform);
 					ts.transforms = outTransforms.toArray(ts.transforms);
-				}
-				catch ( final Exception e )
-				{
-					System.out.println( "Error applying transform to tile in layer " + i + "." );
-					e.printStackTrace();
+
+					// bounding box after transformations are applied [left, right, top, bottom] possibly with extra entries for [front, back, etc.]
+					final float[] meshMin = new float[ 2 ];
+					final float[] meshMax = new float[ 2 ];
+					mesh.bounds( meshMin, meshMax );			
+					ts.bbox = new float[] {
+							/*meshMin[0] * param.layerScale,
+							meshMax[0] * param.layerScale,
+							meshMin[1] * param.layerScale,
+							meshMax[1] * param.layerScale */
+							meshMin[0],
+							meshMax[0],
+							meshMin[1],
+							meshMax[1]
+						};
 				}
 
 			}
+			catch ( final Exception e )
+			{
+				System.out.println( "Error applying transform to tile in layer " + i + "." );
+				e.printStackTrace();
+			}
+
+			
+			
 		}
 		
 	}
-	
+
 
 	public static void main( final String[] args )
 	{
