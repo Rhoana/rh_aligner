@@ -196,7 +196,7 @@ if __name__ == '__main__':
         if out_pattern is None:
             out_pattern = '{}%rowcolmontaged'.format(tiles_fname_prefix)
 
-        out_dir = os.path.join(args.output_dir, out_pattern)
+        out_dir = os.path.join(args.output_dir, tiles_fname_prefix)
         create_dir(out_dir)
         out_0_dir = os.path.join(out_dir, "0")
         if not os.path.exists(out_0_dir):
