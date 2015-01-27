@@ -6,7 +6,7 @@ from subprocess import call
 import utils
 
 
-def render_tiles_2d(tiles_fname, output_dir, tile_size, jar_file, blend_type=None, threads_num=None):
+def render_tiles_2d(tiles_fname, output_dir, tile_size, output_type, jar_file, output_pattern=None, blend_type=None, threads_num=None):
 
     tiles_url = utils.path2url(tiles_fname)
 
@@ -18,9 +18,14 @@ def render_tiles_2d(tiles_fname, output_dir, tile_size, jar_file, blend_type=Non
     if blend_type is not None:
         blend_str = "--blendType {}".format(blend_type)
 
+    pattern_str = ""
+    if output_pattern is not None:
+        pattern_str = "--outputNamePattern {}".format(output_pattern)
+
+
     java_cmd = 'java -Xmx12g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.RenderTiles --targetDir {1} --tileSize {2} \
-        {3} {4} --url {5}'.format(\
-            jar_file, output_dir, tile_size, threads_str, blend_str, tiles_url)
+        {3} {4} --outputType {5} {6} --url {7}'.format(\
+            jar_file, output_dir, tile_size, threads_str, blend_str, output_type, pattern_str, tiles_url)
     utils.execute_shell_command(java_cmd)
 
 
@@ -44,13 +49,21 @@ def main():
     parser.add_argument('-b', '--blend_type', type=str, 
                         help='the mosaics blending type',
                         default=None)
+    parser.add_argument('--output_type', type=str, 
+                        help='The output type format',
+                        default='jpg')
+    parser.add_argument('--output_pattern', type=str, 
+                        help='The output file name pattern where "%row%col" will be replaced by "_tr[row]-tc[rol]_" with the row and column numbers',
+                        default=None)
 
     args = parser.parse_args()
 
 
     utils.create_dir(args.output_dir)
 
-    render_tiles_2d(args.tiles_file, args.output_dir, args.tile_size, args.jar_file, args.blend_type, args.threads_num)
+    render_tiles_2d(args.tiles_file, args.output_dir, args.tile_size, 
+        args.output_type, args.jar_file, 
+        args.output_pattern, args.blend_type, args.threads_num)
 
 if __name__ == '__main__':
     main()

@@ -36,7 +36,7 @@ def create_img(tiles_dir, from_row, from_col, rows_num, cols_num, tile_size):
     for row in range(rows_num):
         for col in range(cols_num):
 
-            tile_files = glob.glob(os.path.join(tiles_dir, 'tile_{}_{}.*'.format(from_row + row, from_col + col)))
+            tile_files = glob.glob(os.path.join(tiles_dir, '*_tr{}-tc{}_*.*'.format(from_row + row + 1, from_col + col + 1)))
             if len(tile_files) > 0:
                 tile_file = tile_files[0]
                 tile_img = cv2.imread(tile_file, 0)
@@ -44,7 +44,8 @@ def create_img(tiles_dir, from_row, from_col, rows_num, cols_num, tile_size):
                             col * tile_size:(col + 1) * tile_size] = tile_img
     return new_img_arr
 
-def create_open_sea_dragon_conf(conf_file, tile_size, initial_rows, initial_cols, zoom_level):
+def create_open_sea_dragon_conf(conf_file, tile_size, initial_rows, initial_cols, zoom_level, file_pattern):
+    tile_file = file_pattern.replace('%rowcol', '_tr" + (y + 1) + "-tc" + (x + 1) + "_')
     with open(conf_file, 'w') as conf_data:
         conf_data.write('function createTileSource() {\n')
         conf_data.write('   var tileSource = {};\n')
@@ -55,33 +56,34 @@ def create_open_sea_dragon_conf(conf_file, tile_size, initial_rows, initial_cols
         conf_data.write('   tileSource.minLevel = 0\n')
         conf_data.write('   tileSource.maxLevel = {}\n'.format(zoom_level))
         conf_data.write('   tileSource.getTileUrl = function( level, x, y ) {\n')
-        conf_data.write('       return "/tiles/" + ({} - level) + "/tile_" + y + "_" + x + ".jpg";\n'.format(zoom_level))
+        conf_data.write('       return "/tiles/" + ({} - level) + "/{}";\n'.format(zoom_level, tile_file))
         conf_data.write('   }\n')
         conf_data.write('   return tileSource;\n')
         conf_data.write('}\n')
 
 
-def worker_process_create_zoomed_tiles(prev_dir, cur_dir, tile_size, tile_ext, rows, cur_cols):
+def worker_process_create_zoomed_tiles(prev_dir, cur_dir, tile_size, rows, cur_cols, file_pattern):
     for row in range(rows[0], rows[1]):
         for col in range(cur_cols):
             # load the original 4 tiles image
             new_img = create_img(prev_dir, row * 2, col * 2, 2, 2, tile_size)
             # scale down the image by 2 and save it to disk
             scaled_img = block_mean(new_img, 2)
-            out_file = os.path.join(cur_dir, 'tile_{}_{}{}'.format(row, col, tile_ext))
+            out_file = os.path.join(cur_dir, file_pattern.replace('%rowcol', '_tr{}-tc{}_'.format(row + 1, col + 1)))
             cv2.imwrite(out_file, scaled_img)
 
 
 def create_zoomed_tiles(tiles_dir, open_sea_dragon=False, processes_num=1):
     #all_tiles = glob.glob(os.path.join(os.path.join(tiles_dir, '0'), '*'))
 
-    first_tile = glob.glob(os.path.join(os.path.join(tiles_dir, '0'), 'tile_0_0.*'))[0]
+    first_tile = glob.glob(os.path.join(os.path.join(tiles_dir, '0'), '*_tr1-tc1_*'))[0]
     tile_ext = os.path.splitext(first_tile)[1]
     tile_size = get_tile_size(first_tile)
+    file_pattern = os.path.basename(first_tile).replace('_tr1-tc1_', '%rowcol')
 
     # get number of rows and columns used for full resolution
-    cur_rows = len(glob.glob(os.path.join(os.path.join(tiles_dir, '0'), 'tile_*_0.*')))
-    cur_cols = len(glob.glob(os.path.join(os.path.join(tiles_dir, '0'), 'tile_0_*')))
+    cur_rows = len(glob.glob(os.path.join(os.path.join(tiles_dir, '0'), '*_tr*-tc1_*{}'.format(tile_ext))))
+    cur_cols = len(glob.glob(os.path.join(os.path.join(tiles_dir, '0'), '*_tr1-tc*_*{}'.format(tile_ext))))
 
     initial_rows = cur_rows
     initial_cols = cur_cols
@@ -107,7 +109,7 @@ def create_zoomed_tiles(tiles_dir, open_sea_dragon=False, processes_num=1):
                     new_img = create_img(prev_dir, row * 2, col * 2, 2, 2, tile_size)
                     # scale down the image by 2 and save it to disk
                     scaled_img = block_mean(new_img, 2)
-                    out_file = os.path.join(cur_dir, 'tile_{}_{}{}'.format(row, col, tile_ext))
+                    out_file = os.path.join(cur_dir, file_pattern.replace('%rowcol', '_tr{}-tc{}_'.format(row + 1, col + 1)))
                     cv2.imwrite(out_file, scaled_img)
             single_tile = (cur_rows == 1) and (cur_cols == 1)
     else: # Multiple process execution
@@ -149,10 +151,11 @@ def create_zoomed_tiles(tiles_dir, open_sea_dragon=False, processes_num=1):
             # run all jobs but one by other processes
             async_res = None
             for row_job in rows_list[:-1]:
-                async_res = pool.apply_async(worker_process_create_zoomed_tiles, (prev_dir, cur_dir, tile_size, tile_ext, row_job, cur_cols))
+                async_res = pool.apply_async(worker_process_create_zoomed_tiles, (prev_dir, cur_dir, tile_size, row_job, cur_cols, file_pattern))
 
             # run the last job by the current process
-            worker_process_create_zoomed_tiles(prev_dir, cur_dir, tile_size, tile_ext, rows_list[-1], cur_cols)
+            print "rows_list: {}".format(rows_list)
+            worker_process_create_zoomed_tiles(prev_dir, cur_dir, tile_size, rows_list[-1], cur_cols, file_pattern)
 
             # wait for all other processes to finish their job
             if pool is not None:
@@ -166,7 +169,7 @@ def create_zoomed_tiles(tiles_dir, open_sea_dragon=False, processes_num=1):
     if open_sea_dragon:
         conf_file = os.path.join(tiles_dir, 'osd.js')
         print "Creating open sea dragon configuration file at: {}".format(conf_file)
-        create_open_sea_dragon_conf(conf_file, tile_size, initial_rows, initial_cols, zoom_level)
+        create_open_sea_dragon_conf(conf_file, tile_size, initial_rows, initial_cols, zoom_level, file_pattern)
 
 
 

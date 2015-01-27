@@ -43,7 +43,7 @@ class NormalizeCoordinates(Job):
 
 
 class RenderTiles2D(Job):
-    def __init__(self, dependencies, tiles_fname, out_dir, tile_size, jar_file, blend_type=None, threads_num=1):
+    def __init__(self, dependencies, tiles_fname, out_dir, tile_size, output_type, jar_file, output_pattern=None, blend_type=None, threads_num=1):
         Job.__init__(self)
         self.already_done = False
         self.tiles_fname = '"{0}"'.format(tiles_fname)
@@ -56,6 +56,11 @@ class RenderTiles2D(Job):
             self.blend_type = ''
         else:
             self.blend_type = '-b {0}'.format(blend_type)
+        self.output_type = '--output_type "{0}"'.format(output_type)
+        if output_pattern is None:
+            self.output_pattern = ''
+        else:
+            self.output_pattern = '--output_pattern "{0}"'.format(output_pattern)
         self.dependencies = dependencies
         self.memory = 14000
         self.time = 600
@@ -66,7 +71,7 @@ class RenderTiles2D(Job):
     def command(self):
         return ['python -u',
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'render_tiles_2d.py'),
-                self.output_dir, self.jar_file, self.tile_size, self.blend_type, self.threads_str, self.tiles_fname]
+                self.output_dir, self.jar_file, self.tile_size, self.blend_type, self.output_type, self.output_pattern, self.threads_str, self.tiles_fname]
 
 
 class CreateZoomedTiles(Job):
@@ -125,6 +130,12 @@ if __name__ == '__main__':
     parser.add_argument('-b', '--blend_type', type=str, 
                         help='the mosaics blending type',
                         default=None)
+    parser.add_argument('--output_type', type=str, 
+                        help='The output type format',
+                        default='jpg')
+    parser.add_argument('--output_pattern', type=str, 
+                        help='The output file name pattern where "%row%col" will be replaced by "_tr[row]-tc[rol]_" with the row and column numbers',
+                        default=None)
     parser.add_argument('-k', '--keeprunning', action='store_true', 
                         help='Run all jobs and report cluster jobs execution stats')
     parser.add_argument('-m', '--multicore', action='store_true', 
@@ -181,14 +192,19 @@ if __name__ == '__main__':
             job_normalize = NormalizeCoordinates(f, norm_dir, norm_json, args.jar_file)
 
         # Render the normalized json file into tiles
-        out_dir = os.path.join(args.output_dir, tiles_fname_prefix)
+        out_pattern = args.output_pattern
+        if out_pattern is None:
+            out_pattern = '{}%rowcolmontaged'.format(tiles_fname_prefix)
+
+        out_dir = os.path.join(args.output_dir, out_pattern)
         create_dir(out_dir)
         out_0_dir = os.path.join(out_dir, "0")
         if not os.path.exists(out_0_dir):
             dependencies = [ ]
             if job_normalize != None:
                 dependencies.append(job_normalize)
-            job_render = RenderTiles2D(dependencies, norm_json, out_0_dir, args.tile_size, args.jar_file, blend_type=args.blend_type, threads_num=32)
+            job_render = RenderTiles2D(dependencies, norm_json, out_0_dir, args.tile_size, args.output_type,
+                args.jar_file, output_pattern=out_pattern, blend_type=args.blend_type, threads_num=32)
 
         # Create zoomed tiles
         if not args.avoid_mipmaps:

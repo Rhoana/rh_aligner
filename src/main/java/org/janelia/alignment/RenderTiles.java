@@ -68,6 +68,12 @@ public class RenderTiles {
         @Parameter( names = "--blendType", description = "The type of image blending to use (BLEND_WEIGHTED_SIMPLE, BLEND_LINEAR)", required = false,  arity = 1 )
         public BlendType blendType = BlendType.BLEND_WEIGHTED_SIMPLE;
 
+        @Parameter( names = "--outputNamePattern", description = "An output file name pattern where '%rowcol' will be replaced by '_tr[row]-tc[col]_' with the row and column numbers", required = false )
+        public String outputNamePattern = "tile%rowcol";
+
+        @Parameter( names = "--outputType", description = "The output image type", required = true )
+        public String outputType = "jpg";
+
 	}
 
 	public enum BlendType
@@ -77,7 +83,6 @@ public class RenderTiles {
 
 		// converter that will be used later
 		public static BlendType fromString( String code ) {
-			System.out.println( "here1" );
 			for ( BlendType type : BlendType.values() ) {
 				if ( type.toString().equalsIgnoreCase( code ) ) {
 					return type;
@@ -402,6 +407,8 @@ public class RenderTiles {
 	}
 	
 	private static void saveAsTiles( 
+			final String outFilePattern,
+			final String outFileType,
 			final SingleTileSpecRender[] origTiles,
 			final BoundingBox entireImageBBox,
 			final int tileSize,
@@ -463,9 +470,10 @@ public class RenderTiles {
 				}
 												
 				// Save the image to disk
-				String outFile = outputDir + File.separatorChar + "tile_" + (row / tileSize) + "_" + (col / tileSize) + ".jpg";
+				String rowCol = outFilePattern.replaceAll( "%rowcol", "_tr" + (row / tileSize + 1) + "-tc" + (col / tileSize + 1) + "_" );
+				String outFile = outputDir + File.separatorChar + rowCol + "." + outFileType;
 				System.out.println( "Saving file: " + outFile );
-				Utils.saveImage( targetImage, outFile, "jpg" );
+				Utils.saveImage( targetImage, outFile, outFileType );
 				
 				// Clear the output image
 				raster.setDataElements( 0, 0, tileSize, tileSize, origData );
@@ -474,6 +482,8 @@ public class RenderTiles {
 	}
 
 	private static void saveAsTiles( 
+			final String outFilePattern,
+			final String outFileType,
 			final SingleTileSpecRender[] origTiles,
 			final BoundingBox entireImageBBox,
 			final int tileSize,
@@ -554,9 +564,10 @@ public class RenderTiles {
 							}
 															
 							// Save the image to disk
-							String outFile = outputDir + File.separatorChar + "tile_" + (row / tileSize) + "_" + (col / tileSize) + ".jpg";
+							String rowCol = outFilePattern.replaceAll( "%rowcol", "_tr" + (row / tileSize + 1) + "-tc" + (col / tileSize + 1) + "_" );
+							String outFile = outputDir + File.separatorChar + rowCol + "." + outFileType;
 							System.out.println( "Saving file: " + outFile );
-							Utils.saveImage( targetImage, outFile, "jpg" );
+							Utils.saveImage( targetImage, outFile, outFileType );
 							
 							// Clear the output image
 							raster.setDataElements( 0, 0, tileSize, tileSize, origData );
@@ -593,6 +604,12 @@ public class RenderTiles {
 		if ( params == null )
 			return;
 		
+		if ( params.outputNamePattern.indexOf( "%rowcol" ) == -1 )
+		{
+			System.err.println( "outputNameFormat must have %rowcol in the pattern" );
+			return;
+		}
+
 		
 		/* open tilespec */
 		final URL url;
@@ -620,7 +637,7 @@ public class RenderTiles {
 			e.printStackTrace( System.err );
 			return;
 		}
-		
+				
 		
 		// Load each original tile and compute the entire image bbox
 		System.out.println( "Loading tilespecs and computing entire bounding box" );
@@ -644,6 +661,8 @@ public class RenderTiles {
 		System.out.println( "Saving all tiles" );
 		if ( params.numThreads == 1 ) {
 			saveAsTiles( 
+					params.outputNamePattern,
+					params.outputType,
 					origTilesRendered,
 					entireImageBBox,
 					params.tileSize, 
@@ -651,6 +670,8 @@ public class RenderTiles {
 					params.blendType );
 		} else {
 			saveAsTiles( 
+					params.outputNamePattern,
+					params.outputType,
 					origTilesRendered,
 					entireImageBBox,
 					params.tileSize, 

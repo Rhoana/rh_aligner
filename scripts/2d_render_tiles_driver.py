@@ -41,6 +41,12 @@ parser.add_argument('--avoid_mipmaps', action="store_true",
 parser.add_argument('-b', '--blend_type', type=str, 
                     help='the mosaics blending type',
                     default=None)
+parser.add_argument('--output_type', type=str, 
+                    help='The output type format',
+                    default='jpg')
+parser.add_argument('--output_pattern', type=str, 
+                    help='The output file name pattern where "%row%col" will be replaced by "_tr[row]-tc[rol]_" with the row and column numbers',
+                    default=None)
 
 
 
@@ -63,9 +69,14 @@ if not os.path.exists(norm_json):
     normalize_coordinates(args.tiles_fname, norm_dir, args.jar_file)
 
 # Render the normalized json file
+out_pattern = args.output_pattern
+if out_pattern is None:
+    out_pattern = '{}%rowcolmontaged'.format(tiles_fname_prefix)
+
 out_0_dir = os.path.join(args.output_dir, "0")
 if not os.path.exists(out_0_dir):
-    render_tiles_2d(norm_json, out_0_dir, args.tile_size, args.jar_file, args.blend_type, args.threads_num)
+    render_tiles_2d(norm_json, out_0_dir, args.tile_size, args.output_type,
+        args.jar_file, out_pattern, args.blend_type, args.threads_num)
 
 # create the zoomed tiles
 if not args.avoid_mipmaps:
