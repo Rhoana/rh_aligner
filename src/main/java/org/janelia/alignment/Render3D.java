@@ -193,7 +193,7 @@ public class Render3D {
 					String baseFilename = jsonFilename.substring( jsonFilename.lastIndexOf( File.separatorChar ) + 1 );
 					baseFilename = baseFilename.substring( 0, baseFilename.lastIndexOf( '.' ) );
 					
-					String outFile = String.format( "%s/%s.png", params.targetDir, baseFilename );
+					String outFile = String.format( "%04d_%s/%s.png", curLayer, params.targetDir, baseFilename );
 					saveLayerImage( image, outFile );
 				}
 			}
@@ -222,7 +222,7 @@ public class Render3D {
 					baseFilename = baseFilename.substring( 0, baseFilename.lastIndexOf( '.' ) );
 					System.out.println( baseFilename );
 					
-					String outFile = String.format( "%s/%s.png", params.targetDir, baseFilename );
+					String outFile = String.format( "%04d_%s/%s.png", curLayer, params.targetDir, baseFilename );
 					saveLayerImage( image, outFile );
 				}
 			}
