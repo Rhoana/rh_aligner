@@ -28,7 +28,9 @@ import java.io.InputStreamReader;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
@@ -556,9 +558,9 @@ public class Utils
 	 * @param s
 	 * @return
 	 */
-	public static List<Integer> parseRange(String s)
+	public static Set<Integer> parseRange(String s)
 	{
-		List<Integer> res = new ArrayList<Integer>();
+		Set<Integer> res = new HashSet<Integer>();
 		
 		if ( ( s != null ) && ( s.length() > 0 ) )
 		{

@@ -11,8 +11,10 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
@@ -540,7 +542,7 @@ public class OptimizeLayersElastic {
 			final List< Integer > fixedLayers,
 			final int startLayer,
 			final int endLayer,
-			final List<Integer> skippedLayers,
+			final Set<Integer> skippedLayers,
 			final int maxDistance )
 	{
 		
@@ -703,7 +705,7 @@ public class OptimizeLayersElastic {
 			final List< Integer > fixedLayers,
 			final int startLayer,
 			final int endLayer,
-			final List<Integer> skippedLayers,
+			final Set<Integer> skippedLayers,
 			final int maxDistance,
 			final int threadsNum )
 	{		
@@ -946,7 +948,7 @@ public class OptimizeLayersElastic {
 			final int endLayer,
 			final int startX,
 			final int startY,
-			final List<Integer> skippedLayers,
+			final Set<Integer> skippedLayers,
 			final int maxDistance )
 	{
 		final ArrayList< Tile< ? > > tiles = createLayersModels( endLayer - startLayer + 1, param.modelIndex );
@@ -1132,6 +1134,8 @@ public class OptimizeLayersElastic {
         	return;
         }
 		
+		Set<Integer> skippedLayers = Utils.parseRange( params.skippedLayers );
+		
 		List< String > actualTileSpecFiles;
 		if ( params.tileSpecFiles.size() == 1 )
 			// It might be a non-json file that contains a list of
@@ -1142,6 +1146,7 @@ public class OptimizeLayersElastic {
 		System.out.println( "Reading tilespecs" );
 
 		// Load and parse tile spec files
+		List< String > relevantTileSpecFiles = new ArrayList<String>();
 		final HashMap< Integer, List< TileSpec > > layersTs = new HashMap<Integer, List<TileSpec>>();
 		final HashMap< String, Integer > tsUrlToLayerIds = new HashMap<String, Integer>();
 		final HashMap< Integer, String > layerIdToTsUrl = new HashMap<Integer, String>();
@@ -1151,7 +1156,11 @@ public class OptimizeLayersElastic {
 			int layer = tileSpecs[0].layer;
 			if ( layer == -1 )
 				throw new RuntimeException( "Error: a tile spec json file (" + tsUrl + ") has a tilespec without a layer " );
+			
+			if ( skippedLayers.contains( layer ) ) // No need to add skipped layers
+				continue;
 
+			relevantTileSpecFiles.add( tsUrl );
 			layersTs.put( layer, Arrays.asList( tileSpecs ) );
 			tsUrlToLayerIds.put( tsUrl, layer );
 			layerIdToTsUrl.put( layer, tsUrl );
@@ -1170,7 +1179,7 @@ public class OptimizeLayersElastic {
 
 		// Find bounding box
 		System.out.println( "Finding bounding box" );
-		final TileSpecsImage entireImage = TileSpecsImage.createImageFromFiles( actualTileSpecFiles );
+		final TileSpecsImage entireImage = TileSpecsImage.createImageFromFiles( relevantTileSpecFiles );
 		final BoundingBox bbox = entireImage.getBoundingBox();
 		
 		int firstLayer = bbox.getStartPoint().getZ();
@@ -1180,7 +1189,19 @@ public class OptimizeLayersElastic {
 		if (( params.toLayer != -1 ) && ( params.toLayer <= lastLayer ))
 			lastLayer = params.toLayer;
 		
-		List<Integer> skippedLayers = Utils.parseRange( params.skippedLayers );
+		// Remove non existent fixed layers
+		Iterator< Integer > fixedIt = params.fixedLayers.iterator();
+		while ( fixedIt.hasNext() ) {
+			int fixedLayer = fixedIt.next();
+			if ( ( fixedLayer < firstLayer ) ||
+				 ( fixedLayer > lastLayer ) ||
+				 ( skippedLayers.contains( fixedLayer ) ) ) {
+				fixedIt.remove();
+			}
+		}
+		if ( params.fixedLayers.size() == 0 ) {
+			params.fixedLayers.add( firstLayer );
+		}
 		
 		// Optimze
 		optimizeElastic(
