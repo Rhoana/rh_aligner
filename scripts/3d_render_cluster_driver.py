@@ -211,7 +211,7 @@ if __name__ == '__main__':
         # norm_file = os.path.join(norm_dir, tiles_fname)
 
         tiles_fname_prefix = os.path.splitext(tiles_fname)[0]
-        render_out_file = os.path.join(args.output_dir, tiles_fname_prefix + ".png")
+        render_out_file = os.path.join(args.output_dir, "{0:0>4}".format(layer) + "_" + tiles_fname_prefix + ".png")
 
         if not os.path.exists(render_out_file):
             # print "Adding job for output file: {0}".format(render_out_file)
