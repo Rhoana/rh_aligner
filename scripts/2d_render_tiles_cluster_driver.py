@@ -62,7 +62,7 @@ class RenderTiles2D(Job):
         else:
             self.output_pattern = '--output_pattern "{0}"'.format(output_pattern)
         self.dependencies = dependencies
-        self.memory = 14000
+        self.memory = 18000
         self.time = 600
         self.is_java_job = True
         self.output = out_dir

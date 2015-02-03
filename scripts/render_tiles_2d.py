@@ -23,7 +23,7 @@ def render_tiles_2d(tiles_fname, output_dir, tile_size, output_type, jar_file, o
         pattern_str = "--outputNamePattern {}".format(output_pattern)
 
 
-    java_cmd = 'java -Xmx12g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.RenderTiles --targetDir {1} --tileSize {2} \
+    java_cmd = 'java -Xmx16g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.RenderTiles --targetDir {1} --tileSize {2} \
         {3} {4} --outputType {5} {6} --url {7}'.format(\
             jar_file, output_dir, tile_size, threads_str, blend_str, output_type, pattern_str, tiles_url)
     utils.execute_shell_command(java_cmd)
