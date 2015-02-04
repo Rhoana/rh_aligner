@@ -52,22 +52,24 @@ def replace_matches_to_cols_rows(matches_json_fname, mesh_json_fname, output_fna
         replaced_match['mipmapLevel'] = match['mipmapLevel']
         replaced_match['url1'] = match['url1']
         replaced_match['url2'] = match['url2']
+        replaced_match['shouldConnect'] = match['shouldConnect']
 
-        replaced_point_pairs = []
-        for point_pair in match['correspondencePointPairs']:
-            point_pair_x = round_float_to_int(point_pair['p1']['l'][0])
-            point_pair_y = round_float_to_int(point_pair['p1']['l'][1])
-            if (not point_pair_x in xy_to_colrow.keys()) or (not point_pair_y in xy_to_colrow[point_pair_x].keys()):
-                print "Error: could not find point {},{} in the mesh file".format(point_pair['p1']['l'][0], point_pair['p1']['l'][1])
-            else:
-                replaced_point_pair = {}
-                p1 = {}
-                p1['col'] = xy_to_colrow[point_pair_x][point_pair_y][0]
-                p1['row'] = xy_to_colrow[point_pair_x][point_pair_y][1]
-                replaced_point_pair['p1'] = p1
-                replaced_point_pair['p2'] = point_pair['p2']
-                replaced_point_pairs.append(replaced_point_pair)
-        replaced_match['correspondencePointPairs'] = replaced_point_pairs
+        if 'correspondencePointPairs' in match.keys():
+            replaced_point_pairs = []
+            for point_pair in match['correspondencePointPairs']:
+                point_pair_x = round_float_to_int(point_pair['p1']['l'][0])
+                point_pair_y = round_float_to_int(point_pair['p1']['l'][1])
+                if (not point_pair_x in xy_to_colrow.keys()) or (not point_pair_y in xy_to_colrow[point_pair_x].keys()):
+                    print "Error: could not find point {},{} in the mesh file".format(point_pair['p1']['l'][0], point_pair['p1']['l'][1])
+                else:
+                    replaced_point_pair = {}
+                    p1 = {}
+                    p1['col'] = xy_to_colrow[point_pair_x][point_pair_y][0]
+                    p1['row'] = xy_to_colrow[point_pair_x][point_pair_y][1]
+                    replaced_point_pair['p1'] = p1
+                    replaced_point_pair['p2'] = point_pair['p2']
+                    replaced_point_pairs.append(replaced_point_pair)
+            replaced_match['correspondencePointPairs'] = replaced_point_pairs
         replaced_matches.append(replaced_match)
 
     # output the new json file
