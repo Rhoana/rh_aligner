@@ -9,6 +9,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 
 import mpicbg.ij.FeatureTransform;
@@ -223,14 +224,34 @@ public class MatchSiftFeaturesAndFilter {
 		List< CorrespondenceSpec > corr_data = new ArrayList< CorrespondenceSpec >();
 
 		if ( params.all ) {
+			// Create a map between a tilespec url and its corresponding feature index
+			HashMap< String, Integer > tsToFeatureIdx = new HashMap< String, Integer >();
+			for ( int i = 0; i < featureSpecs.length; i++ ) {
+				String tsUrl = featureSpecs[ i ].getMipmapImageAndFeatures( mipmapLevel ).imageUrl;
+				// We assume that each ts-url has only a single entry inside the feature spec file
+				tsToFeatureIdx.put( tsUrl, i );
+			}
+			
 			// Check if the bounding box of each two tiles is overlapping, and if so, add them to the indices
 			params.indices.clear();
 			for ( int i = 0; i < tileSpecs.length; i++ ) {
 				float[] bboxI = tileSpecs[i].bbox;
+				String tileIUrl = tileSpecs[i].getMipmapLevels().get( String.valueOf( mipmapLevel ) ).imageUrl;
+				if ( ! tsToFeatureIdx.containsKey( tileIUrl ) )
+					continue;
+				
+				int idxI = tsToFeatureIdx.get( tileIUrl );
 				for ( int j = i + 1; j < tileSpecs.length; j++ ) {
 					float[] bboxJ = tileSpecs[j].bbox;
-					if ( checkBBoxOverlapping( bboxI, bboxJ ) )
-						params.indices.add( i + ":" + j );
+					String tileJUrl = tileSpecs[j].getMipmapLevels().get( String.valueOf( mipmapLevel ) ).imageUrl;
+					if ( ! tsToFeatureIdx.containsKey( tileJUrl ) )
+						continue;
+					
+					int idxJ = tsToFeatureIdx.get( tileJUrl );
+					if ( checkBBoxOverlapping( bboxI, bboxJ ) ) {
+						System.out.println( "Adding " + idxI + ":" + idxJ );
+						params.indices.add( idxI + ":" + idxJ );
+					}
 				}
 			}
 		}
@@ -333,9 +354,9 @@ public class MatchSiftFeaturesAndFilter {
 
 
 			if ( modelFound )
-				System.out.println( "Model found for tiles at indices: " + idx1 + " and " + idx2 + ":\n  correspondences  " + inliers.size() + " of " + candidates.size() + "\n  average residual error  " + model.getCost() + " px" );
+				System.out.println( "Model found for tiles at indices: " + iaf1.imageUrl + " and " + iaf2.imageUrl + ":\n  correspondences  " + inliers.size() + " of " + candidates.size() + "\n  average residual error  " + model.getCost() + " px" );
 			else
-				System.out.println( "No model found for tiles at indices: " + idx1 + " and " + idx2 + "\":\n  correspondence candidates  " + candidates.size() );
+				System.out.println( "No model found for tiles at indices: " + iaf1.imageUrl + " and " + iaf2.imageUrl + "\":\n  correspondence candidates  " + candidates.size() );
 			
 			corr_data.add(new CorrespondenceSpec(mipmapLevel,
 					iaf1.imageUrl,
