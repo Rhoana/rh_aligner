@@ -216,18 +216,20 @@ public class ComputeLayerSiftFeatures {
 
 		feature_data.add(new FeatureSpec( String.valueOf( mipmapLevel ), params.url, scale, fs));
 
-			
-		try {
-			Writer writer = new FileWriter(params.targetPath);
-			//Gson gson = new GsonBuilder().create();
-			Gson gson = new GsonBuilder().setPrettyPrinting().create();
-			gson.toJson(feature_data, writer);
-			writer.close();
-		}
-		catch ( final IOException e )
+		if ( feature_data.size() > 0 )
 		{
-			System.err.println( "Error writing JSON file: " + params.targetPath );
-			e.printStackTrace( System.err );
+			try {
+				Writer writer = new FileWriter(params.targetPath);
+				//Gson gson = new GsonBuilder().create();
+				Gson gson = new GsonBuilder().setPrettyPrinting().create();
+				gson.toJson(feature_data, writer);
+				writer.close();
+			}
+			catch ( final IOException e )
+			{
+				System.err.println( "Error writing JSON file: " + params.targetPath );
+				e.printStackTrace( System.err );
+			}
 		}
 	}
 }
