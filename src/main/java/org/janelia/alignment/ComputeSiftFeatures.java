@@ -353,7 +353,7 @@ public class ComputeSiftFeatures
 //			/* create mesh */
 		
 		
-                System.out.println( "Sift Features computation: layer scale: " + scale );
+                System.out.println( "Sift Features computation: tile scale: " + scale );
                 ImageProcessor scaledImp;
                 if ( scale == 1.0f )
                 	scaledImp = imp.getProcessor();
@@ -374,7 +374,7 @@ public class ComputeSiftFeatures
 				}
 
                 final List< Feature > fs = ComputeSiftFeatures.computeImageSiftFeatures( scaledImp, siftParam );
-                System.out.println( "Found " + fs.size() + " features in the layer" );
+                System.out.println( "Found " + fs.size() + " features in the tile" );
 				//ijSIFT.extractFeatures( imp.getProcessor(), fs );
 		
 				/* Apply the transformations on the location of every feature */
