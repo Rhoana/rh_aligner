@@ -121,6 +121,10 @@ public class ComputeSiftFeatures
         @Parameter( names = "--avoidTileScale", description = "Avoid automatic scale of all tiles according to the bounding box width and height", required = false )
         private boolean avoidTileScale = false;
         */
+        
+        @Parameter( names = "--minFeaturesNum", description = "Minimum number of features (after boundary filtering) that need to be in a tile in order to save these features", required = false )
+        public int minFeaturesNum = 0;
+
 	}
 	
 	private ComputeSiftFeatures() {}
@@ -421,9 +425,13 @@ public class ComputeSiftFeatures
                     System.out.println( "Found " + fs.size() + " features in the layer after filtering non-boundary matches (" + params.distanceFromBoundariesPercent + ")" );
                 }
                 
-				feature_data.add(new FeatureSpec( String.valueOf( mipmapLevel ), imageUrl, scale, fs));
+        		if ( fs.size() >= params.minFeaturesNum )
+        		{
+        			feature_data.add(new FeatureSpec( String.valueOf( mipmapLevel ), imageUrl, scale, fs));
+        		}
 			}
 		}
+
 		try {
 			Writer writer = new FileWriter(params.targetPath);
 			//Gson gson = new GsonBuilder().create();
@@ -436,5 +444,6 @@ public class ComputeSiftFeatures
 			System.err.println( "Error writing JSON file: " + params.targetPath );
 			e.printStackTrace( System.err );
 		}
+		System.out.println( "Done" );
 	}
 }
