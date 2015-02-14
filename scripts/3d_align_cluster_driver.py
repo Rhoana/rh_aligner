@@ -274,6 +274,9 @@ if __name__ == '__main__':
                         default=None)
     parser.add_argument('-r', '--render_meshes_first', action='store_true',
                         help='before working with json files, "render" their transfromations (saves repeated work on large images)')
+    parser.add_argument('-M', '--manual_match', type=str, nargs="*",
+                        help='pairs of layers (sections) that will need to be manually aligned (not part of the max_layer_distance) e.g., "2:10,7:21" (default: none)',
+                        default=None)
     parser.add_argument('-k', '--keeprunning', action='store_true', 
                         help='Run all jobs and report cluster jobs execution stats')
     parser.add_argument('-m', '--multicore', action='store_true', 
@@ -407,8 +410,18 @@ if __name__ == '__main__':
 
     print "Found the following layers: {0}".format(all_layers)
 
-    # Set the first layer as a fixed layer
-    fixed_layer = all_layers[0]
+    # Set the middle layer as a fixed layer
+    fixed_layer = all_layers[len(all_layers)//2]
+
+    manual_matches = {}
+    for match in args.manual_match:
+        # parse the manual match string
+        match_layers = [int(l) for l in match.split(':')]
+        # add a manual match between the lower layer and the higher layer
+        if min(match_layers) not in manual_matches.keys():
+            manual_matches[min(match_layers)] = []
+        manual_matches[min(match_layers)].append(max(match_layers))
+
 
     # Match and optimize each two layers in the required distance
     all_pmcc_files = []
@@ -419,7 +432,15 @@ if __name__ == '__main__':
         layers_data[si]['ransac'] = {}
         layers_data[si]['matched_pmcc'] = {}
         layers_to_process = min(i + args.max_layer_distance + 1, all_layers[-1] + 1) - i
-        for j in range(1, layers_to_process):
+        to_range = range(1, layers_to_process)
+        # add manual matches
+        if i in manual_matches.keys():
+            for second_layer in manual_matches[i]:
+                diff_layers = second_layer - i
+                if diff_layers not in to_range:
+                    to_range.append(diff_layers)
+        # Process all matched layers
+        for j in to_range:
             sij = str(i + j)
             if i in skipped_layers or (i+j) in skipped_layers:
                 print "Skipping matching of layers {} and {}, because at least one of them should be skipped".format(i, i+j)
