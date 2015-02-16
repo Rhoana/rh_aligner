@@ -420,13 +420,14 @@ if __name__ == '__main__':
         fixed_layers = all_layers[::args.fix_every_nth]
 
     manual_matches = {}
-    for match in args.manual_match:
-        # parse the manual match string
-        match_layers = [int(l) for l in match.split(':')]
-        # add a manual match between the lower layer and the higher layer
-        if min(match_layers) not in manual_matches.keys():
-            manual_matches[min(match_layers)] = []
-        manual_matches[min(match_layers)].append(max(match_layers))
+    if args.manual_match is not None:
+        for match in args.manual_match:
+            # parse the manual match string
+            match_layers = [int(l) for l in match.split(':')]
+            # add a manual match between the lower layer and the higher layer
+            if min(match_layers) not in manual_matches.keys():
+                manual_matches[min(match_layers)] = []
+            manual_matches[min(match_layers)].append(max(match_layers))
 
 
     # Match and optimize each two layers in the required distance
