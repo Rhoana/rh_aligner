@@ -277,7 +277,7 @@ if __name__ == '__main__':
     parser.add_argument('-M', '--manual_match', type=str, nargs="*",
                         help='pairs of layers (sections) that will need to be manually aligned (not part of the max_layer_distance) e.g., "2:10,7:21" (default: none)',
                         default=None)
-    parser.add_argument('-F', '--fix_every_nth', type=str, 
+    parser.add_argument('-F', '--fix_every_nth', type=int, 
                         help='each Nth layer will be fixed (default: only middle layer)',
                         default=None)
     parser.add_argument('-k', '--keeprunning', action='store_true', 
