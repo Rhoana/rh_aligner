@@ -15,7 +15,7 @@ def optimize_layers_elastic(tile_files, corr_files, image_width, image_height, f
 
     fixed_str = ""
     if fixed_layers != None:
-        fixed_str = "--fixedLayers {0}".format(" ".join(map(str, fixed_layers)))
+        fixed_str = " ".join("--fixedLayers {0}".format(str(fixed_layer) for fixed_layer in fixed_layers))
 
     skip_str = ""
     if skip_layers != None:

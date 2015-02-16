@@ -228,7 +228,7 @@ class OptimizeLayersElastic(Job):
     def command(self):
         return ['python -u',
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'optimize_layers_elastic.py'),
-                self.output_dir, self.jar_file, self.conf_fname, self.image_width, self.image_height, self.fixed_layers,
+                self.output_dir, self.jar_file, self.conf_fname, self.fixed_layers, self.image_width, self.image_height,
                 self.max_layer_distance, self.threads_str, self.skip_layers, self.tiles_fnames, self.corr_fnames]
 
 
@@ -276,6 +276,9 @@ if __name__ == '__main__':
                         help='before working with json files, "render" their transfromations (saves repeated work on large images)')
     parser.add_argument('-M', '--manual_match', type=str, nargs="*",
                         help='pairs of layers (sections) that will need to be manually aligned (not part of the max_layer_distance) e.g., "2:10,7:21" (default: none)',
+                        default=None)
+    parser.add_argument('-F', '--fix_every_nth', type=str, 
+                        help='each Nth layer will be fixed (default: only middle layer)',
                         default=None)
     parser.add_argument('-k', '--keeprunning', action='store_true', 
                         help='Run all jobs and report cluster jobs execution stats')
@@ -410,8 +413,11 @@ if __name__ == '__main__':
 
     print "Found the following layers: {0}".format(all_layers)
 
-    # Set the middle layer as a fixed layer
-    fixed_layer = all_layers[len(all_layers)//2]
+    if args.fix_every_nth is None:
+        # Set the middle layer as a fixed layer
+        fixed_layers = [all_layers[len(all_layers)//2]]
+    else:
+        fixed_layers = all_layers[::args.fix_every_nth]
 
     manual_matches = {}
     for match in args.manual_match:
@@ -518,14 +524,13 @@ if __name__ == '__main__':
                 if args.render_meshes_first:
                     job_pmcc = MatchLayersByMaxPMCC(dependencies, layers_data[si]['ts'], layers_data[sij]['ts'], 
                         layers_data[si]['ransac'][sij], imageWidth, imageHeight, 
-                        [ fixed_layer ], pmcc_fname, args.jar_file, 
+                        fixed_layers, pmcc_fname, args.jar_file, 
                         meshes_dir1=layers_data[si]['meshes_dir'], meshes_dir2=layers_data[sij]['meshes_dir'],
                         conf_fname=args.conf_file_name, threads_num=32, auto_add_model=args.auto_add_model)
                 else:
                     job_pmcc = MatchLayersByMaxPMCC(dependencies, layers_data[si]['ts'], layers_data[sij]['ts'], 
                         layers_data[si]['ransac'][sij], imageWidth, imageHeight, 
-                        [ fixed_layer ], pmcc_fname, args.jar_file, conf_fname=args.conf_file_name, threads_num=32, auto_add_model=args.auto_add_model)
-                #match_layers_by_max_pmcc(args.jar_file, layer_to_ts_json[i], layer_to_ts_json[i + j], ransac_fname, imageWidth, imageHeight, [fixed_layer], pmcc_fname, conf)
+                        fixed_layers, pmcc_fname, args.jar_file, conf_fname=args.conf_file_name, threads_num=32, auto_add_model=args.auto_add_model)
                 pmcc_jobs.append(job_pmcc)
                 all_running_jobs.append(job_pmcc)
             layers_data[si]['matched_pmcc'][sij] = pmcc_fname
@@ -552,9 +557,8 @@ if __name__ == '__main__':
 
     dependencies = all_running_jobs
     job_optimize = OptimizeLayersElastic(dependencies, sections_outputs, [ ts_list_file ], [ pmcc_list_file ], \
-        imageWidth, imageHeight, [ fixed_layer ], args.output_dir, args.max_layer_distance, args.jar_file, conf_fname=args.conf_file_name,
+        imageWidth, imageHeight, fixed_layers, args.output_dir, args.max_layer_distance, args.jar_file, conf_fname=args.conf_file_name,
         skip_layers=args.skip_layers, threads_num=32)
-    #optimize_layers_elastic(all_ts_files, all_pmcc_files, imageWidth, imageHeight, [fixed_layer], args.output_dir, args.jar_file, conf)
 
 
     # Run all jobs
