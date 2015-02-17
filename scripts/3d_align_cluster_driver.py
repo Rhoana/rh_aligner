@@ -279,7 +279,7 @@ if __name__ == '__main__':
                         default=None)
     parser.add_argument('-F', '--fix_every_nth', type=int, 
                         help='each Nth layer will be fixed (default: only middle layer)',
-                        default=None)
+                        default=0)
     parser.add_argument('-k', '--keeprunning', action='store_true', 
                         help='Run all jobs and report cluster jobs execution stats')
     parser.add_argument('-m', '--multicore', action='store_true', 
@@ -413,9 +413,9 @@ if __name__ == '__main__':
 
     print "Found the following layers: {0}".format(all_layers)
 
-    if args.fix_every_nth is None:
+    if args.fix_every_nth == 0:
         # Set the middle layer as a fixed layer
-        fixed_layers = [all_layers[len(all_layers)//2]]
+        fixed_layers = [ all_layers[len(all_layers)//2] ]
     else:
         fixed_layers = all_layers[::args.fix_every_nth]
 
