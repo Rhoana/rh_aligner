@@ -490,15 +490,12 @@ public class OptimizeLayersElastic {
 		final ExecutorService exec = Executors.newFixedThreadPool( threadsNum );
 		final ArrayList< Future< ArrayList< SpringMesh > > > tasks = new ArrayList< Future< ArrayList< SpringMesh > > >();
 
-		final int layersPerThreadNum = ( endLayer - startLayer + 1 ) / threadsNum;
-		for ( int i = 0; i < threadsNum; i++ )
+		final Distributer distributer = new Distributer( endLayer - startLayer + 1, threadsNum );
+		for ( int i = 0; i < threadsNum && distributer.hasNext(); i++ )
 		{
-			final int fromIndex = startLayer + i * layersPerThreadNum;
-			final int lastIndex;
-			if ( i == threadsNum - 1 ) // lastThread
-				lastIndex = endLayer;
-			else
-				lastIndex = fromIndex + layersPerThreadNum - 1;
+			distributer.next();
+			final int fromIndex = startLayer + distributer.getStart();
+			final int lastIndex = startLayer + distributer.getEnd();
 
 			tasks.add( exec.submit( new Callable< ArrayList< SpringMesh > >() {
 
@@ -723,15 +720,12 @@ public class OptimizeLayersElastic {
 		final ExecutorService exec = Executors.newFixedThreadPool( threadsNum );
 		final ArrayList< Future< ? > > tasks = new ArrayList< Future< ? > >();
 
-		final int layersPerThreadNum = (endLayer - startLayer + 1) / threadsNum;
-		for ( int i = 0; i < threadsNum; i++ )
+		final Distributer distributer = new Distributer( endLayer - startLayer + 1, threadsNum );
+		for ( int i = 0; i < threadsNum && distributer.hasNext(); i++ )
 		{
-			final int fromIndex = startLayer + i * layersPerThreadNum;
-			final int lastIndex;
-			if ( i == threadsNum - 1 ) // lastThread
-				lastIndex = endLayer;
-			else
-				lastIndex = fromIndex + layersPerThreadNum;
+			distributer.next();
+			final int fromIndex = startLayer + distributer.getStart();
+			final int lastIndex = startLayer + distributer.getEnd();
 
 			tasks.add( exec.submit( new Runnable() {
 				

@@ -55,15 +55,15 @@ public class TileConfiguration extends mpicbg.models.TileConfiguration {
 		final double[] threadCd = new double[ exeThreadsNum ];
 		final Distributer distributer = new Distributer( tiles.size(), exeThreadsNum );
 		final Tile< ? >[] tilesArr = tiles.toArray( new Tile< ? >[ tiles.size() ] );
-		for ( int i = 0; i < exeThreadsNum; i++ )
+		for ( int i = 0; i < exeThreadsNum && distributer.hasNext(); i++ )
 		{
+			distributer.next();
 			final int threadIdx = i;
 			threadMinError[ threadIdx ] = Double.MAX_VALUE;
 			threadMaxError[ threadIdx ] = 0.0;
 			threadCd[ threadIdx ] = 0.0;
 			final int firstTileIdx = distributer.getStart();
 			final int lastTileIdx = distributer.getEnd();
-			distributer.next();
 			futures.add(exe.submit( new Runnable() {
 				
 				@Override
