@@ -246,8 +246,7 @@ public class MatchLayersByMaxPMCC {
 			final AbstractModel< ? > model,
 			final TileSpec[] ts1,
 			final TileSpec[] ts2,
-			int mipmapLevel,
-			final List< Integer > fixedLayers )
+			int mipmapLevel )
 	{
 		final List< CorrespondenceSpec > corr_data = new ArrayList< CorrespondenceSpec >();
 
@@ -257,15 +256,6 @@ public class MatchLayersByMaxPMCC {
 		final int layer1 = ts1[0].layer;
 		final int layer2 = ts2[0].layer;
 		
-		final boolean layer1Fixed = fixedLayers.contains( layer1 );
-		final boolean layer2Fixed = fixedLayers.contains( layer2 );
-
-		if ( layer1Fixed && layer2Fixed )
-		{
-			// Both layers are fixed, nothing to do...
-			// Returns an empty correspondence spec list
-			return corr_data;
-		}
 
 		// Compute bounding box of the two layers
 		
@@ -337,130 +327,126 @@ public class MatchLayersByMaxPMCC {
 		final ArrayList< Vertex > v2 = m2.getVertices();
 		
 				
-		//if ( !( layer1Fixed && layer2Fixed ) )
-		//{
-			/* Load images and masks into FloatProcessor objects */		
-			System.out.println( "Rendering layers" );
-			startTime = System.currentTimeMillis();
-			final TileSpecsImage layer1Img = new TileSpecsImage( ts1 );
-			final TileSpecsImage layer2Img = new TileSpecsImage( ts2 );
-			
-			layer1Img.setThreadsNum( param.numThreads );
-			layer2Img.setThreadsNum( param.numThreads );
-			
-			/*
-			final BoundingBox layer1BBox = layer1Img.getBoundingBox();
-			final BoundingBox layer2BBox = layer2Img.getBoundingBox();
-			
-			final int img1Width = (int) (layer1BBox.getWidth() * param.layerScale);
-			final int img1Height = (int) (layer1BBox.getHeight() * param.layerScale);
-			final int img2Width = (int) (layer2BBox.getWidth() * param.layerScale);
-			final int img2Height = (int) (layer2BBox.getHeight() * param.layerScale);
+		/* Load images and masks into FloatProcessor objects */		
+		System.out.println( "Rendering layers" );
+		startTime = System.currentTimeMillis();
+		final TileSpecsImage layer1Img = new TileSpecsImage( ts1 );
+		final TileSpecsImage layer2Img = new TileSpecsImage( ts2 );
+		
+		layer1Img.setThreadsNum( param.numThreads );
+		layer2Img.setThreadsNum( param.numThreads );
+		
+		/*
+		final BoundingBox layer1BBox = layer1Img.getBoundingBox();
+		final BoundingBox layer2BBox = layer2Img.getBoundingBox();
+		
+		final int img1Width = (int) (layer1BBox.getWidth() * param.layerScale);
+		final int img1Height = (int) (layer1BBox.getHeight() * param.layerScale);
+		final int img2Width = (int) (layer2BBox.getWidth() * param.layerScale);
+		final int img2Height = (int) (layer2BBox.getHeight() * param.layerScale);
 
-			final FloatProcessor ip1 = new FloatProcessor( img1Width, img1Height );
-			final FloatProcessor ip2 = new FloatProcessor( img2Width, img2Height );
-			final FloatProcessor ip1Mask = new FloatProcessor( img1Width, img1Height );
-			final FloatProcessor ip2Mask = new FloatProcessor( img2Width, img2Height );
-			*/
-			
-			// TODO: load the tile specs to FloatProcessor objects
-			final FloatProcessor ip1 = tilespecToFloatAndMask( layer1Img, layer1, mipmapLevel, param.layerScale, param.meshesDir1 );
-			final FloatProcessor ip2 = tilespecToFloatAndMask( layer2Img, layer2, mipmapLevel, param.layerScale, param.meshesDir2 );
+		final FloatProcessor ip1 = new FloatProcessor( img1Width, img1Height );
+		final FloatProcessor ip2 = new FloatProcessor( img2Width, img2Height );
+		final FloatProcessor ip1Mask = new FloatProcessor( img1Width, img1Height );
+		final FloatProcessor ip2Mask = new FloatProcessor( img2Width, img2Height );
+		*/
+		
+		// TODO: load the tile specs to FloatProcessor objects
+		final FloatProcessor ip1 = tilespecToFloatAndMask( layer1Img, layer1, mipmapLevel, param.layerScale, param.meshesDir1 );
+		final FloatProcessor ip2 = tilespecToFloatAndMask( layer2Img, layer2, mipmapLevel, param.layerScale, param.meshesDir2 );
 //			tilespecToFloatAndMask( layer1Img, layer1, ip1, ip1Mask, mipmapLevel, param.layerScale, param.meshesDir1 );
 //			tilespecToFloatAndMask( layer2Img, layer2, ip2, ip2Mask, mipmapLevel, param.layerScale, param.meshesDir2 );
+		endTime = System.currentTimeMillis();
+		if ( PRINT_TIME_PER_STEP )
+			System.out.println("Creating images took: " + ((endTime - startTime) / 1000.0) + " sec");
+		
+		//final float springConstant  = 1.0f / ( layer2 - layer1 );
+		
+
+		// Scale the affine transformation
+		final AffineTransform scaleDown = new AffineTransform();
+		scaleDown.scale( param.layerScale, param.layerScale );
+		final AffineModel2D scaleDownModel = new AffineModel2D();
+		scaleDownModel.set( scaleDown );
+		
+		final CoordinateTransformList< CoordinateTransform > scaledModel = new CoordinateTransformList< CoordinateTransform >();
+		scaledModel.add( scaleDownModel.createInverse() );
+		scaledModel.add( ( CoordinateTransform )model );
+		scaledModel.add( scaleDownModel );
+		
+		final CoordinateTransformList< CoordinateTransform > scaledInverseModel = new CoordinateTransformList< CoordinateTransform >();
+		scaledInverseModel.add( scaleDownModel.createInverse() );
+		scaledInverseModel.add( ( ( InvertibleCoordinateTransform )model ).createInverse() );
+		scaledInverseModel.add( scaleDownModel );
+
+		
+		try
+		{
+			startTime = System.currentTimeMillis();
+			BlockMatching.matchByMaximalPMCC(
+					ip1,
+					ip2,
+					null,//ip1Mask,
+					null,//ip2Mask,
+					1.0f,
+					scaledInverseModel, //( ( InvertibleCoordinateTransform )model ).createInverse(),
+					blockRadius,
+					blockRadius,
+					searchRadius,
+					searchRadius,
+					param.minR,
+					param.rodR,
+					param.maxCurvatureR,
+					v1,
+					pm12,
+					new ErrorStatistic( 1 ) );
 			endTime = System.currentTimeMillis();
 			if ( PRINT_TIME_PER_STEP )
-				System.out.println("Creating images took: " + ((endTime - startTime) / 1000.0) + " sec");
-			
-			//final float springConstant  = 1.0f / ( layer2 - layer1 );
-			
+				System.out.println("Block matching 1 took: " + ((endTime - startTime) / 1000.0) + " sec");
+		}
+		catch ( final InterruptedException e )
+		{
+			System.err.println( "Block matching interrupted." );
+			//IJ.showProgress( 1.0 );
+			throw new RuntimeException( e );
+		}
+		catch ( final ExecutionException e )
+		{
+			System.out.println( "Block matching interrupted." );
+			throw new RuntimeException( e );
+		}
+		if ( Thread.interrupted() )
+		{
+			System.err.println( "Block matching interrupted." );
+			//IJ.showProgress( 1.0 );
+			throw new RuntimeException( "Block matching interrupted." );
+		}
 
-			// Scale the affine transformation
-			final AffineTransform scaleDown = new AffineTransform();
-			scaleDown.scale( param.layerScale, param.layerScale );
-			final AffineModel2D scaleDownModel = new AffineModel2D();
-			scaleDownModel.set( scaleDown );
-			
-			final CoordinateTransformList< CoordinateTransform > scaledModel = new CoordinateTransformList< CoordinateTransform >();
-			scaledModel.add( scaleDownModel.createInverse() );
-			scaledModel.add( ( CoordinateTransform )model );
-			scaledModel.add( scaleDownModel );
-			
-			final CoordinateTransformList< CoordinateTransform > scaledInverseModel = new CoordinateTransformList< CoordinateTransform >();
-			scaledInverseModel.add( scaleDownModel.createInverse() );
-			scaledInverseModel.add( ( ( InvertibleCoordinateTransform )model ).createInverse() );
-			scaledInverseModel.add( scaleDownModel );
+		if ( param.useLocalSmoothnessFilter )
+		{
 
-			
-			if ( ! layer1Fixed )
-			{
-				try
-				{
-					startTime = System.currentTimeMillis();
-					BlockMatching.matchByMaximalPMCC(
-							ip1,
-							ip2,
-							null,//ip1Mask,
-							null,//ip2Mask,
-							1.0f,
-							scaledInverseModel, //( ( InvertibleCoordinateTransform )model ).createInverse(),
-							blockRadius,
-							blockRadius,
-							searchRadius,
-							searchRadius,
-							param.minR,
-							param.rodR,
-							param.maxCurvatureR,
-							v1,
-							pm12,
-							new ErrorStatistic( 1 ) );
-					endTime = System.currentTimeMillis();
-					if ( PRINT_TIME_PER_STEP )
-						System.out.println("Block matching 1 took: " + ((endTime - startTime) / 1000.0) + " sec");
-				}
-				catch ( final InterruptedException e )
-				{
-					System.err.println( "Block matching interrupted." );
-					//IJ.showProgress( 1.0 );
-					throw new RuntimeException( e );
-				}
-				catch ( final ExecutionException e )
-				{
-					System.out.println( "Block matching interrupted." );
-					throw new RuntimeException( e );
-				}
-				if ( Thread.interrupted() )
-				{
-					System.err.println( "Block matching interrupted." );
-					//IJ.showProgress( 1.0 );
-					throw new RuntimeException( "Block matching interrupted." );
-				}
-	
-				if ( param.useLocalSmoothnessFilter )
-				{
+			startTime = System.currentTimeMillis();
+			System.out.println( layer1 + " > " + layer2 + ": found " + pm12.size() + " correspondence candidates." );
+			localSmoothnessFilterModel.localSmoothnessFilter( pm12, pm12, localRegionSigma, maxLocalEpsilon, param.maxLocalTrust );
+			System.out.println( layer1 + " > " + layer2 + ": " + pm12.size() + " candidates passed local smoothness filter." );
+			endTime = System.currentTimeMillis();
+			if ( PRINT_TIME_PER_STEP )
+				System.out.println("local smooth filter 1 took: " + ((endTime - startTime) / 1000.0) + " sec");
+		}
+		else
+		{
+			System.out.println( layer1 + " > " + layer2 + ": found " + pm12.size() + " correspondences." );
+		}
 
-					startTime = System.currentTimeMillis();
-					System.out.println( layer1 + " > " + layer2 + ": found " + pm12.size() + " correspondence candidates." );
-					localSmoothnessFilterModel.localSmoothnessFilter( pm12, pm12, localRegionSigma, maxLocalEpsilon, param.maxLocalTrust );
-					System.out.println( layer1 + " > " + layer2 + ": " + pm12.size() + " candidates passed local smoothness filter." );
-					endTime = System.currentTimeMillis();
-					if ( PRINT_TIME_PER_STEP )
-						System.out.println("local smooth filter 1 took: " + ((endTime - startTime) / 1000.0) + " sec");
-				}
-				else
-				{
-					System.out.println( layer1 + " > " + layer2 + ": found " + pm12.size() + " correspondences." );
-				}
-	
-				/* <visualisation> */
-				//			final List< Point > s1 = new ArrayList< Point >();
-				//			PointMatch.sourcePoints( pm12, s1 );
-				//			final ImagePlus imp1 = new ImagePlus( i + " >", ip1 );
-				//			imp1.show();
-				//			imp1.setOverlay( BlockMatching.illustrateMatches( pm12 ), Color.yellow, null );
-				//			imp1.setRoi( Util.pointsToPointRoi( s1 ) );
-				//			imp1.updateAndDraw();
-				/* </visualisation> */
+		/* <visualisation> */
+		//			final List< Point > s1 = new ArrayList< Point >();
+		//			PointMatch.sourcePoints( pm12, s1 );
+		//			final ImagePlus imp1 = new ImagePlus( i + " >", ip1 );
+		//			imp1.show();
+		//			imp1.setOverlay( BlockMatching.illustrateMatches( pm12 ), Color.yellow, null );
+		//			imp1.setRoi( Util.pointsToPointRoi( s1 ) );
+		//			imp1.updateAndDraw();
+		/* </visualisation> */
 /*				
 				for ( final PointMatch pm : pm12 )
 				{
@@ -471,11 +457,11 @@ public class MatchLayersByMaxPMCC {
 				}
 */
 
-				/*
-				 * adding Tiles to the initialing TileConfiguration, adding a Tile
-				 * multiple times does not harm because the TileConfiguration is
-				 * backed by a Set. 
-				 */
+		/*
+		 * adding Tiles to the initialing TileConfiguration, adding a Tile
+		 * multiple times does not harm because the TileConfiguration is
+		 * backed by a Set. 
+		 */
 /*
 				if ( pm12.size() > model.getMinNumMatches() )
 				{
@@ -484,103 +470,99 @@ public class MatchLayersByMaxPMCC {
 					t1.connect( t2, pm12 );
 				}
 */
-				
-				// Remove Vertex (spring mesh) details from points
-				final ArrayList< PointMatch > pm12_strip = new ArrayList< PointMatch >();
-				for (PointMatch pm: pm12)
-				{
-					PointMatch actualPm;
-					try {
-						actualPm = new PointMatch(
-								new Point( pm.getP1().getL(), scaleDownModel.applyInverse( pm.getP1().getW() ) ),
-								new Point( pm.getP2().getL(), scaleDownModel.applyInverse( pm.getP2().getW() ) )
-								);
-						pm12_strip.add( actualPm );
-					} catch (NoninvertibleModelException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
-					}
-				}
-				
-				// TODO: Export / Import master sprint mesh vertices no calculated  individually per tile (v1, v2).
-				corr_data.add(new CorrespondenceSpec(
-						mipmapLevel,
-						param.inputfile1,
-						param.inputfile2,
-						pm12_strip,
-						( pm12.size() > model.getMinNumMatches() ) ));
-				
+		
+		// Remove Vertex (spring mesh) details from points
+		final ArrayList< PointMatch > pm12_strip = new ArrayList< PointMatch >();
+		for (PointMatch pm: pm12)
+		{
+			PointMatch actualPm;
+			try {
+				actualPm = new PointMatch(
+						new Point( pm.getP1().getL(), scaleDownModel.applyInverse( pm.getP1().getW() ) ),
+						new Point( pm.getP2().getL(), scaleDownModel.applyInverse( pm.getP2().getW() ) )
+						);
+				pm12_strip.add( actualPm );
+			} catch (NoninvertibleModelException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
 			}
+		}
+		
+		// TODO: Export / Import master sprint mesh vertices no calculated  individually per tile (v1, v2).
+		corr_data.add(new CorrespondenceSpec(
+				mipmapLevel,
+				param.inputfile1,
+				param.inputfile2,
+				pm12_strip,
+				( pm12.size() > model.getMinNumMatches() ) ));
 
-			if ( !layer2Fixed )
-			{
-				try
-				{
-					startTime = System.currentTimeMillis();
-					BlockMatching.matchByMaximalPMCC(
-							ip2,
-							ip1,
-							null,//ip2Mask,
-							null,//ip1Mask,
-							1.0f,
-							scaledModel, //model,
-							blockRadius,
-							blockRadius,
-							searchRadius,
-							searchRadius,
-							param.minR,
-							param.rodR,
-							param.maxCurvatureR,
-							v2,
-							pm21,
-							new ErrorStatistic( 1 ) );
-					endTime = System.currentTimeMillis();
-					if ( PRINT_TIME_PER_STEP )
-						System.out.println("Block matching 2 took: " + ((endTime - startTime) / 1000.0) + " sec");
-				}
-				catch ( final InterruptedException e )
-				{
-					System.out.println( "Block matching interrupted." );
-					//IJ.showProgress( 1.0 );
-					throw new RuntimeException( e );
-				}
-				catch ( final ExecutionException e )
-				{
-					System.out.println( "Block matching interrupted." );
-					throw new RuntimeException( e );
-				}
-				if ( Thread.interrupted() )
-				{
-					System.out.println( "Block matching interrupted." );
-					//IJ.showProgress( 1.0 );
-					throw new RuntimeException( "Block matching interrupted." );
-				}
-	
-				if ( param.useLocalSmoothnessFilter )
-				{
-					startTime = System.currentTimeMillis();
-					System.out.println( layer1 + " < " + layer2 + ": found " + pm21.size() + " correspondence candidates." );
-					localSmoothnessFilterModel.localSmoothnessFilter( pm21, pm21, localRegionSigma, maxLocalEpsilon, param.maxLocalTrust );
-					System.out.println( layer1 + " < " + layer2 + ": " + pm21.size() + " candidates passed local smoothness filter." );
-					endTime = System.currentTimeMillis();
-					if ( PRINT_TIME_PER_STEP )
-						System.out.println("local smooth filter 2 took: " + ((endTime - startTime) / 1000.0) + " sec");
-				}
-				else
-				{
-					System.out.println( layer1 + " < " + layer2 + ": found " + pm21.size() + " correspondences." );
-				}
-				
-				/* <visualisation> */
-				//			final List< Point > s2 = new ArrayList< Point >();
-				//			PointMatch.sourcePoints( pm21, s2 );
-				//			final ImagePlus imp2 = new ImagePlus( i + " <", ip2 );
-				//			imp2.show();
-				//			imp2.setOverlay( BlockMatching.illustrateMatches( pm21 ), Color.yellow, null );
-				//			imp2.setRoi( Util.pointsToPointRoi( s2 ) );
-				//			imp2.updateAndDraw();
-				/* </visualisation> */
-				
+		try
+		{
+			startTime = System.currentTimeMillis();
+			BlockMatching.matchByMaximalPMCC(
+					ip2,
+					ip1,
+					null,//ip2Mask,
+					null,//ip1Mask,
+					1.0f,
+					scaledModel, //model,
+					blockRadius,
+					blockRadius,
+					searchRadius,
+					searchRadius,
+					param.minR,
+					param.rodR,
+					param.maxCurvatureR,
+					v2,
+					pm21,
+					new ErrorStatistic( 1 ) );
+			endTime = System.currentTimeMillis();
+			if ( PRINT_TIME_PER_STEP )
+				System.out.println("Block matching 2 took: " + ((endTime - startTime) / 1000.0) + " sec");
+		}
+		catch ( final InterruptedException e )
+		{
+			System.out.println( "Block matching interrupted." );
+			//IJ.showProgress( 1.0 );
+			throw new RuntimeException( e );
+		}
+		catch ( final ExecutionException e )
+		{
+			System.out.println( "Block matching interrupted." );
+			throw new RuntimeException( e );
+		}
+		if ( Thread.interrupted() )
+		{
+			System.out.println( "Block matching interrupted." );
+			//IJ.showProgress( 1.0 );
+			throw new RuntimeException( "Block matching interrupted." );
+		}
+
+		if ( param.useLocalSmoothnessFilter )
+		{
+			startTime = System.currentTimeMillis();
+			System.out.println( layer1 + " < " + layer2 + ": found " + pm21.size() + " correspondence candidates." );
+			localSmoothnessFilterModel.localSmoothnessFilter( pm21, pm21, localRegionSigma, maxLocalEpsilon, param.maxLocalTrust );
+			System.out.println( layer1 + " < " + layer2 + ": " + pm21.size() + " candidates passed local smoothness filter." );
+			endTime = System.currentTimeMillis();
+			if ( PRINT_TIME_PER_STEP )
+				System.out.println("local smooth filter 2 took: " + ((endTime - startTime) / 1000.0) + " sec");
+		}
+		else
+		{
+			System.out.println( layer1 + " < " + layer2 + ": found " + pm21.size() + " correspondences." );
+		}
+		
+		/* <visualisation> */
+		//			final List< Point > s2 = new ArrayList< Point >();
+		//			PointMatch.sourcePoints( pm21, s2 );
+		//			final ImagePlus imp2 = new ImagePlus( i + " <", ip2 );
+		//			imp2.show();
+		//			imp2.setOverlay( BlockMatching.illustrateMatches( pm21 ), Color.yellow, null );
+		//			imp2.setRoi( Util.pointsToPointRoi( s2 ) );
+		//			imp2.updateAndDraw();
+		/* </visualisation> */
+		
 /*
 				for ( final PointMatch pm : pm21 )
 				{
@@ -590,11 +572,11 @@ public class MatchLayersByMaxPMCC {
 					m1.addPassiveVertex( p2 );
 				}
 */				
-				/*
-				 * adding Tiles to the initialing TileConfiguration, adding a Tile
-				 * multiple times does not harm because the TileConfiguration is
-				 * backed by a Set. 
-				 */
+		/*
+		 * adding Tiles to the initialing TileConfiguration, adding a Tile
+		 * multiple times does not harm because the TileConfiguration is
+		 * backed by a Set. 
+		 */
 /*
 				if ( pm21.size() > model.getMinNumMatches() )
 				{
@@ -603,36 +585,31 @@ public class MatchLayersByMaxPMCC {
 					t2.connect( t1, pm21 );
 				}
 */
-				// Remove Vertex (spring mesh) details from points
-				final ArrayList< PointMatch > pm21_strip = new ArrayList< PointMatch >();
-				for (PointMatch pm: pm21)
-				{
-					PointMatch actualPm;
-					try {
-						actualPm = new PointMatch(
-								new Point( pm.getP1().getL(), scaleDownModel.applyInverse( pm.getP1().getW() ) ),
-								new Point( pm.getP2().getL(), scaleDownModel.applyInverse( pm.getP2().getW() ) )
-								);
-						pm21_strip.add( actualPm );
-					} catch (NoninvertibleModelException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
-					}
-				}
-
-				// TODO: Export / Import master sprint mesh vertices no calculated  individually per tile (v1, v2).
-				corr_data.add(new CorrespondenceSpec(
-						mipmapLevel,
-						param.inputfile2,
-						param.inputfile1,
-						pm21_strip,
-						( pm21.size() > model.getMinNumMatches() ) ));
-
-
+		// Remove Vertex (spring mesh) details from points
+		final ArrayList< PointMatch > pm21_strip = new ArrayList< PointMatch >();
+		for (PointMatch pm: pm21)
+		{
+			PointMatch actualPm;
+			try {
+				actualPm = new PointMatch(
+						new Point( pm.getP1().getL(), scaleDownModel.applyInverse( pm.getP1().getW() ) ),
+						new Point( pm.getP2().getL(), scaleDownModel.applyInverse( pm.getP2().getW() ) )
+						);
+				pm21_strip.add( actualPm );
+			} catch (NoninvertibleModelException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
 			}
-			
-			//System.out.println( layer1 + " <> " + layer2 + " spring constant = " + springConstant );
-		//}
+		}
+
+		// TODO: Export / Import master sprint mesh vertices no calculated  individually per tile (v1, v2).
+		corr_data.add(new CorrespondenceSpec(
+				mipmapLevel,
+				param.inputfile2,
+				param.inputfile1,
+				pm21_strip,
+				( pm21.size() > model.getMinNumMatches() ) ));
+
 
 		return corr_data;
 	}
@@ -641,40 +618,23 @@ public class MatchLayersByMaxPMCC {
 			final int layer1,
 			final int layer2,
 			final Params param,
-			final int mipmapLevel,
-			final List<Integer> fixedLayers )
+			final int mipmapLevel )
 	{
 		final List< CorrespondenceSpec > corr_data = new ArrayList< CorrespondenceSpec >();
 
-		final boolean layer1Fixed = fixedLayers.contains( layer1 );
-		final boolean layer2Fixed = fixedLayers.contains( layer2 );
+		corr_data.add(new CorrespondenceSpec(
+				mipmapLevel,
+				param.inputfile1,
+				param.inputfile2,
+				null,
+				false ));
 
-		if ( layer1Fixed && layer2Fixed )
-		{
-			// Both layers are fixed, nothing to do...
-			// Returns an empty correspondence spec list
-			return corr_data;
-		}
-
-		if ( ! layer1Fixed )
-		{
-			corr_data.add(new CorrespondenceSpec(
-					mipmapLevel,
-					param.inputfile1,
-					param.inputfile2,
-					null,
-					false ));
-		}
-
-		if ( ! layer2Fixed )
-		{
-			corr_data.add(new CorrespondenceSpec(
-					mipmapLevel,
-					param.inputfile2,
-					param.inputfile1,
-					null,
-					false ));
-		}
+		corr_data.add(new CorrespondenceSpec(
+				mipmapLevel,
+				param.inputfile2,
+				param.inputfile1,
+				null,
+				false ));
 
 		return corr_data;
 	}
@@ -741,7 +701,7 @@ public class MatchLayersByMaxPMCC {
 					// Write an "empty" file
 					final List< CorrespondenceSpec > corr_data = createEmptyCorrespondece(
 							tilespecs1[0].layer, tilespecs2[0].layer,
-							params, mipmapLevel, params.fixedLayers );
+							params, mipmapLevel );
 					System.out.println( "Writing an empty correspondece match file between layers: " + params.inputfile1 + " and " + params.inputfile2 );
 					try {
 						Writer writer = new FileWriter(params.targetPath);
@@ -783,8 +743,7 @@ public class MatchLayersByMaxPMCC {
 		startTime = System.currentTimeMillis();
 		final List< CorrespondenceSpec > corr_data = matchLayersByMaxPMCC( 
 				params, (AbstractModel< ? >)model,
-				tilespecs1, tilespecs2, mipmapLevel,
-				params.fixedLayers );
+				tilespecs1, tilespecs2, mipmapLevel );
 		endTime = System.currentTimeMillis();
 		System.out.println("Entire match process took: " + ((endTime - startTime) / 1000.0) + " ms");
 		
