@@ -501,7 +501,7 @@ public class OptimizeLayersElastic {
 
 				@Override
 				public ArrayList<SpringMesh> call() throws Exception {
-					return fixSubAllPointMatchVertices( param, layersCorrs, fromIndex, lastIndex );
+					return fixSubAllPointMatchVertices( param, layersCorrs, fromIndex, lastIndex - 1 );
 				}
 				
 			}));
