@@ -174,7 +174,8 @@ print "Found the following layers: {0}".format(all_layers)
 
 print "All json files prefix are: {0}".format(layer_to_json_prefix)
 
-fixed_layer = all_layers[0]
+# Set the middle layer as a fixed layer
+fixed_layers = [ all_layers[len(all_layers)//2] ]
 
 
 # Match and optimize each two layers in the required distance
@@ -208,9 +209,9 @@ for i in all_layers:
         if not os.path.exists(pmcc_fname):
             print "Matching layers by Max PMCC: {0} and {1}".format(i, i + j)
             if args.render_meshes_first:
-                match_layers_by_max_pmcc(args.jar_file, layer_to_ts_json[i], layer_to_ts_json[i + j], ransac_fname, imageWidth, imageHeight, [fixed_layer], pmcc_fname, meshes_dir1=layer_meshes_dir[i], meshes_dir2=layer_meshes_dir[i + j], conf=conf, auto_add_model=args.auto_add_model)
+                match_layers_by_max_pmcc(args.jar_file, layer_to_ts_json[i], layer_to_ts_json[i + j], ransac_fname, imageWidth, imageHeight, fixed_layers, pmcc_fname, meshes_dir1=layer_meshes_dir[i], meshes_dir2=layer_meshes_dir[i + j], conf=conf, auto_add_model=args.auto_add_model)
             else:
-                match_layers_by_max_pmcc(args.jar_file, layer_to_ts_json[i], layer_to_ts_json[i + j], ransac_fname, imageWidth, imageHeight, [fixed_layer], pmcc_fname, conf=conf, auto_add_model=args.auto_add_model)
+                match_layers_by_max_pmcc(args.jar_file, layer_to_ts_json[i], layer_to_ts_json[i + j], ransac_fname, imageWidth, imageHeight, fixed_layers, pmcc_fname, conf=conf, auto_add_model=args.auto_add_model)
         all_pmcc_files.append(pmcc_fname)
 
 print "All pmcc files: {0}".format(all_pmcc_files)
@@ -228,6 +229,6 @@ pmcc_list_file = os.path.join(args.workspace_dir, "all_pmcc_files.txt")
 write_list_to_file(pmcc_list_file, actual_pmcc_files)
 
 optimize_layers_elastic([ ts_list_file ], [ pmcc_list_file ], imageWidth, imageHeight, 
-    [fixed_layer], args.output_dir, args.max_layer_distance, args.block_size,
+    fixed_layers, args.output_dir, args.max_layer_distance,
     args.jar_file, conf, args.skip_layers)
 
