@@ -83,6 +83,7 @@ def main():
 
     print "tile_files: {0}".format(args.tile_files)
     print "corr_files: {0}".format(args.corr_files)
+    print "manual_match: {0}".format(args.manual_match)
 
     optimize_layers_elastic(args.tile_files, args.corr_files,
         args.image_width, args.image_height, args.fixed_layers, args.output_dir, args.max_layer_distance,
