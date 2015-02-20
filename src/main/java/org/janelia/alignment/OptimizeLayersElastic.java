@@ -124,6 +124,8 @@ public class OptimizeLayersElastic {
         @Parameter( names = "--skipLayers", description = "The layers ranges that will not be processed (default: none)", required = false )
         private String skippedLayers = "";
 
+        @Parameter( names = "--manualMatches", description = "Pair of layer indices (each pair is separated by a colon) that need to be manually aligned with a spring of constant of 1", required = false )
+        public List<String> manualMatches = new ArrayList<String>();
 	}
 	
 	private OptimizeLayersElastic() {}
@@ -540,7 +542,8 @@ public class OptimizeLayersElastic {
 			final int startLayer,
 			final int endLayer,
 			final Set<Integer> skippedLayers,
-			final int maxDistance )
+			final int maxDistance,
+			final HashMap< Integer, List< Integer > > manuallyMatchedLayers )
 	{
 		
 		System.out.println( "Matching layers" );
@@ -553,11 +556,11 @@ public class OptimizeLayersElastic {
 				System.out.println( "Skipping optimization of layer " + layerA );
 				continue;
 			}
-			//for ( Integer layerB : layersCorrs.get( layerA ).keySet() )
+			for ( Integer layerB : layersCorrs.get( layerA ).keySet() )
 			//for ( int layerB = layerA + 1; layerB <= endLayer; layerB++ )
-			for ( int layerB = layerA + 1; layerB <= layerA + maxDistance; layerB++ )
+			//for ( int layerB = layerA + 1; layerB <= layerA + maxDistance; layerB++ )
 			{
-				// We later both directions, so just do forward matching
+				// We compare both directions, so just do forward matching
 				if ( layerB < layerA )
 					continue;
 
@@ -615,12 +618,20 @@ public class OptimizeLayersElastic {
 				final SpringMesh m1 = meshes.get( layerA - startLayer );
 				final SpringMesh m2 = meshes.get( layerB - startLayer );
 
+				// System.out.println( "Matching layers: " + layerA + " - " + layerB );
+
 				// TODO: Load point matches
 				
 				final Tile< ? > t1 = tiles.get( layerA - startLayer );
 				final Tile< ? > t2 = tiles.get( layerB - startLayer );
 
-				final float springConstant  = 1.0f / ( layerB - layerA );
+				final float springConstant;
+				
+				if ( manuallyMatchedLayers.containsKey( layerA ) && manuallyMatchedLayers.get( layerA ).contains( layerB ) ) {
+					springConstant = 0.5f; // act as if these are closely neighboring layers
+				} else {
+					springConstant = 1.0f / ( layerB - layerA );
+				}
 				
 
 				if ( layer1Fixed )
@@ -704,6 +715,7 @@ public class OptimizeLayersElastic {
 			final int endLayer,
 			final Set<Integer> skippedLayers,
 			final int maxDistance,
+			final HashMap< Integer, List< Integer > > manuallyMatchedLayers,
 			final int threadsNum )
 	{		
 		System.out.println( "Matching layers with " + threadsNum + " threads" );
@@ -712,7 +724,7 @@ public class OptimizeLayersElastic {
 		{
 			matchLayers( meshes, tiles, initMeshes,
 					layersCorrs, fixedLayers, startLayer, endLayer,
-					skippedLayers, maxDistance );
+					skippedLayers, maxDistance, manuallyMatchedLayers );
 			return;
 		}
 		
@@ -739,11 +751,11 @@ public class OptimizeLayersElastic {
 							System.out.println( "Skipping optimization of layer " + layerA );
 							continue;
 						}
-						//for ( Integer layerB : layersCorrs.get( layerA ).keySet() )
+						for ( Integer layerB : layersCorrs.get( layerA ).keySet() )
 						//for ( int layerB = layerA + 1; layerB <= endLayer; layerB++ )
-						for ( int layerB = layerA + 1; layerB <= layerA + maxDistance; layerB++ )
+						//for ( int layerB = layerA + 1; layerB <= layerA + maxDistance; layerB++ )
 						{
-							// We later both directions, so just do forward matching
+							// We compare both directions, so just do forward matching
 							if ( layerB < layerA )
 								continue;
 
@@ -801,12 +813,20 @@ public class OptimizeLayersElastic {
 							final SpringMesh m1 = meshes.get( layerA - startLayer );
 							final SpringMesh m2 = meshes.get( layerB - startLayer );
 
+							// System.out.println( "Matching layers: " + layerA + " - " + layerB );
 							// TODO: Load point matches
 							
 							final Tile< ? > t1 = tiles.get( layerA - startLayer );
 							final Tile< ? > t2 = tiles.get( layerB - startLayer );
 
-							final float springConstant  = 1.0f / ( layerB - layerA );
+							final float springConstant;
+							
+							if ( manuallyMatchedLayers.containsKey( layerA ) && manuallyMatchedLayers.get( layerA ).contains( layerB ) ) {
+								springConstant = 0.5f; // act as if these are closely neighboring layers
+							} else {
+								springConstant = 1.0f / ( layerB - layerA );
+							}
+							
 
 							synchronized ( m1 )
 							{
@@ -943,7 +963,8 @@ public class OptimizeLayersElastic {
 			final int startX,
 			final int startY,
 			final Set<Integer> skippedLayers,
-			final int maxDistance )
+			final int maxDistance,
+			final HashMap< Integer, List< Integer > > manuallyMatchedLayers )
 	{
 		final ArrayList< Tile< ? > > tiles = createLayersModels( endLayer - startLayer + 1, param.modelIndex );
 		
@@ -956,7 +977,7 @@ public class OptimizeLayersElastic {
 
 		matchLayers( meshes, tiles, initMeshes,
 				layersCorrs, fixedLayers, startLayer, endLayer,
-				skippedLayers, maxDistance, param.numThreads );
+				skippedLayers, maxDistance, manuallyMatchedLayers, param.numThreads );
 		
 
 		/* pre-align by optimizing a piecewise linear model */
@@ -1197,6 +1218,25 @@ public class OptimizeLayersElastic {
 			params.fixedLayers.add( firstLayer );
 		}
 		
+		// Parse manually matched layers
+		HashMap< Integer, List< Integer > > manuallyMatchedLayers = new HashMap<Integer, List< Integer > >();
+		if ( params.manualMatches.size() > 0 ) {
+			for ( String pair : params.manualMatches ) {
+				String[] vals = pair.split(":");
+                if ( vals.length != 2 )
+                        throw new IllegalArgumentException("Index pair not in correct format:" + pair);
+                int layer1 = Integer.parseInt(vals[0]);
+                int layer2 = Integer.parseInt(vals[1]);
+				int minLayer = Math.min( layer1, layer2 );
+				int maxLayer = Math.max( layer1, layer2 );
+				if (! manuallyMatchedLayers.containsKey( minLayer ) ) {
+					manuallyMatchedLayers.put( minLayer, new ArrayList< Integer >() );
+				}
+				List< Integer > pairsList = manuallyMatchedLayers.get( minLayer );
+				pairsList.add( maxLayer );
+			}
+		}
+		
 		// Optimze
 		optimizeElastic(
 			params, layersTs, layersCorrs,
@@ -1204,7 +1244,8 @@ public class OptimizeLayersElastic {
 			firstLayer, lastLayer,
 			bbox.getStartPoint().getX(), bbox.getStartPoint().getY(),
 			skippedLayers,
-			params.maxLayersDistance );
+			params.maxLayersDistance,
+			manuallyMatchedLayers );
 
 		// Save new tilespecs
 		System.out.println( "Optimization complete. Generating tile transforms.");

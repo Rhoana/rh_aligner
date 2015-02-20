@@ -219,7 +219,6 @@ class OptimizeLayersElastic(Job):
             self.manual_matches = ''
         else:
             self.manual_matches = '-M {0}'.format(" ".join(manual_matches))
-        print "self.manual_matches:", self.manual_matches
         self.max_layer_distance = '-d {}'.format(max_layer_distance)
         self.threads = threads_num
         self.threads_str = '-t {0}'.format(threads_num)
@@ -561,7 +560,6 @@ if __name__ == '__main__':
         out_section = os.path.join(args.output_dir, os.path.basename(layers_data[str(i)]['ts']))
         sections_outputs.append(out_section)
 
-    print "Sending manual_match:", args.manual_match
     dependencies = all_running_jobs
     job_optimize = OptimizeLayersElastic(dependencies, sections_outputs, [ ts_list_file ], [ pmcc_list_file ], \
         imageWidth, imageHeight, fixed_layers, args.output_dir, args.max_layer_distance, args.jar_file, conf_fname=args.conf_file_name,
