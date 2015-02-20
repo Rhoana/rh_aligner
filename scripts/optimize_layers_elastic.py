@@ -10,7 +10,7 @@ import utils
 
 # common functions
 
-def optimize_layers_elastic(tile_files, corr_files, image_width, image_height, fixed_layers, out_dir, max_layer_distance, jar_file, conf=None, skip_layers=None, threads_num=4):
+def optimize_layers_elastic(tile_files, corr_files, image_width, image_height, fixed_layers, out_dir, max_layer_distance, jar_file, conf=None, skip_layers=None, threads_num=4, manual_matches=None):
     conf_args = utils.conf_args_from_file(conf, 'OptimizeLayersElastic')
 
     fixed_str = ""
@@ -21,13 +21,24 @@ def optimize_layers_elastic(tile_files, corr_files, image_width, image_height, f
     if skip_layers != None:
         skip_str = "--skipLayers {0}".format(skip_layers)
 
+    manual_matches_str = ""
+    if manual_matches is not None:
+        index_pairs = []
+        for match in args.manual_match:
+            # parse the manual match string
+            match_layers = [int(l) for l in match.split(':')]
+            # add a manual match between the lower layer and the higher layer
+            index_pairs.append((match_layers[0], match_layers[1]))
+
+        manual_matches_str = " ".join("--manualMatches {}:{}".format(a, b) for a, b in index_pairs)
 
     java_cmd = 'java -Xmx96g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.OptimizeLayersElastic --tilespecFiles {1} --corrFiles {2} \
-            {3} --imageWidth {4} --imageHeight {5} --threads {6} --maxLayersDistance {7} {8} --targetDir {9} {10}'.format(
+            {3} {4} --imageWidth {5} --imageHeight {6} --threads {7} --maxLayersDistance {8} {9} --targetDir {10} {11}'.format(
         jar_file,
         " ".join(utils.path2url(f) for f in tile_files),
         " ".join(utils.path2url(f) for f in corr_files),
         fixed_str,
+        manual_matches_str,
         int(image_width),
         int(image_height),
         threads_num,
@@ -70,6 +81,9 @@ def main():
     parser.add_argument('-d', '--max_layer_distance', type=int, 
                         help='the largest distance between two layers to be matched (default: 1)',
                         default=1)
+    parser.add_argument('-M', '--manual_match', type=str, nargs="*",
+                        help='pairs of layers (sections) that will need to be manually aligned (not part of the max_layer_distance) e.g., "2:10,7:21" (default: none)',
+                        default=None)
 
 
     args = parser.parse_args()
@@ -81,7 +95,8 @@ def main():
         args.image_width, args.image_height, args.fixed_layers, args.output_dir, args.max_layer_distance,
         args.jar_file,
         conf=args.conf_file_name, 
-        skip_layers=args.skip_layers, threads_num=args.threads_num)
+        skip_layers=args.skip_layers, threads_num=args.threads_num,
+        manual_matches=args.manual_match)
 
 if __name__ == '__main__':
     main()
