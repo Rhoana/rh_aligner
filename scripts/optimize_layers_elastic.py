@@ -24,7 +24,7 @@ def optimize_layers_elastic(tile_files, corr_files, image_width, image_height, f
     manual_matches_str = ""
     if manual_matches is not None:
         index_pairs = []
-        for match in args.manual_match:
+        for match in manual_matches:
             # parse the manual match string
             match_layers = [int(l) for l in match.split(':')]
             # add a manual match between the lower layer and the higher layer
