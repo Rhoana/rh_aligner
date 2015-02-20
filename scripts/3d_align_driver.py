@@ -64,6 +64,9 @@ parser.add_argument('--to_layer', type=int,
 parser.add_argument('-s', '--skip_layers', type=str, 
                     help='the range of layers (sections) that will not be processed e.g., "2,3,9-11,18" (default: no skipped sections)',
                     default=None)
+parser.add_argument('-M', '--manual_match', type=str, nargs="*",
+                    help='pairs of layers (sections) that will need to be manually aligned (not part of the max_layer_distance) e.g., "2:10,7:21" (default: none)',
+                    default=None)
 
 
 
@@ -177,13 +180,32 @@ print "All json files prefix are: {0}".format(layer_to_json_prefix)
 # Set the middle layer as a fixed layer
 fixed_layers = [ all_layers[len(all_layers)//2] ]
 
+# Handle manual matches
+manual_matches = {}
+if args.manual_match is not None:
+    for match in args.manual_match:
+        # parse the manual match string
+        match_layers = [int(l) for l in match.split(':')]
+        # add a manual match between the lower layer and the higher layer
+        if min(match_layers) not in manual_matches.keys():
+            manual_matches[min(match_layers)] = []
+        manual_matches[min(match_layers)].append(max(match_layers))
+
 
 # Match and optimize each two layers in the required distance
 all_pmcc_files = []
 for i in all_layers:
     layers_to_process = min(i + args.max_layer_distance + 1, all_layers[-1] + 1) - i
-    print "layers_to_process {0}".format(layers_to_process)
-    for j in range(1, layers_to_process):
+    to_range = range(1, layers_to_process)
+    # add manual matches
+    if i in manual_matches.keys():
+        for second_layer in manual_matches[i]:
+            diff_layers = second_layer - i
+            if diff_layers not in to_range:
+                to_range.append(diff_layers)
+    # Process all matched layers
+    print "layers_to_process {0}".format(to_range[-1])
+    for j in to_range:
         if i in skipped_layers or (i+j) in skipped_layers:
             print "Skipping matching of layers {} and {}, because at least one of them should be skipped".format(i, i+j)
             continue
@@ -230,5 +252,5 @@ write_list_to_file(pmcc_list_file, actual_pmcc_files)
 
 optimize_layers_elastic([ ts_list_file ], [ pmcc_list_file ], imageWidth, imageHeight, 
     fixed_layers, args.output_dir, args.max_layer_distance,
-    args.jar_file, conf, args.skip_layers)
+    args.jar_file, conf, args.skip_layers, manual_matches=args.manual_match)
 

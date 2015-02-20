@@ -218,7 +218,7 @@ class OptimizeLayersElastic(Job):
         if manual_matches is None:
             self.manual_matches = ''
         else:
-            self.manual_matches = '-M "{0}"'.format(manual_matches)
+            self.manual_matches = '-M '.format(" ".join(manual_matches))
         self.max_layer_distance = '-d {}'.format(max_layer_distance)
         self.threads = threads_num
         self.threads_str = '-t {0}'.format(threads_num)

@@ -23,14 +23,7 @@ def optimize_layers_elastic(tile_files, corr_files, image_width, image_height, f
 
     manual_matches_str = ""
     if manual_matches is not None:
-        index_pairs = []
-        for match in manual_matches:
-            # parse the manual match string
-            match_layers = [int(l) for l in match.split(':')]
-            # add a manual match between the lower layer and the higher layer
-            index_pairs.append((match_layers[0], match_layers[1]))
-
-        manual_matches_str = " ".join("--manualMatches {}:{}".format(a, b) for a, b in index_pairs)
+        manual_matches_str = " ".join("--manualMatches {}".format(a) for a in manual_matches)
 
     java_cmd = 'java -Xmx96g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.OptimizeLayersElastic --tilespecFiles {1} --corrFiles {2} \
             {3} {4} --imageWidth {5} --imageHeight {6} --threads {7} --maxLayersDistance {8} {9} --targetDir {10} {11}'.format(
