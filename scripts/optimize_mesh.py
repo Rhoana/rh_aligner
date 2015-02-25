@@ -115,8 +115,27 @@ def parse_mesh_file(mesh_file):
     print "# points in base mesh", num_base
     return pts, rowcols
 
-def optimize_meshes(mesh_file, matches_files, url_to_layerid, max_iterations=50):
+def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict):
 
+    # set default values
+    max_iteartions = 50
+
+    # read parameters from the configuration dictionary
+    if "cross_slice_weight" in conf_dict.keys():
+        cross_slice_weight = conf_dict["cross_slice_weight"]
+    if "cross_slice_weight" in conf_dict.keys():
+        cross_slice_weight = conf_dict["cross_slice_weight"]
+    if "cross_slice_winsor" in conf_dict.keys():
+        cross_slice_winsor = conf_dict["cross_slice_winsor"]
+    if "intra_slice_weight" in conf_dict.keys():
+        intra_slice_weight = conf_dict["intra_slice_weight"]
+    if "intra_slice_winsor" in conf_dict.keys():
+        intra_slice_winsor = conf_dict["intra_slice_winsor"]
+    if "max_iterations" in conf_dict.keys():
+        max_iterations = conf_dict["max_iterations"]
+
+
+    # load the mesh
     mesh = json.load(open(mesh_file))
     mesh_pts = np.array([(p["x"], p["y"]) for p in mesh["points"]], dtype=np.float32)
     mesh_rowcols = np.array([(p["row"], p["col"]) for p in mesh["points"]])
@@ -125,6 +144,13 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, max_iterations=50)
     num_base = mesh_pts.shape[0]
     print "# points in base mesh", num_base
  
+    # Adjust winsor values according to layer scale
+    cross_slice_winsor = int(round(cross_slice_winsor * layer_scale))
+    intra_slice_winsor = int(round(intra_slice_winsor * layer_scale))
+
+    print "cross_slice_winsor: {}, intra_slice_winsor: {}".format(cross_slice_winsor, intra_slice_winsor)
+    print "cross_slice_weight: {}, intra_slice_weight: {}".format(cross_slice_weight, intra_slice_weight)
+
     # Build the KDTree for neighbor searching
     kdt = KDTree(mesh_pts, leafsize=3)
 

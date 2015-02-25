@@ -18,6 +18,7 @@ def compute_restricted_moving_ls_radius(url_optimized_mesh):
 
     # TODO - verify that the radius is dependent only on the mesh (not on the matches)
     if cached_radius is None:
+        print "Computing restricted MLS radius"
         min_point_dist_sqr = float("inf")
         for p1idx,p2idx in itertools.combinations(range(len(url_optimized_mesh[0])), 2):
             p1 = url_optimized_mesh[0][p1idx]
@@ -25,6 +26,7 @@ def compute_restricted_moving_ls_radius(url_optimized_mesh):
             cur_dist_sqr = (p1[0] - p2[0]) * (p1[0] - p2[0]) + (p1[1] - p2[1]) * (p1[1] - p2[1])
             min_point_dist_sqr = min(min_point_dist_sqr, cur_dist_sqr)
         cached_radius = 2 * math.sqrt(min_point_dist_sqr)
+        print "Restricted MLS radius: {}".format(cached_radius)
         
     return cached_radius
 
@@ -109,8 +111,13 @@ def optimize_layers_elastic_theano(tile_files, corr_files, image_width, image_he
     with open(corr_files[0], 'r') as f:
         actual_corr_files = [line.replace('file://', '').strip('\n') for line in f.readlines()]
 
+    conf_dict = {}
+    if conf is not None:
+        with open(conf, 'r') as f:
+            conf_dict = json.load(f)["OptimizeLayersElasticTheano"]
+
     # Create a per-layer optimized mesh
-    optimized_meshes = optimize_meshes(mesh_json, actual_corr_files, url_to_layerid, 1000)
+    optimized_meshes = optimize_meshes(mesh_json, actual_corr_files, url_to_layerid, conf_dict)
     
     # Save the output
     utils.create_dir(out_dir)
