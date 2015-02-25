@@ -42,9 +42,17 @@ parser.add_argument('--from_layer', type=int,
 parser.add_argument('--to_layer', type=int, 
                     help='the last layer to render (inclusive, default: the last layer in the data)',
                     default=-1)
+parser.add_argument('--width', type=int, 
+                    help='set the width of the rendered images (default: full image)',
+                    default=-1)
 parser.add_argument('-s', '--skip_layers', type=str, 
                     help='the range of layers (sections) that will not be processed e.g., "2,3,9-11,18" (default: no skipped sections)',
                     default=None)
+parser.add_argument('-t', '--threads', type=int, 
+                    help='the number of threads to use (default: 4)',
+                    default=4)
+parser.add_argument('--skip_bounding_box', action="store_true",
+                    help='skip the phase that computes the new bounding box (default: no)')
 
 
 
@@ -92,10 +100,13 @@ for tiles_fname in glob.glob(os.path.join(args.input_dir, '*.json')):
     all_layers.append(layer)
 
     # Update the bounding box of the section
-    print "Updating bounding box of {0}".format(tiles_fname_prefix)
-    bbox_json = os.path.join(bbox_dir, "{0}.json".format(tiles_fname_prefix))
-    if not os.path.exists(bbox_json):
-        update_bounding_box(tiles_fname, bbox_dir, args.jar_file, threads_num=4)
+    if args.skip_bounding_box:
+        bbox_json = tiles_fname
+    else:
+        print "Updating bounding box of {0}".format(tiles_fname_prefix)
+        bbox_json = os.path.join(bbox_dir, "{0}.json".format(tiles_fname_prefix))
+        if not os.path.exists(bbox_json):
+            update_bounding_box(tiles_fname, bbox_dir, args.jar_file, threads_num=args.threads)
     layer_to_bbox[layer] = bbox_json
     layer_to_json_prefix[layer] = tiles_fname_prefix
     layer_to_ts_json[layer] = tiles_fname
@@ -113,13 +124,12 @@ for i in range(len(all_layers) - 1):
                 sys.exit(1)
 
 # Normalize the sections
-normalize_coordinates([bbox_dir], norm_dir, args.jar_file)
+print [layer_to_bbox[l] for l in layer_to_bbox.keys()]
+normalize_coordinates([layer_to_bbox[l] for l in layer_to_bbox.keys()], norm_dir, args.jar_file)
 
 norm_list_file = os.path.join(args.workspace_dir, "all_norm_files.txt")
 write_list_to_file(norm_list_file, all_norm_files)
 
-
-width = 4000 # default width
 
 
 # Render each layer individually
@@ -131,13 +141,13 @@ for tiles_fname in glob.glob(os.path.join(norm_dir, '*.json')):
 
 
     # Check if it already rendered the files (don't know the output type)
-    render_out_files = glob.glob(os.path.join(args.output_dir, '{}.*'.format(tiles_fname_prefix)))
+    render_out_files = glob.glob(os.path.join(args.output_dir, '{0:0>4}_{1}.*'.format(layer, tiles_fname_prefix)))
     if len(render_out_files) > 0:
         print "Skipping rendering of layer {}, because found: {}".format(layer, render_out_files)
         continue
 
 
     print "Rendering {0}".format(tiles_fname_prefix)
-    render_3d(norm_list_file, args.output_dir, layer, layer, width, args.jar_file, threads_num=4)
+    render_3d(norm_list_file, args.output_dir, layer, layer, args.width, args.jar_file, threads_num=args.threads)
 
 
