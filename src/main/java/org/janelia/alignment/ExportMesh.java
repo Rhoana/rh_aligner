@@ -3,19 +3,15 @@ package org.janelia.alignment;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.Writer;
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.TreeMap;
 
-import mpicbg.imagefeatures.Feature;
 import mpicbg.models.SpringMesh;
 import mpicbg.models.Vertex;
 
-import org.janelia.alignment.FeatureSpec.ImageAndFeatures;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;

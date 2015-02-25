@@ -40,6 +40,8 @@ public class Transform
 		}
 		catch ( final Exception e )
 		{
+			System.out.println( "Error while parsing transformation, using IdentityModel:" );
+			e.printStackTrace();
 			return new IdentityModel();
 		}
 	}
