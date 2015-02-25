@@ -80,6 +80,8 @@ def save_optimized_meshes(tile_files, optimized_meshes, out_dir):
 def read_ts_layers(tile_files):
     url_to_layerid = {}
 
+    print "Reading tilespec files"
+
     # TODO - make sure its not a json files list
     actual_tile_urls = []
     with open(tile_files[0], 'r') as f:
