@@ -223,7 +223,7 @@ if __name__ == '__main__':
 
         if not os.path.exists(render_out_file):
             # print "Adding job for output file: {0}".format(render_out_file)
-            render_job = Render3D(bbox_and_norm_jobs, norm_list_file, args.output_dir, layer, args.scale
+            render_job = Render3D(bbox_and_norm_jobs, norm_list_file, args.output_dir, layer, args.scale,
                 args.from_x, args.from_y, args.to_x, args.to_y, args.jar_file, render_out_file, threads_num=8)
             jobs['render'].append(render_job)
 
