@@ -92,7 +92,7 @@ class Render3D(Job):
         return ['python -u',
                 os.path.join(os.environ['RENDERER'], 'scripts', 'render_3d.py'),
                 self.output_dir, self.jar_file, self.from_layer, self.to_layer, self.scale,
-                args.from_x, args.from_y, args.to_x, args.to_y, self.threads_str, self.tiles_fname]
+                self.from_x, self.from_y, self.to_x, self.to_y, self.threads_str, self.tiles_fname]
 
 
 
