@@ -6,14 +6,15 @@ from subprocess import call
 import utils
 
 
-def render_3d(tile_fnames_or_dir_fname, output_dir, from_layer, to_layer, width, jar_file, threads_num=1):
+def render_3d(tile_fnames_or_dir_fname, output_dir, from_layer, to_layer, scale, from_x, from_y, to_x, to_y, jar_file, threads_num=1):
 
 
     list_file_url = utils.path2url(tile_fnames_or_dir_fname)
 
-    java_cmd = 'java -Xmx32g -XX:ParallelGCThreads=1 -cp "{0}" org.janelia.alignment.Render3D --targetDir {1} --width {2} \
-        --threads {3} --fromLayer {4} --toLayer {5} --hide {6}'.format(\
-            jar_file, output_dir, width, threads_num, from_layer, to_layer, list_file_url)
+    java_cmd = 'java -Xmx32g -XX:ParallelGCThreads=1 -cp "{0}" org.janelia.alignment.Render3D --targetDir {1} --scale {2} \
+        --threads {3} --fromLayer {4} --toLayer {5} --fromX {6} --fromY {7} --toX {8} --toY {9} --hide {10}'.format(\
+            jar_file, output_dir, scale, threads_num, from_layer, to_layer,
+            from_x, from_y, to_x, to_y, list_file_url)
     utils.execute_shell_command(java_cmd)
 
 
@@ -37,29 +38,29 @@ def main():
     parser.add_argument('--to_layer', type=int, 
                         help='the last layer to render (inclusive, default: the last layer in the data)',
                         default=-1)
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument('-q', '--quality', type=str, choices=['full', 'default', 'fast', 'veryfast'],
-                        help='sets the output quality and resoultion')
-    group.add_argument('-w', '--width', type=int, 
-                        help='set the width of the rendered images')
+    parser.add_argument('--scale', type=float, 
+                        help='set the scale of the rendered images (default: full image)',
+                        default=1.0)
+    parser.add_argument('--from_x', type=int, 
+                        help='the left coordinate (default: 0)',
+                        default=0)
+    parser.add_argument('--from_y', type=int, 
+                        help='the top coordinate (default: 0)',
+                        default=0)
+    parser.add_argument('--to_x', type=int, 
+                        help='the right coordinate (default: full image)',
+                        default=-1)
+    parser.add_argument('--to_y', type=int, 
+                        help='the bottom coordinate (default: full image)',
+                        default=-1)
 
     args = parser.parse_args()
 
     utils.create_dir(args.output_dir)
 
-    width = 4000 # default width
-    if not args.width is None:
-        width = args.width
-    elif not args.quality is None:
-        if args.quality == 'full':
-            width = -1 # full image width
-        elif args.quality == 'fast':
-            width = 1000
-        elif args.quality == 'veryfast':
-            width = 100
-
     print "args: from_layer {0}, to_layer {1}".format(args.from_layer, args.to_layer)
-    render_3d(args.tile_files_or_dirs_fname, args.output_dir, args.from_layer, args.to_layer, width, args.jar_file, args.threads_num)
+    render_3d(args.tile_files_or_dirs_fname, args.output_dir, args.from_layer, args.to_layer, args.scale,
+        args.from_x, args.from_y, args.to_x, args.to_y, args.jar_file, args.threads_num)
 
 if __name__ == '__main__':
     main()

@@ -124,16 +124,21 @@ public class TileSpecsImage {
 		return render( layer, mipmapLevel, scale, width, height );
 
 	}
-	
+
 	public ByteProcessor render( int layer, int mipmapLevel, float scale, int width, int height ) {
-		
-		/* create a target */
-		ByteProcessor tp = new ByteProcessor( (int) ( width * scale ),
-				(int) ( height * scale ) );
 		
 		// Create an offset according to the bounding box
 		final int offsetX = 0; //boundingBox.getStartPoint().getX();
 		final int offsetY = 0; //boundingBox.getStartPoint().getY();
+		
+		return render( layer, mipmapLevel, scale, width, height, offsetX, offsetY );
+	}
+	
+	public ByteProcessor render( int layer, int mipmapLevel, float scale, int width, int height, int offsetX, int offsetY ) {
+		
+		/* create a target */
+		ByteProcessor tp = new ByteProcessor( (int) ( width * scale ),
+				(int) ( height * scale ) );
 		
 		for ( TileSpec ts : tileSpecs ) {
 

@@ -40,8 +40,8 @@ public class Render3D {
         @Parameter( names = "--threads", description = "Number of threads to be used", required = false )
         public int numThreads = Runtime.getRuntime().availableProcessors();
 
-        @Parameter( names = "--width", description = "The width of the output image (considering all sections)", required = false )
-        public int width = 2500;
+        @Parameter( names = "--scale", description = "The scale of the output image (considering all sections)", required = false )
+        public double scale = 1.0f;
 
         @Parameter( names = "--fromLayer", description = "The layer to start the optimization from (default: first layer in the tile specs data)", required = false )
         private int fromLayer = -1;
@@ -54,6 +54,18 @@ public class Render3D {
 
         @Parameter( names = "--targetDir", description = "The directory to save the output files to (default: no saving)", required = false )
         public String targetDir = null;
+
+        @Parameter( names = "--fromX", description = "Target image left coordinate", required = false )
+        public int fromX = 0;
+        
+        @Parameter( names = "--fromY", description = "Target image top coordinate", required = false )
+        public int fromY = 0;
+        
+        @Parameter( names = "--toX", description = "Target image right coordinate", required = false )
+        public int toX = -1;
+        
+        @Parameter( names = "--toY", description = "Target image bottom coordinate", required = false )
+        public int toY = -1;
 
 	}
 	
@@ -86,9 +98,14 @@ public class Render3D {
 
 	private static ImagePlus renderLayerImage( TileSpecsImage image, double scale, int layer, int entireWidth, int entireHeight )
 	{
+		return renderLayerImage( image, scale, layer, entireWidth, entireHeight, 0, 0 );
+	}
+	
+	private static ImagePlus renderLayerImage( TileSpecsImage image, double scale, int layer, int entireWidth, int entireHeight, int fromX, int fromY )
+	{
 		System.out.println( "Showing layer: " + layer );
 		
-		ByteProcessor tp = image.render( layer, 0, (float) scale, entireWidth, entireHeight );
+		ByteProcessor tp = image.render( layer, 0, (float) scale, entireWidth, entireHeight, fromX, fromY );
 		ImagePlus curLayer = new ImagePlus( "Layer " + layer, tp );
 		return curLayer;
 	}
@@ -147,18 +164,17 @@ public class Render3D {
 		if ( bbox.getStartPoint().getY() > 0 )
 			entireImageHeight += bbox.getStartPoint().getY();
 		
+		if ( params.toX != -1 )
+			entireImageWidth = params.toX - params.fromX;
+
+		if ( params.toY != -1 )
+			entireImageHeight = params.toY - params.fromY;
+
 		// Compute the initial scale (initialWidth pixels wide), round with a 2 digits position
-		double scale;
-		if ( params.width == -1 )
-			scale = 1.0;
-		else
-		{
-			scale = Math.round( ( (double)params.width / entireImageWidth ) * 100.0 ) / 100.0;
-			scale = Math.min( scale, 1.0 );
-		}
+		params.scale = Math.min( params.scale, 1.0 );
 		
-		System.out.println( "Scale is: " + scale );
-		System.out.println( "Scaled width: " + (entireImageWidth * scale) + ", height: " + (entireImageHeight * scale) );
+		System.out.println( "Scale is: " + params.scale );
+		System.out.println( "Scaled width: " + (entireImageWidth * params.scale) + ", height: " + (entireImageHeight * params.scale) );
 		
 		// Render the first layer
 		int firstLayer = params.fromLayer;
@@ -182,9 +198,9 @@ public class Render3D {
 					continue;
 
 				final int curLayer = i;
-				final double curScale = scale;
+				final double curScale = params.scale;
 
-				final ImagePlus image = renderLayerImage( entireImage, curScale, curLayer, entireImageWidth, entireImageHeight );
+				final ImagePlus image = renderLayerImage( entireImage, curScale, curLayer, entireImageWidth, entireImageHeight, params.fromX, params.fromY );
 				if ( !params.hide )
 					image.show();
 				if ( params.targetDir != null )
@@ -210,9 +226,9 @@ public class Render3D {
 					continue;
 
 				final int curLayer = i;
-				final double curScale = scale;
+				final double curScale = params.scale;
 
-				final ImagePlus image = renderLayerImage( entireImage, curScale, curLayer, entireImageWidth, entireImageHeight );
+				final ImagePlus image = renderLayerImage( entireImage, curScale, curLayer, entireImageWidth, entireImageHeight, params.fromX, params.fromY );
 				if ( !params.hide )
 					image.show();
 				if ( params.targetDir != null )

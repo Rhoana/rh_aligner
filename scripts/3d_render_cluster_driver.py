@@ -65,7 +65,7 @@ class NormalizeCoordinates(Job):
 
 
 class Render3D(Job):
-    def __init__(self, dependencies, tiles_fname, output_dir, layer, quality_width, jar_file, output_file, threads_num=1):
+    def __init__(self, dependencies, tiles_fname, output_dir, layer, scale, from_x, from_y, to_x, to_y, jar_file, output_file, threads_num=1):
         Job.__init__(self)
         self.already_done = False
         self.tiles_fname = '"{0}"'.format(tiles_fname)
@@ -74,7 +74,11 @@ class Render3D(Job):
         # Make the from-layer and to-layer the same layer
         self.from_layer = '--from_layer {0}'.format(layer)
         self.to_layer = '--to_layer {0}'.format(layer)
-        self.quality_width = quality_width
+        self.scale = '--scale {0}'.format(scale)
+        self.from_x = '--from_x {0}'.format(from_x)
+        self.from_y = '--from_y {0}'.format(from_y)
+        self.to_x = '--to_x {0}'.format(to_x)
+        self.to_y = '--to_y {0}'.format(to_y)
         self.dependencies = dependencies
         self.threads = threads_num
         self.threads_str = "-t {0}".format(threads_num)
@@ -87,7 +91,8 @@ class Render3D(Job):
     def command(self):
         return ['python -u',
                 os.path.join(os.environ['RENDERER'], 'scripts', 'render_3d.py'),
-                self.output_dir, self.jar_file, self.from_layer, self.to_layer, self.quality_width, self.threads_str, self.tiles_fname]
+                self.output_dir, self.jar_file, self.from_layer, self.to_layer, self.scale,
+                args.from_x, args.from_y, args.to_x, args.to_y, self.threads_str, self.tiles_fname]
 
 
 
@@ -112,16 +117,26 @@ if __name__ == '__main__':
     parser.add_argument('-j', '--jar_file', type=str, 
                         help='the jar file that includes the render (default: ../target/render-0.0.1-SNAPSHOT.jar)',
                         default='../target/render-0.0.1-SNAPSHOT.jar')
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument('--quality', type=str, choices=['full', 'default', 'fast', 'veryfast'],
-                        help='sets the output quality and resoultion')
-    group.add_argument('--width', type=int, 
-                        help='set the width of the rendered images')
+    parser.add_argument('--scale', type=float, 
+                        help='set the scale of the rendered images (default: full image)',
+                        default=1.0)
     parser.add_argument('--from_layer', type=int, 
                         help='the layer to start from (inclusive, default: the first layer in the data)',
                         default=-1)
     parser.add_argument('--to_layer', type=int, 
                         help='the last layer to render (inclusive, default: the last layer in the data)',
+                        default=-1)
+    parser.add_argument('--from_x', type=int, 
+                        help='the left coordinate (default: 0)',
+                        default=0)
+    parser.add_argument('--from_y', type=int, 
+                        help='the top coordinate (default: 0)',
+                        default=0)
+    parser.add_argument('--to_x', type=int, 
+                        help='the right coordinate (default: full image)',
+                        default=-1)
+    parser.add_argument('--to_y', type=int, 
+                        help='the bottom coordinate (default: full image)',
                         default=-1)
     parser.add_argument('-k', '--keeprunning', action='store_true', 
                         help='Run all jobs and report cluster jobs execution stats')
@@ -134,13 +149,6 @@ if __name__ == '__main__':
 
     assert 'RENDERER' in os.environ
     #assert 'VIRTUAL_ENV' in os.environ
-
-    quality_width = ''
-    if not args.width is None:
-        quality_width = '--width {0}'.format(args.width)
-    elif not args.quality is None:
-        quality_width = '--quality {0}'.format(args.quality)
-
 
     # create a workspace directory if not found
     create_dir(args.workspace_dir)
@@ -215,7 +223,8 @@ if __name__ == '__main__':
 
         if not os.path.exists(render_out_file):
             # print "Adding job for output file: {0}".format(render_out_file)
-            render_job = Render3D(bbox_and_norm_jobs, norm_list_file, args.output_dir, layer, quality_width, args.jar_file, render_out_file, threads_num=8)
+            render_job = Render3D(bbox_and_norm_jobs, norm_list_file, args.output_dir, layer, args.scale
+                args.from_x, args.from_y, args.to_x, args.to_y, args.jar_file, render_out_file, threads_num=8)
             jobs['render'].append(render_job)
 
 

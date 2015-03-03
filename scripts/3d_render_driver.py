@@ -42,9 +42,9 @@ parser.add_argument('--from_layer', type=int,
 parser.add_argument('--to_layer', type=int, 
                     help='the last layer to render (inclusive, default: the last layer in the data)',
                     default=-1)
-parser.add_argument('--width', type=int, 
-                    help='set the width of the rendered images (default: full image)',
-                    default=-1)
+parser.add_argument('--scale', type=float, 
+                    help='set the scale of the rendered images (default: full image)',
+                    default=1.0)
 parser.add_argument('-s', '--skip_layers', type=str, 
                     help='the range of layers (sections) that will not be processed e.g., "2,3,9-11,18" (default: no skipped sections)',
                     default=None)
@@ -53,6 +53,18 @@ parser.add_argument('-t', '--threads', type=int,
                     default=4)
 parser.add_argument('--skip_bounding_box', action="store_true",
                     help='skip the phase that computes the new bounding box (default: no)')
+parser.add_argument('--from_x', type=int, 
+                    help='the left coordinate (default: 0)',
+                    default=0)
+parser.add_argument('--from_y', type=int, 
+                    help='the top coordinate (default: 0)',
+                    default=0)
+parser.add_argument('--to_x', type=int, 
+                    help='the right coordinate (default: full image)',
+                    default=-1)
+parser.add_argument('--to_y', type=int, 
+                    help='the bottom coordinate (default: full image)',
+                    default=-1)
 
 
 
@@ -148,6 +160,7 @@ for tiles_fname in glob.glob(os.path.join(norm_dir, '*.json')):
 
 
     print "Rendering {0}".format(tiles_fname_prefix)
-    render_3d(norm_list_file, args.output_dir, layer, layer, args.width, args.jar_file, threads_num=args.threads)
+    render_3d(norm_list_file, args.output_dir, layer, layer, args.scale,
+        args.from_x, args.from_y, args.to_x, args.to_y, args.jar_file, threads_num=args.threads)
 
 
