@@ -75,7 +75,7 @@ def match_sift_features_and_filter(tiles_file, features_file, out_fname, jar_fil
     #         idx2 = feature_indices[imageUrl2]
     #         indices.append((idx1, idx2))
 
-    match_multiple_sift_features_and_filter(tiles_file, features_file, jar_file, out_fname, index_pairs=None, conf_fname=conf_fname, threads_num=None)
+    match_multiple_sift_features_and_filter(tiles_file, features_file, jar_file, out_fname, index_pairs=None, conf_fname=conf_fname, threads_num=threads_num)
 
 def main():
     # Command line parser
