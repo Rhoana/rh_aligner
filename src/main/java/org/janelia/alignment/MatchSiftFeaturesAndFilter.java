@@ -371,50 +371,72 @@ public class MatchSiftFeaturesAndFilter {
 		
 		final CorrespondenceSpec[] corr_data = new CorrespondenceSpec[ params.indices.size() ];
 
-
-		// Initialize threads
-        final ExecutorService exec = Executors.newFixedThreadPool( params.numThreads );
-        final ArrayList< Future< ? > > tasks = new ArrayList< Future< ? > >();
-		
-        int counter = 0;
-		for (String idx_pair : params.indices) {
-			
-			String[] vals = idx_pair.split(":");
-			if (vals.length != 2)
-				throw new IllegalArgumentException("Index pair not in correct format:" + idx_pair);
-			final int idx1 = Integer.parseInt(vals[0]);
-			final int idx2 = Integer.parseInt(vals[1]);
-			
-			final int curCounter = counter;
-			tasks.add( exec.submit( new Runnable() {
-
-				@Override
-				public void run() {
-					CorrespondenceSpec corrSpec = matchAndFilter(
-							idx1, idx2,
-							tileSpecs, featureSpecs,
-							params );
-
-					corr_data[ curCounter ] = corrSpec;
-				}
-			}));
-
-			counter++;
-		}
-
-		for ( Future< ? > task : tasks )
+		if ( params.numThreads == 1 )
 		{
-			try {
-				task.get();
-			} catch (InterruptedException e) {
-				exec.shutdownNow();
-				e.printStackTrace();
-			} catch (ExecutionException e) {
-				exec.shutdownNow();
-				e.printStackTrace();
+	        int counter = 0;
+			for (String idx_pair : params.indices) {
+				
+				String[] vals = idx_pair.split(":");
+				if (vals.length != 2)
+					throw new IllegalArgumentException("Index pair not in correct format:" + idx_pair);
+				final int idx1 = Integer.parseInt(vals[0]);
+				final int idx2 = Integer.parseInt(vals[1]);
+				
+				CorrespondenceSpec corrSpec = matchAndFilter(
+						idx1, idx2,
+						tileSpecs, featureSpecs,
+						params );
+
+				corr_data[ counter ] = corrSpec;
+				counter++;
 			}
 		}
-		exec.shutdown();
+		else
+		{
+			// Initialize threads
+	        final ExecutorService exec = Executors.newFixedThreadPool( params.numThreads );
+	        final ArrayList< Future< ? > > tasks = new ArrayList< Future< ? > >();
+			
+	        int counter = 0;
+			for (String idx_pair : params.indices) {
+				
+				String[] vals = idx_pair.split(":");
+				if (vals.length != 2)
+					throw new IllegalArgumentException("Index pair not in correct format:" + idx_pair);
+				final int idx1 = Integer.parseInt(vals[0]);
+				final int idx2 = Integer.parseInt(vals[1]);
+				
+				final int curCounter = counter;
+				tasks.add( exec.submit( new Runnable() {
+	
+					@Override
+					public void run() {
+						CorrespondenceSpec corrSpec = matchAndFilter(
+								idx1, idx2,
+								tileSpecs, featureSpecs,
+								params );
+	
+						corr_data[ curCounter ] = corrSpec;
+					}
+				}));
+	
+				counter++;
+			}
+	
+			for ( Future< ? > task : tasks )
+			{
+				try {
+					task.get();
+				} catch (InterruptedException e) {
+					exec.shutdownNow();
+					e.printStackTrace();
+				} catch (ExecutionException e) {
+					exec.shutdownNow();
+					e.printStackTrace();
+				}
+			}
+			exec.shutdown();
+		}
 		
 		if (corr_data.length > 0) {
 			try {
