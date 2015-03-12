@@ -12,7 +12,7 @@ import utils
 
 
 
-def match_multiple_sift_features_and_filter(tiles_file, features_file, jar, out_fname, index_pairs=None, conf_fname=None):
+def match_multiple_sift_features_and_filter(tiles_file, features_file, jar, out_fname, index_pairs=None, conf_fname=None, threads_num=None):
     tiles_url = utils.path2url(os.path.abspath(tiles_file))
 
     conf_args = utils.conf_args_from_file(conf_fname, 'MatchSiftFeaturesAndFilter')
@@ -20,12 +20,18 @@ def match_multiple_sift_features_and_filter(tiles_file, features_file, jar, out_
     if index_pairs is not None:
         indices = " ".join("--indices {}:{}".format(a, b) for a, b in index_pairs)
 
-    java_cmd = 'java -Xmx6g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.MatchSiftFeaturesAndFilter --tilespecfile {1} --featurefile {2} {3} --targetPath {4} {5}'.format(
+    threads_str = ""
+    if threads_num != None:
+        threads_str = "--threads {0}".format(threads_num)
+
+    java_cmd = 'java -Xmx10g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.MatchSiftFeaturesAndFilter \
+            --tilespecfile {1} --featurefile {2} {3} --targetPath {4} {5} {6}'.format(
         jar,
         tiles_url,
         features_file,
         indices,
         out_fname,
+        threads_str,
         conf_args)
     utils.execute_shell_command(java_cmd)
 
@@ -42,7 +48,7 @@ def load_data_files(tile_file, features_file):
     return tilespecs, {ft["mipmapLevels"]["0"]["imageUrl"] : idx for idx, ft in enumerate(features)}
 
 
-def match_sift_features_and_filter(tiles_file, features_file, out_fname, jar_file, conf_fname=None):
+def match_sift_features_and_filter(tiles_file, features_file, out_fname, jar_file, conf_fname=None, threads_num=None):
 
     # tilespecs, feature_indices = load_data_files(tiles_file, features_file)
     # for k, v in feature_indices.iteritems():
@@ -69,7 +75,7 @@ def match_sift_features_and_filter(tiles_file, features_file, out_fname, jar_fil
     #         idx2 = feature_indices[imageUrl2]
     #         indices.append((idx1, idx2))
 
-    match_multiple_sift_features_and_filter(tiles_file, features_file, jar_file, out_fname, index_pairs=None, conf_fname=conf_fname)
+    match_multiple_sift_features_and_filter(tiles_file, features_file, jar_file, out_fname, index_pairs=None, conf_fname=conf_fname, threads_num=None)
 
 def main():
     # Command line parser
@@ -90,6 +96,9 @@ def main():
     parser.add_argument('-w', '--wait_time', type=int, 
                         help='the time to wait since the last modification date of the features_file (default: None)',
                         default=0)
+    parser.add_argument('-t', '--threads_num', type=int, 
+                        help='the number of threads to use (default: the number of cores in the system)',
+                        default=None)
 
 
     args = parser.parse_args()
@@ -98,7 +107,7 @@ def main():
     utils.wait_after_file(args.features_file, args.wait_time)
 
     match_sift_features_and_filter(args.tiles_file, args.features_file, args.output_file, args.jar_file, \
-        conf_fname=args.conf_file_name)
+        conf_fname=args.conf_file_name, threads_num=args.threads_num)
 
 
 if __name__ == '__main__':

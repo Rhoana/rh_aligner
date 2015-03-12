@@ -11,6 +11,10 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import mpicbg.ij.FeatureTransform;
 import mpicbg.imagefeatures.Feature;
@@ -142,6 +146,117 @@ public class MatchSiftFeaturesAndFilter {
 		return false;
 	}
 	
+	private static CorrespondenceSpec matchAndFilter(
+			final int idx1,
+			final int idx2,
+			final TileSpec[] tileSpecs,
+			final FeatureSpec[] featureSpecs,
+			final Params params )
+	{
+		final int mipmapLevel = 0;
+		
+		final ImageAndFeatures iaf1 = featureSpecs[idx1].getMipmapImageAndFeatures( mipmapLevel );
+		final ImageAndFeatures iaf2 = featureSpecs[idx2].getMipmapImageAndFeatures( mipmapLevel );
+
+		final List< Feature > fs1 = iaf1.featureList;
+		final List< Feature > fs2 = iaf2.featureList;
+
+
+		final List< PointMatch > candidates = new ArrayList< PointMatch >();
+		//FeatureTransform.matchFeatures( fs2, fs1, candidates, params.rod );
+		FeatureTransform.matchFeatures( fs1, fs2, candidates, params.rod );
+
+		
+		/* scale the candidates */
+		final CoordinateTransformList< CoordinateTransform > ctl1 = tileSpecs[idx1].createTransformList();
+		final CoordinateTransformList< CoordinateTransform > ctl2 = tileSpecs[idx2].createTransformList();
+		for ( final PointMatch pm : candidates )
+		{
+			final Point p1 = pm.getP1();
+			final Point p2 = pm.getP2();
+							
+			final float[] l1 = p1.getL();
+			final float[] w1 = p1.getW();
+			final float[] l2 = p2.getL();
+			final float[] w2 = p2.getW();
+
+			// Apply original transformations on the candidates
+			l1[ 0 ] *= 1.0 / iaf1.scale;
+			l1[ 1 ] *= 1.0 / iaf1.scale;
+			w1[ 0 ] *= 1.0 / iaf1.scale;
+			w1[ 1 ] *= 1.0 / iaf1.scale;
+			ctl1.applyInPlace( w1 );
+			l2[ 0 ] *= 1.0 / iaf2.scale;
+			l2[ 1 ] *= 1.0 / iaf2.scale;
+			w2[ 0 ] *= 1.0 / iaf2.scale;
+			w2[ 1 ] *= 1.0 / iaf2.scale;
+			ctl2.applyInPlace( w2 );
+
+			System.out.println( "* Candidate: L(" + l1[0] + "," + l1[1] + ") -> L(" + l2[0] + "," + l2[1] + ")" );
+
+			// Scale the candidates by some parameter scale
+			l1[ 0 ] *= params.tileScale;
+			l1[ 1 ] *= params.tileScale;
+			w1[ 0 ] *= params.tileScale;
+			w1[ 1 ] *= params.tileScale;
+			l2[ 0 ] *= params.tileScale;
+			l2[ 1 ] *= params.tileScale;
+			w2[ 0 ] *= params.tileScale;
+			w2[ 1 ] *= params.tileScale;
+		}
+
+		/* Filter the matches */
+        /* find the model */
+		
+		final Model< ? > model = Utils.createModel( params.modelIndex );
+		
+//		final AbstractAffineModel2D< ? > model;
+//		switch ( p.expectedModelIndex )
+//		{
+//		case 0:
+//			model = new TranslationModel2D();
+//			break;
+//		case 1:
+//			model = new RigidModel2D();
+//			break;
+//		case 2:
+//			model = new SimilarityModel2D();
+//			break;
+//		case 3:
+//			model = new AffineModel2D();
+//			break;
+//		default:
+//			return;
+//		}
+//
+
+		//List< PointMatch > inliers = candidates;
+		final List< PointMatch > inliers = new ArrayList< PointMatch >();
+
+
+		final boolean modelFound = findModel(
+				model,
+				candidates,
+				inliers,
+				params.maxEpsilon,
+				params.minInlierRatio,
+				params.minNumInliers,
+				params.rejectIdentity,
+				params.identityTolerance );
+
+
+		if ( modelFound )
+			System.out.println( "Model found for tiles at indices: " + iaf1.imageUrl + " and " + iaf2.imageUrl + ":\n  correspondences  " + inliers.size() + " of " + candidates.size() + "\n  average residual error  " + model.getCost() + " px" );
+		else
+			System.out.println( "No model found for tiles at indices: " + iaf1.imageUrl + " and " + iaf2.imageUrl + "\":\n  correspondence candidates  " + candidates.size() );
+		
+		return new CorrespondenceSpec(mipmapLevel,
+				iaf1.imageUrl,
+				iaf2.imageUrl,
+				inliers,
+				Transform.createTransform( model ) );
+	}
+	
 	public static void main( final String[] args )
 	{
 
@@ -221,8 +336,6 @@ public class MatchSiftFeaturesAndFilter {
 			return;
 		}
 
-		List< CorrespondenceSpec > corr_data = new ArrayList< CorrespondenceSpec >();
-
 		if ( params.all ) {
 			// Create a map between a tilespec url and its corresponding feature index
 			HashMap< String, Integer > tsToFeatureIdx = new HashMap< String, Integer >();
@@ -256,116 +369,54 @@ public class MatchSiftFeaturesAndFilter {
 			}
 		}
 		
+		final CorrespondenceSpec[] corr_data = new CorrespondenceSpec[ params.indices.size() ];
+
+
+		// Initialize threads
+        final ExecutorService exec = Executors.newFixedThreadPool( params.numThreads );
+        final ArrayList< Future< ? > > tasks = new ArrayList< Future< ? > >();
+		
+        int counter = 0;
 		for (String idx_pair : params.indices) {
+			
 			String[] vals = idx_pair.split(":");
 			if (vals.length != 2)
 				throw new IllegalArgumentException("Index pair not in correct format:" + idx_pair);
-			int idx1 = Integer.parseInt(vals[0]);
-			int idx2 = Integer.parseInt(vals[1]);
+			final int idx1 = Integer.parseInt(vals[0]);
+			final int idx2 = Integer.parseInt(vals[1]);
 			
-			final ImageAndFeatures iaf1 = featureSpecs[idx1].getMipmapImageAndFeatures( mipmapLevel );
-			final ImageAndFeatures iaf2 = featureSpecs[idx2].getMipmapImageAndFeatures( mipmapLevel );
+			final int curCounter = counter;
+			tasks.add( exec.submit( new Runnable() {
 
-			final List< Feature > fs1 = iaf1.featureList;
-			final List< Feature > fs2 = iaf2.featureList;
+				@Override
+				public void run() {
+					CorrespondenceSpec corrSpec = matchAndFilter(
+							idx1, idx2,
+							tileSpecs, featureSpecs,
+							params );
 
+					corr_data[ curCounter ] = corrSpec;
+				}
+			}));
 
-			final List< PointMatch > candidates = new ArrayList< PointMatch >();
-			//FeatureTransform.matchFeatures( fs2, fs1, candidates, params.rod );
-			FeatureTransform.matchFeatures( fs1, fs2, candidates, params.rod );
-
-			
-			/* scale the candidates */
-			final CoordinateTransformList< CoordinateTransform > ctl1 = tileSpecs[idx1].createTransformList();
-			final CoordinateTransformList< CoordinateTransform > ctl2 = tileSpecs[idx2].createTransformList();
-			for ( final PointMatch pm : candidates )
-			{
-				final Point p1 = pm.getP1();
-				final Point p2 = pm.getP2();
-								
-				final float[] l1 = p1.getL();
-				final float[] w1 = p1.getW();
-				final float[] l2 = p2.getL();
-				final float[] w2 = p2.getW();
-
-				// Apply original transformations on the candidates
-				l1[ 0 ] *= 1.0 / iaf1.scale;
-				l1[ 1 ] *= 1.0 / iaf1.scale;
-				w1[ 0 ] *= 1.0 / iaf1.scale;
-				w1[ 1 ] *= 1.0 / iaf1.scale;
-				ctl1.applyInPlace( w1 );
-				l2[ 0 ] *= 1.0 / iaf2.scale;
-				l2[ 1 ] *= 1.0 / iaf2.scale;
-				w2[ 0 ] *= 1.0 / iaf2.scale;
-				w2[ 1 ] *= 1.0 / iaf2.scale;
-				ctl2.applyInPlace( w2 );
-
-				System.out.println( "* Candidate: L(" + l1[0] + "," + l1[1] + ") -> L(" + l2[0] + "," + l2[1] + ")" );
-
-				// Scale the candidates by some parameter scale
-				l1[ 0 ] *= params.tileScale;
-				l1[ 1 ] *= params.tileScale;
-				w1[ 0 ] *= params.tileScale;
-				w1[ 1 ] *= params.tileScale;
-				l2[ 0 ] *= params.tileScale;
-				l2[ 1 ] *= params.tileScale;
-				w2[ 0 ] *= params.tileScale;
-				w2[ 1 ] *= params.tileScale;
-			}
-
-			/* Filter the matches */
-            /* find the model */
-			
-			final Model< ? > model = Utils.createModel( params.modelIndex );
-			
-//			final AbstractAffineModel2D< ? > model;
-//			switch ( p.expectedModelIndex )
-//			{
-//			case 0:
-//				model = new TranslationModel2D();
-//				break;
-//			case 1:
-//				model = new RigidModel2D();
-//				break;
-//			case 2:
-//				model = new SimilarityModel2D();
-//				break;
-//			case 3:
-//				model = new AffineModel2D();
-//				break;
-//			default:
-//				return;
-//			}
-//
-
-			//List< PointMatch > inliers = candidates;
-			
-			List< PointMatch > inliers = new ArrayList< PointMatch >();
-			
-			final boolean modelFound = findModel(
-					model,
-					candidates,
-					inliers,
-					params.maxEpsilon,
-					params.minInlierRatio,
-					params.minNumInliers,
-					params.rejectIdentity,
-					params.identityTolerance );
-
-
-			if ( modelFound )
-				System.out.println( "Model found for tiles at indices: " + iaf1.imageUrl + " and " + iaf2.imageUrl + ":\n  correspondences  " + inliers.size() + " of " + candidates.size() + "\n  average residual error  " + model.getCost() + " px" );
-			else
-				System.out.println( "No model found for tiles at indices: " + iaf1.imageUrl + " and " + iaf2.imageUrl + "\":\n  correspondence candidates  " + candidates.size() );
-			
-			corr_data.add(new CorrespondenceSpec(mipmapLevel,
-					iaf1.imageUrl,
-					iaf2.imageUrl,
-					inliers,
-					Transform.createTransform( model ) ));
+			counter++;
 		}
 
-		if (corr_data.size() > 0) {
+		for ( Future< ? > task : tasks )
+		{
+			try {
+				task.get();
+			} catch (InterruptedException e) {
+				exec.shutdownNow();
+				e.printStackTrace();
+			} catch (ExecutionException e) {
+				exec.shutdownNow();
+				e.printStackTrace();
+			}
+		}
+		exec.shutdown();
+		
+		if (corr_data.length > 0) {
 			try {
 				Writer writer = new FileWriter(params.targetPath);
 				//Gson gson = new GsonBuilder().create();

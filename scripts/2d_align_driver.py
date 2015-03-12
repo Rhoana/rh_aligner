@@ -79,7 +79,7 @@ if not os.path.exists(sifts_json):
 match_json = os.path.join(args.workspace_dir, "{0}_sift_matches.json".format(tiles_fname_prefix))
 if not os.path.exists(match_json):
     #match_sift_features(filter_json, sifts_json, match_json, args.jar_file, conf)
-    match_sift_features_and_filter(filter_json, sifts_json, match_json, args.jar_file, args.conf_file_name)
+    match_sift_features_and_filter(filter_json, sifts_json, match_json, args.jar_file, args.conf_file_name, threads_num=args.threads_num)
 
 # optimize the 2d layer montage
 optmon_fname = os.path.join(args.workspace_dir, "{0}_optimized_montage.json".format(tiles_fname_prefix))
