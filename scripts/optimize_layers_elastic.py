@@ -25,7 +25,8 @@ def optimize_layers_elastic(tile_files, corr_files, image_width, image_height, f
     if manual_matches is not None:
         manual_matches_str = " ".join("--manualMatches {}".format(a) for a in manual_matches)
 
-    java_cmd = 'java -Xmx96g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.OptimizeLayersElastic --tilespecFiles {1} --corrFiles {2} \
+    # Assuming that at least 4 threads will be allocated for this job, and increasing the number of gc threads to 4 will make it faster
+    java_cmd = 'java -Xmx96g -XX:ParallelGCThreads=4 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.OptimizeLayersElastic --tilespecFiles {1} --corrFiles {2} \
             {3} {4} --imageWidth {5} --imageHeight {6} --threads {7} --maxLayersDistance {8} {9} --targetDir {10} {11}'.format(
         jar_file,
         " ".join(utils.path2url(f) for f in tile_files),

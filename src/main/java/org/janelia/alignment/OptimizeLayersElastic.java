@@ -31,6 +31,7 @@ import mpicbg.models.RigidModel2D;
 import mpicbg.models.SimilarityModel2D;
 import mpicbg.models.Spring;
 import mpicbg.models.SpringMesh;
+import mpicbg.models.SpringMeshConcurrent;
 import mpicbg.models.Tile;
 import mpicbg.models.TranslationModel2D;
 import mpicbg.models.Vertex;
@@ -743,6 +744,7 @@ public class OptimizeLayersElastic {
 				
 				@Override
 				public void run() {
+					System.out.println( "Thread matching layers: [" + fromIndex + ", " + lastIndex + ")" );
 					for ( int layerA = fromIndex; layerA < lastIndex; layerA++ )
 					{
 						//if ( skippedLayers.contains( layerA ) || !layersCorrs.containsKey( layerA ) )
@@ -1006,11 +1008,12 @@ public class OptimizeLayersElastic {
 			if ( param.useLegacyOptimizer )
 			{
 				System.out.println( "  ...using legacy optimizer...");
-				SpringMesh.optimizeMeshes2(
+				SpringMeshConcurrent.optimizeMeshes2(
 						meshes,
 						param.maxEpsilon * param.layerScale,
 						param.maxIterationsSpringMesh,
-						param.maxPlateauwidthSpringMesh );
+						param.maxPlateauwidthSpringMesh,
+						param.numThreads );
 			}
 			else
 			{
