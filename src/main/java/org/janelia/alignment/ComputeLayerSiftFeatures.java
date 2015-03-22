@@ -67,7 +67,7 @@ public class ComputeLayerSiftFeatures {
 //        public int res = 64;
 
         @Parameter( names = "--scale", description = "Layer scale (if given, avoids automatic layer scale)", required = false )
-        public float scale = -1.0f;
+        public float scale = 1.0f;
 
 	}
 	

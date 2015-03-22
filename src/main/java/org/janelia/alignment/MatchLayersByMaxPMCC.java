@@ -208,6 +208,30 @@ public class MatchLayersByMaxPMCC {
 		return tp.convertToFloatProcessor();
 	}
 
+	/**
+	 * Receives a single layer, applies the transformations, and outputs the ip and mask
+	 * of the given level (render the ip and ipMask)
+	 * 
+	 * @param layerTileSpecs
+	 * @param ip
+	 * @param ipMask
+	 * @param mipmapLevel
+	 */
+	private static ByteProcessor tilespecToByteAndMask(
+			final TileSpecsImage layerTileSpecsImage,
+			final int layer,
+			final int mipmapLevel,
+			final float layerScale,
+			final String meshesDir )
+	{
+		final ByteProcessor tp;
+		if ( meshesDir == null )
+			tp = layerTileSpecsImage.render( layer, mipmapLevel, layerScale );
+		else
+			tp = layerTileSpecsImage.renderFromMeshes( meshesDir, layer, mipmapLevel, layerScale );
+		return tp;
+	}
+
 /*
 	private static Tile< ? >[] createLayersModels( int layersNum, int desiredModelIndex )
 	{
@@ -354,8 +378,8 @@ public class MatchLayersByMaxPMCC {
 		// TODO: load the tile specs to FloatProcessor objects
 		final FloatProcessor ip1 = tilespecToFloatAndMask( layer1Img, layer1, mipmapLevel, param.layerScale, param.meshesDir1 );
 		final FloatProcessor ip2 = tilespecToFloatAndMask( layer2Img, layer2, mipmapLevel, param.layerScale, param.meshesDir2 );
-//			tilespecToFloatAndMask( layer1Img, layer1, ip1, ip1Mask, mipmapLevel, param.layerScale, param.meshesDir1 );
-//			tilespecToFloatAndMask( layer2Img, layer2, ip2, ip2Mask, mipmapLevel, param.layerScale, param.meshesDir2 );
+//		final ByteProcessor ip1 = tilespecToByteAndMask( layer1Img, layer1, mipmapLevel, param.layerScale, param.meshesDir1 );
+//		final ByteProcessor ip2 = tilespecToByteAndMask( layer2Img, layer2, mipmapLevel, param.layerScale, param.meshesDir2 );
 		endTime = System.currentTimeMillis();
 		if ( PRINT_TIME_PER_STEP )
 			System.out.println("Creating images took: " + ((endTime - startTime) / 1000.0) + " sec");
