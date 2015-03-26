@@ -21,11 +21,10 @@ stepsize = 0.1
 
 class MeshParser(object):
     mesh = None
-    kdt = None # for the Neighbors
+    kdt = None  # for the Neighbors
     pts = None
     rowcols = None
     layer_scale = None
-
 
     def __init__(self, mesh_file):
         # load the mesh
@@ -35,7 +34,7 @@ class MeshParser(object):
         self.layer_scale = float(self.mesh["layerScale"])
 
         print "# points in base mesh", self.pts.shape[0]
-     
+
         mesh_p_x = self.pts[:, 0]
         mesh_p_y = self.pts[:, 1]
         self.long_row_min_x = min(mesh_p_x)
@@ -91,8 +90,6 @@ class MeshParser(object):
                 dists[i][tris_y < self.short_row_max_y] = 0.0
                 surround_indices[i][tris_y < self.short_row_max_y] = surround_indices[i][0]
 
-
-
         return dists, surround_indices
 
     def query_cross(self, points, k):
@@ -101,9 +98,7 @@ class MeshParser(object):
         and all others wil have distance -1, and location [-1, -1]"""
         dists, surround_indices = self.kdt.query(points, k)
 
-
         return dists, surround_indices
-
 
 
 # Original huber function (Huber's M-estimator from http://www.statisticalconsultants.co.nz/blog/m-estimators.html)
@@ -112,7 +107,6 @@ def huber(target, output, delta):
     d = target - output
     a = .5 * d ** 2
     b = delta * (abs(d) - delta / 2.)
-    #b = .5 * delta ** 2
     l = T.switch(abs(d) <= delta, a, b)
     return l.sum()
 
@@ -120,10 +114,8 @@ def huber(target, output, delta):
 # Based on Tukey's bisquare M-estimator function (Tukey's bisquare M-estimator from http://www.statisticalconsultants.co.nz/blog/m-estimators.html)
 def bisquare(target, output, c):
     z_i = target - output
-    #a = (3 * c ** 4 * z_i ** 2 - 3 * c ** 2 * z_i ** 4 + z_i ** 6) / 6.
     a = (c ** 6 - (c ** 2 - z_i ** 2) ** 3) / 6.
     b = (c ** 6) / 6.
-    #b = 0
     l = T.switch(abs(z_i) <= c, a, b)
     return l.sum()
 
@@ -135,14 +127,12 @@ def link_cost(lengths, weight, winsor, rest_length):
     '''
 
     return weight * huber(lengths, rest_length, winsor)
-    #return weight * bisquare(lengths, rest_length, winsor)
+    # return weight * bisquare(lengths, rest_length, winsor)
 
 def regularized_lengths(vec):
     return T.sqrt(T.sum(T.sqr(vec) + 0.01, axis=1))
 
-
 def barycentric(pt, verts_x, verts_y):
-
     '''computes the barycentric weights to reconstruct an array of points in an
     array of triangles.
 
@@ -204,13 +194,10 @@ def parse_mesh_file(mesh_file):
     return pts, rowcols
 
 def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict):
-
     # set default values
-    max_iteartions = 50
+    max_iterations = 50
 
     # read parameters from the configuration dictionary
-    if "cross_slice_weight" in conf_dict.keys():
-        cross_slice_weight = conf_dict["cross_slice_weight"]
     if "cross_slice_weight" in conf_dict.keys():
         cross_slice_weight = conf_dict["cross_slice_weight"]
     if "cross_slice_winsor" in conf_dict.keys():
@@ -222,10 +209,7 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict):
     if "max_iterations" in conf_dict.keys():
         max_iterations = conf_dict["max_iterations"]
 
-
-
     mesh = MeshParser(mesh_file)
-
 
     # Adjust winsor values according to layer scale
     cross_slice_winsor = int(round(cross_slice_winsor * mesh.layer_scale))
@@ -234,16 +218,15 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict):
     print "cross_slice_winsor: {}, intra_slice_winsor: {}".format(cross_slice_winsor, intra_slice_winsor)
     print "cross_slice_weight: {}, intra_slice_weight: {}".format(cross_slice_weight, intra_slice_weight)
 
-
     # seed rowcolidx to match mesh_pts array
     rowcolidx = {}
     for idx, rc in enumerate(mesh.rowcols):
         rowcolidx[tuple(rc)] = idx
 
     # create a dictionary from the mesh p1 points x,y to a unique row,col (we compare shift 3 decimal points, and compare integers instead of floats)
-    points_multiplier = 10**3
-    mesh_y_to_row_dict = dict([ (int(p[1] * points_multiplier), rowcol[0]) for (p,rowcol) in zip(mesh.pts, mesh.rowcols) ])
-    mesh_x_to_col_dict = dict([ (int(p[0] * points_multiplier), rowcol[1]) for (p,rowcol) in zip(mesh.pts, mesh.rowcols) ])
+    points_multiplier = 10 ** 3
+    mesh_y_to_row_dict = dict([(int(p[1] * points_multiplier), rowcol[0]) for (p,rowcol) in zip(mesh.pts, mesh.rowcols)])
+    mesh_x_to_col_dict = dict([(int(p[0] * points_multiplier), rowcol[1]) for (p,rowcol) in zip(mesh.pts, mesh.rowcols)])
 
 #    print "mesh_x_to_col_dict:", sorted(mesh_x_to_col_dict.keys())
 #    print "mesh_y_to_row_dict:", sorted(mesh_y_to_row_dict.keys())
@@ -256,7 +239,6 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict):
         return per_tile_mesh_pts[tile_name]
 
     cross_links = []
-    costs_by_mesh = defaultdict(list)
 
     pbar = ProgressBar(widgets=['Loading matches: ', Counter(), ' / ', str(len(matches_files)), " ", Bar(), ETA()])
 
@@ -270,17 +252,9 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict):
             # parse matches file, and get p1's mesh x and y points
             orig_p1s = np.array([(pair["p1"]["l"][0], pair["p1"]["l"][1]) for pair in m["correspondencePointPairs"]], dtype=np.float32)
 
-            # find barycentric weights
-            #p1s = (pair["p1"] for pair in m["correspondencePointPairs"])
-            #p1_rc_indices = [rowcolidx[p1["row"], p1["col"]] for p1 in p1s]
-#            for p1 in orig_p1s:
-#                print 'int(p1["l"][0] * points_multiplier) {}'.format(int(p1[0] * points_multiplier))
-#                print 'mesh_x_to_col_dict[int(p1["l"][0] * points_multiplier)] {}'.format(mesh_x_to_col_dict[int(p1[0] * points_multiplier)])
-#                print 'int(p1["l"][1] * points_multiplier) {}'.format(int(p1[1] * points_multiplier))
-#                print 'mesh_y_to_row_dict[int(p1["l"][1] * points_multiplier)] {}'.format(mesh_y_to_row_dict[int(p1[1] * points_multiplier)])
             p1_rc_indices = [rowcolidx[
                 mesh_y_to_row_dict[int(p1[1] * points_multiplier)],
-                mesh_x_to_col_dict[int(p1[0] * points_multiplier)] ] for p1 in orig_p1s]
+                mesh_x_to_col_dict[int(p1[0] * points_multiplier)]] for p1 in orig_p1s]
 
             p2_locs = np.array([pair["p2"]["l"] for pair in m["correspondencePointPairs"]])
             dists, surround_indices = mesh.query_cross(p2_locs, 3)
@@ -301,8 +275,9 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict):
 
     def check_nan(g):
         assert not np.any(np.isnan(g))
-    
+
     cost = 0.0
+
     class Foo(object):
         def update(self, ignore):
             return '{:.2f}'.format(cost)
@@ -314,7 +289,7 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict):
 
         for url1, url2, m1_indices, m2_surround_indices, w1, w2, w3 in cross_links:
             # TODO - the separation value needs to be set according to the diff in layer id (not the wafer/section number)
-            #separation = abs(int(url1.split('.')[-2][-3:]) - int(url2.split('.')[-2][-3:]))
+            # separation = abs(int(url1.split('.')[-2][-3:]) - int(url2.split('.')[-2][-3:]))
             separation = abs(url_to_layerid[url1] - url_to_layerid[url2])
             c, g1, g2 = Fcross(mesh_for_tile(url1).eval(),
                                mesh_for_tile(url2).eval(),
@@ -337,39 +312,21 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict):
                 grads[url] += g
                 check_nan(g)
 
-        #print iter, cost
         for url in per_tile_mesh_pts.keys():
-            mesh_for_tile(url).set_value(mesh_for_tile(url).eval() - stepsize * grads[url])
+            mesh_for_tile(url).set_value((mesh_for_tile(url) - stepsize * grads[url]).eval())
 
     # Prepare per-layer output
     out_positions = {}
 
     # create a dictionary from the mesh p1 row,col to the corresponding x,y points
-    mesh_row_to_y_dict = dict([ (rowcol[0], p[1]) for (p,rowcol) in zip(mesh.pts, mesh.rowcols) ])
-    mesh_col_to_x_dict = dict([ (rowcol[1], p[0]) for (p,rowcol) in zip(mesh.pts, mesh.rowcols) ])
+    mesh_row_to_y_dict = dict([(rowcol[0], p[1]) for (p, rowcol) in zip(mesh.pts, mesh.rowcols)])
+    mesh_col_to_x_dict = dict([(rowcol[1], p[0]) for (p, rowcol) in zip(mesh.pts, mesh.rowcols)])
 
     for url in per_tile_mesh_pts.keys():
-        #out_dict = {}
-        #out_dict["url"] = url
-        # print "url: {}, mesh_for_tile(url): {}".format(url, mesh_for_tile(url).eval())
-        #out_dict["new_positions"] = [{"row": r,
-        #                              "col": c,
-        #                              "new_x": float(new_x),
-        #                              "new_y": float(new_y)}
-        #                             for ((r, c), (new_x, new_y)) in
-        #                             zip(mesh_rowcols, mesh_for_tile(url).eval())]
-        ##out_positions[url] = [{"row": r,
-        ##                      "col": c,
-        ##                      "new_x": float(new_x),
-        ##                      "new_y": float(new_y)}
-        ##                     for ((r, c), (new_x, new_y)) in
-        ##                     zip(mesh_rowcols, mesh_for_tile(url).eval())]
-        out_positions[url] = [ [ (mesh_col_to_x_dict[c]/mesh.layer_scale, mesh_row_to_y_dict[r]/mesh.layer_scale) for r, c in mesh.rowcols ],
-                               [ (float(new_x)/mesh.layer_scale, float(new_y)/mesh.layer_scale) for new_x, new_y in mesh_for_tile(url).eval() ] ]
-        #new_positions.append(out_dict)
+        out_positions[url] = [[(mesh_col_to_x_dict[c] / mesh.layer_scale, mesh_row_to_y_dict[r] / mesh.layer_scale) for r, c in mesh.rowcols],
+                              [(float(new_x) / mesh.layer_scale, float(new_y) / mesh.layer_scale) for new_x, new_y in mesh_for_tile(url).eval()]]
 
     return out_positions
-
 
 
 if __name__ == '__main__':
@@ -378,12 +335,6 @@ if __name__ == '__main__':
     print "Found {} match files".format(len(matches_files))
 
     pts, rowcols = parse_mesh_file(mesh_file)
-#    mesh = json.load(open(mesh_file))
-#    pts = np.array([(p["x"], p["y"]) for p in mesh["points"]], dtype=np.float32)
-#    rowcols = np.array([(p["row"], p["col"]) for p in mesh["points"]])
-#
-#    num_base = pts.shape[0]
-#    print "# points in base mesh", num_base
 
     # Build the KDTree for neighbor searching
     kdt = KDTree(pts, leafsize=3)
@@ -433,13 +384,15 @@ if __name__ == '__main__':
 
     def check_nan(g):
         assert not np.any(np.isnan(g))
-    
+
     cost = 0.0
+
     class Foo(object):
+        '''class to get the cost into the progress bar'''
         def update(self, ignore):
             return '{:.2f}'.format(cost)
 
-    max_iterations = 50
+    max_iterations = 1000
 
     pbar = ProgressBar(widgets=['Iter ', Counter(), '/{0} '.format(max_iterations), Foo(), Bar(), ETA()])
     for iter in pbar(range(max_iterations)):
@@ -469,24 +422,20 @@ if __name__ == '__main__':
                 grads[url] += g
                 check_nan(g)
 
-        #print iter, cost
         for url in mesh_pts.keys():
             mesh_for_tile(url).set_value(mesh_for_tile(url).eval() - stepsize * grads[url])
-
 
     new_positions = []
     for url in mesh_pts.keys():
         out_dict = {}
         out_dict["url"] = url
-        print "url: {}, mesh_for_tile(url): {}".format(url, mesh_for_tile(url).eval())
         out_dict["new_positions"] = [{"row": r,
                                       "col": c,
                                       "new_x": float(new_x),
                                       "new_y": float(new_y)}
                                      for ((r, c), (new_x, new_y)) in
-                                     zip(rowcols, mesh_for_tile(url).eval())]
+                                     zip(rowcols, mesh_for_tile(url).get_value())]
         new_positions.append(out_dict)
 
     out_file = sys.argv[3]
     json.dump(new_positions, open(out_file, "w"), indent=1)
-
