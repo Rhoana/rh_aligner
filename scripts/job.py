@@ -21,6 +21,9 @@ SBATCH_QUEUE = 'serial_requeue'
 #SBATCH_ACCOUNT = None
 SBATCH_ACCOUNT = 'lichtman_lab'
 
+#SBATCH_EXCLUDED = None
+SBATCH_EXCLUDED = 'nelson01,regal01,regal02,regal03,regal04,regal10,regal09,regal08,regal11,regal13,regal18,jenny02'
+
 # Make sure the logs directory exists
 if not os.path.exists(LOGS_DIR) or not os.path.isdir(os.path.dirname(LOGS_DIR)):
     os.makedirs(LOGS_DIR)
@@ -127,6 +130,10 @@ class Job(object):
                 "-o", LOGS_DIR + "/out." + self.name,     # Standard out file
                 "-e", LOGS_DIR + "/error." + self.name]   # Error out file
 
+            if SBATCH_EXCLUDED is not None:
+                command_list.append("--exclude")
+                command_list.append(SBATCH_EXCLUDED)
+            
             if len(self.dependencies) > 0:
                 #print command_list
                 #print self.dependency_strings()
@@ -529,6 +536,10 @@ class JobBlock(object):
                 "-o", LOGS_DIR + "/out." + block_name,     # Standard out file
                 "-e", LOGS_DIR + "/error." + block_name]   # Error out file
 
+            if SBATCH_EXCLUDED is not None:
+                command_list.append("--exclude")
+                command_list.append(SBATCH_EXCLUDED)
+
         elif USE_QSUB:
             command_list = ["qsub"]#,
                 # "-N", block_name,                   # Job name
@@ -600,6 +611,8 @@ class JobBlock(object):
             print 'jobid={0}'.format(new_jobid)
             for j in self.job_block_list:
                 j.jobid = new_jobid
+        else:
+            sys.stderr.write('Submission error: {0}\n'.format(submit_err))
 
         submitted_job_blocks[block_name] = self.job_block_list
         return submitted_job_blocks

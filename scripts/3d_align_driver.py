@@ -22,7 +22,8 @@ from match_layers_sift_features import match_layers_sift_features
 from filter_ransac import filter_ransac
 from match_layers_by_max_pmcc import match_layers_by_max_pmcc
 from optimize_layers_elastic import optimize_layers_elastic
-from utils import path2url, write_list_to_file, create_dir, read_layer_from_file, parse_range
+from filter_local_smoothness import filter_local_smoothness
+from utils import path2url, write_list_to_file, create_dir, read_layer_from_file, parse_range, read_conf_args
 from bounding_box import BoundingBox
 
 
@@ -96,6 +97,15 @@ after_ransac_dir = os.path.join(args.workspace_dir, "after_ransac")
 create_dir(after_ransac_dir)
 matched_pmcc_dir = os.path.join(args.workspace_dir, "matched_pmcc")
 create_dir(matched_pmcc_dir)
+
+use_local_smoothness_filter = False
+local_smoothness_dir = None
+conf_general = read_conf_args(conf, "General")
+if 'useLocalSmoothnessFilter' in conf_general.keys():
+    use_local_smoothness_filter = True
+    local_smoothness_dir = os.path.join(args.workspace_dir, "after_local_smoothness")
+    create_dir(local_smoothness_dir)
+
 
 all_layers = []
 layer_to_sifts = {}
@@ -194,6 +204,7 @@ if args.manual_match is not None:
 
 # Match and optimize each two layers in the required distance
 all_pmcc_files = []
+all_local_smoothness_files = []
 for i in all_layers:
     layers_to_process = min(i + args.max_layer_distance + 1, all_layers[-1] + 1) - i
     to_range = range(1, layers_to_process)
@@ -236,6 +247,14 @@ for i in all_layers:
                 match_layers_by_max_pmcc(args.jar_file, layer_to_ts_json[i], layer_to_ts_json[i + j], ransac_fname, imageWidth, imageHeight, fixed_layers, pmcc_fname, conf=conf, auto_add_model=args.auto_add_model)
         all_pmcc_files.append(pmcc_fname)
 
+        if use_local_smoothness_filter:
+            # Filter the max PMCC correspondences between the two layers
+            local_smoothness_fname = os.path.join(local_smoothness_dir, "{0}_{1}_smooth.json".format(fname1_prefix, fname2_prefix))
+            if not os.path.exists(local_smoothness_fname):
+                print "Smoothing layers by Local Filter: {0} and {1}".format(i, i + j)
+                filter_local_smoothness(pmcc_fname, local_smoothness_fname, args.jar_file, conf=conf)
+            all_local_smoothness_files.append(local_smoothness_fname)
+
 print "All pmcc files: {0}".format(all_pmcc_files)
 
 # Optimize all layers to a single 3d image
@@ -243,7 +262,10 @@ all_ts_files = layer_to_ts_json.values()
 create_dir(args.output_dir)
 # fetch actual pmcc files list (because some sections were not matched, and therefore their pmcc file is missing)
 #actual_pmcc_files = glob.glob(os.path.join(matched_pmcc_dir, '*.json'))
-actual_pmcc_files = all_pmcc_files
+if use_local_smoothness_filter:
+    actual_pmcc_files = all_local_smoothness_files
+else:
+    actual_pmcc_files = all_pmcc_files
 
 ts_list_file = os.path.join(args.workspace_dir, "all_ts_files.txt")
 write_list_to_file(ts_list_file, all_ts_files)

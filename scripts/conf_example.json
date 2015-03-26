@@ -1,4 +1,7 @@
 {
+    "General" : {
+        "useLocalSmoothnessFilter": ""
+    },
     "ComputeSiftFeatures" : {
         "initialSigma" : 1.6,
         "steps" : 3,
@@ -36,6 +39,14 @@
         "dampSpringMesh": 0.9,
         "maxStretchSpringMesh": 2000.0,
         "useLocalSmoothnessFilter": ""
+    },
+    "FilterLocalSmoothness" : {
+        "layerScale" : 0.1,
+        "localModelIndex": 1,
+        "localRegionSigma": 200.0,
+        "maxLocalEpsilon": 100.0,
+        "maxLocalTrust": 3,
+        "cropNSigma": 6
     },
     "OptimizeLayersElastic" : {
         "layerScale" : 0.1,

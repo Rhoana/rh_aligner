@@ -12,6 +12,16 @@ def path2url(path):
         return path
     return urlparse.urljoin('file:', urllib.pathname2url(os.path.abspath(path)))
 
+def read_conf_args(conf_fname, tool):
+    ''' Read the tool configuration from conf (json format), and return them as dictionary '''
+    tool_dict = {}
+    if not conf_fname is None:
+        with open(conf_fname, 'r') as conf_file:
+            conf = json.load(conf_file)
+            if tool in conf:
+                tool_dict = conf[tool]
+    return tool_dict
+
 
 def conf_args(conf, tool):
     ''' Read the tool configuration from conf (json format), and return the parameters in a string format '''
