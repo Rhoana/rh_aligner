@@ -19,6 +19,93 @@ intra_slice_winsor = 30
 
 stepsize = 0.1
 
+class MeshParser(object):
+    mesh = None
+    kdt = None # for the Neighbors
+    pts = None
+    rowcols = None
+    layer_scale = None
+
+
+    def __init__(self, mesh_file):
+        # load the mesh
+        self.mesh = json.load(open(mesh_file))
+        self.pts = np.array([(p["x"], p["y"]) for p in self.mesh["points"]], dtype=np.float32)
+        self.rowcols = np.array([(p["row"], p["col"]) for p in self.mesh["points"]])
+        self.layer_scale = float(self.mesh["layerScale"])
+
+        print "# points in base mesh", self.pts.shape[0]
+     
+        mesh_p_x = self.pts[:, 0]
+        mesh_p_y = self.pts[:, 1]
+        self.long_row_min_x = min(mesh_p_x)
+        self.long_row_min_y = min(mesh_p_y)
+        self.long_row_max_x = max(mesh_p_x)
+        self.long_row_max_y = max(mesh_p_y)
+        print "Mesh long-row boundary values: min_x: {}, miny: {}, max_x: {}, max_y: {}".format(
+            self.long_row_min_x, self.long_row_min_y, self.long_row_max_x, self.long_row_max_y)
+        self.short_row_min_x = min(mesh_p_x[mesh_p_x > self.long_row_min_x])
+        self.short_row_min_y = min(mesh_p_y[mesh_p_y > self.long_row_min_y])
+        self.short_row_max_x = max(mesh_p_x[mesh_p_x < self.long_row_max_x])
+        self.short_row_max_y = max(mesh_p_y[mesh_p_y < self.long_row_max_y])
+        print "Mesh short-row boundary values: min_x: {}, miny: {}, max_x: {}, max_y: {}".format(
+            self.short_row_min_x, self.short_row_min_y, self.short_row_max_x, self.short_row_max_y)
+
+        # Build the KDTree for neighbor searching
+        self.kdt = KDTree(self.pts, leafsize=3)
+
+    def query_internal(self, points, k):
+        """Returns the k nearest neighbors, while taking into account the mesh formation.
+        If a point is on the boudaries of the mesh, only the relevant neighbors will be returned,
+        and all others wil have distance -1, and location [-1, -1]"""
+        dists, surround_indices = self.kdt.query(points, k)
+
+        # Find out if the point is on the "boundary"
+        for i, p in enumerate(points):
+            # on the left side of the mesh
+            if p[0] < self.short_row_min_x:
+                # remove any surrounding point that is to the right of short_row_min_x
+                point_surround_indices = surround_indices[i].astype(np.int32)
+                tris_x = self.pts[point_surround_indices, 0]
+                dists[i][tris_x > self.short_row_min_x] = 0.0
+                surround_indices[i][tris_x > self.short_row_min_x] = surround_indices[i][0]
+            # on the left side of the mesh
+            if p[0] > self.short_row_max_x:
+                # remove any surrounding point that is to the left of short_row_max_x
+                point_surround_indices = surround_indices[i].astype(np.int32)
+                tris_x = self.pts[point_surround_indices, 0]
+                dists[i][tris_x < self.short_row_max_x] = 0.0
+                surround_indices[i][tris_x < self.short_row_max_x] = surround_indices[i][0]
+            # on the upper side of the mesh
+            if p[1] < self.short_row_min_y:
+                # remove any surrounding point that is above short_row_min_y
+                point_surround_indices = surround_indices[i].astype(np.int32)
+                tris_y = self.pts[point_surround_indices, 1]
+                dists[i][tris_y > self.short_row_min_y] = 0.0
+                surround_indices[i][tris_y > self.short_row_min_y] = surround_indices[i][0]
+            # on the lower side of the mesh
+            if p[1] > self.short_row_max_y:
+                # remove any surrounding point that is under short_row_max_y
+                point_surround_indices = surround_indices[i].astype(np.int32)
+                tris_y = self.pts[point_surround_indices, 1]
+                dists[i][tris_y < self.short_row_max_y] = 0.0
+                surround_indices[i][tris_y < self.short_row_max_y] = surround_indices[i][0]
+
+
+
+        return dists, surround_indices
+
+    def query_cross(self, points, k):
+        """Returns the k nearest neighbors, while taking into account the mesh formation.
+        If a point is on the boudaries of the mesh, only the relevant neighbors will be returned,
+        and all others wil have distance -1, and location [-1, -1]"""
+        dists, surround_indices = self.kdt.query(points, k)
+
+
+        return dists, surround_indices
+
+
+
 # Original huber function (Huber's M-estimator from http://www.statisticalconsultants.co.nz/blog/m-estimators.html)
 def huber(target, output, delta):
     ''' from http://breze.readthedocs.org/en/latest/specify.html '''
@@ -46,12 +133,13 @@ def link_cost(lengths, weight, winsor, rest_length):
     Springs are quadratic within a window of +/- winsor of their rest lenght,
     and linear beyond that.
     '''
+
     return weight * huber(lengths, rest_length, winsor)
     #return weight * bisquare(lengths, rest_length, winsor)
 
 def regularized_lengths(vec):
     return T.sqrt(T.sum(T.sqr(vec) + 0.01, axis=1))
-                        
+
 
 def barycentric(pt, verts_x, verts_y):
 
@@ -135,34 +223,27 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict):
         max_iterations = conf_dict["max_iterations"]
 
 
-    # load the mesh
-    mesh = json.load(open(mesh_file))
-    mesh_pts = np.array([(p["x"], p["y"]) for p in mesh["points"]], dtype=np.float32)
-    mesh_rowcols = np.array([(p["row"], p["col"]) for p in mesh["points"]])
-    layer_scale = float(mesh["layerScale"])
 
-    num_base = mesh_pts.shape[0]
-    print "# points in base mesh", num_base
- 
+    mesh = MeshParser(mesh_file)
+
+
     # Adjust winsor values according to layer scale
-    cross_slice_winsor = int(round(cross_slice_winsor * layer_scale))
-    intra_slice_winsor = int(round(intra_slice_winsor * layer_scale))
+    cross_slice_winsor = int(round(cross_slice_winsor * mesh.layer_scale))
+    intra_slice_winsor = int(round(intra_slice_winsor * mesh.layer_scale))
 
     print "cross_slice_winsor: {}, intra_slice_winsor: {}".format(cross_slice_winsor, intra_slice_winsor)
     print "cross_slice_weight: {}, intra_slice_weight: {}".format(cross_slice_weight, intra_slice_weight)
 
-    # Build the KDTree for neighbor searching
-    kdt = KDTree(mesh_pts, leafsize=3)
 
     # seed rowcolidx to match mesh_pts array
     rowcolidx = {}
-    for idx, rc in enumerate(mesh_rowcols):
+    for idx, rc in enumerate(mesh.rowcols):
         rowcolidx[tuple(rc)] = idx
 
     # create a dictionary from the mesh p1 points x,y to a unique row,col (we compare shift 3 decimal points, and compare integers instead of floats)
     points_multiplier = 10**3
-    mesh_y_to_row_dict = dict([ (int(p[1] * points_multiplier), rowcol[0]) for (p,rowcol) in zip(mesh_pts, mesh_rowcols) ])
-    mesh_x_to_col_dict = dict([ (int(p[0] * points_multiplier), rowcol[1]) for (p,rowcol) in zip(mesh_pts, mesh_rowcols) ])
+    mesh_y_to_row_dict = dict([ (int(p[1] * points_multiplier), rowcol[0]) for (p,rowcol) in zip(mesh.pts, mesh.rowcols) ])
+    mesh_x_to_col_dict = dict([ (int(p[0] * points_multiplier), rowcol[1]) for (p,rowcol) in zip(mesh.pts, mesh.rowcols) ])
 
 #    print "mesh_x_to_col_dict:", sorted(mesh_x_to_col_dict.keys())
 #    print "mesh_y_to_row_dict:", sorted(mesh_y_to_row_dict.keys())
@@ -171,7 +252,7 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict):
 
     def mesh_for_tile(tile_name):
         if tile_name not in per_tile_mesh_pts:
-            per_tile_mesh_pts[tile_name] = theano.shared(mesh_pts, name=tile_name)  # not borrowed
+            per_tile_mesh_pts[tile_name] = theano.shared(mesh.pts, name=tile_name)  # not borrowed
         return per_tile_mesh_pts[tile_name]
 
     cross_links = []
@@ -202,10 +283,10 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict):
                 mesh_x_to_col_dict[int(p1[0] * points_multiplier)] ] for p1 in orig_p1s]
 
             p2_locs = np.array([pair["p2"]["l"] for pair in m["correspondencePointPairs"]])
-            dists, surround_indices = kdt.query(p2_locs, 3)
+            dists, surround_indices = mesh.query_cross(p2_locs, 3)
             surround_indices = surround_indices.astype(np.int32)
-            tris_x = mesh_pts[surround_indices, 0]
-            tris_y = mesh_pts[surround_indices, 1]
+            tris_x = mesh.pts[surround_indices, 0]
+            tris_y = mesh.pts[surround_indices, 1]
             w1, w2, w3 = barycentric(p2_locs, tris_x, tris_y)
 
             cross_links.append((m["url1"], m["url2"], p1_rc_indices, surround_indices, w1, w2, w3))
@@ -214,7 +295,7 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict):
     Finternal = make_internal_gradfun()
 
     # Build structural mesh
-    dists, neighbor_indices = kdt.query(mesh_pts, 7)
+    dists, neighbor_indices = mesh.query_internal(mesh.pts, 7)
     neighbor_indices = neighbor_indices.astype(np.int32)
     dists = dists.astype(np.float32)
 
@@ -264,8 +345,8 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict):
     out_positions = {}
 
     # create a dictionary from the mesh p1 row,col to the corresponding x,y points
-    mesh_row_to_y_dict = dict([ (rowcol[0], p[1]) for (p,rowcol) in zip(mesh_pts, mesh_rowcols) ])
-    mesh_col_to_x_dict = dict([ (rowcol[1], p[0]) for (p,rowcol) in zip(mesh_pts, mesh_rowcols) ])
+    mesh_row_to_y_dict = dict([ (rowcol[0], p[1]) for (p,rowcol) in zip(mesh.pts, mesh.rowcols) ])
+    mesh_col_to_x_dict = dict([ (rowcol[1], p[0]) for (p,rowcol) in zip(mesh.pts, mesh.rowcols) ])
 
     for url in per_tile_mesh_pts.keys():
         #out_dict = {}
@@ -283,8 +364,8 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict):
         ##                      "new_y": float(new_y)}
         ##                     for ((r, c), (new_x, new_y)) in
         ##                     zip(mesh_rowcols, mesh_for_tile(url).eval())]
-        out_positions[url] = [ [ (mesh_col_to_x_dict[c]/layer_scale, mesh_row_to_y_dict[r]/layer_scale) for r, c in mesh_rowcols ],
-                               [ (float(new_x)/layer_scale, float(new_y)/layer_scale) for new_x, new_y in mesh_for_tile(url).eval() ] ]
+        out_positions[url] = [ [ (mesh_col_to_x_dict[c]/mesh.layer_scale, mesh_row_to_y_dict[r]/mesh.layer_scale) for r, c in mesh.rowcols ],
+                               [ (float(new_x)/mesh.layer_scale, float(new_y)/mesh.layer_scale) for new_x, new_y in mesh_for_tile(url).eval() ] ]
         #new_positions.append(out_dict)
 
     return out_positions
