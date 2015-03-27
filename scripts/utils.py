@@ -5,7 +5,7 @@ import urlparse, urllib
 from subprocess import call
 import sys
 import json
-
+import multiprocessing
 
 def path2url(path):
     if "://" in path:
@@ -90,3 +90,16 @@ def parse_range(s):
             result.update(range(int(x[0]), int(x[-1]) + 1))
     return sorted(result)
 
+def get_gc_threads_num(app_threads_num):
+    if app_threads_num is None:
+        app_threads_num = multiprocessing.cpu_count()
+
+    gc_threads_num = 1
+    if app_threads_num >= 16:
+        gc_threads_num = 4
+    elif app_threads_num >= 8:
+        gc_threads_num = 3
+    elif app_threads_num >= 4:
+        gc_threads_num = 2
+
+    return gc_threads_num
