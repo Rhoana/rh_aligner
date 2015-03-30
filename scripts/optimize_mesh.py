@@ -7,26 +7,12 @@ import theano.tensor as T
 import numpy as np
 from scipy.spatial import cKDTree as KDTree  # for searching surrounding points
 from collections import defaultdict
-from progressbar import ProgressBar, ETA, Bar, Counter, FormatLabel
+from progressbar import ProgressBar, ETA, Bar, Counter
 
 sys.setrecursionlimit(10000)  # for grad
 
-cross_slice_weight = 1.0
-cross_slice_winsor = 30
-
-intra_slice_weight = 1.0 / 6
-intra_slice_winsor = 30
-
-stepsize = 0.1
-
 class MeshParser(object):
-    mesh = None
-    kdt = None  # for the Neighbors
-    pts = None
-    rowcols = None
-    layer_scale = None
-
-    def __init__(self, mesh_file):
+    def __init__(self, mesh_file, multiplier=1000):
         # load the mesh
         self.mesh = json.load(open(mesh_file))
         self.pts = np.array([(p["x"], p["y"]) for p in self.mesh["points"]], dtype=np.float32)
@@ -34,6 +20,15 @@ class MeshParser(object):
         self.layer_scale = float(self.mesh["layerScale"])
 
         print "# points in base mesh", self.pts.shape[0]
+
+        self.multiplier = multiplier
+        # seed rowcolidx to match mesh_pts array
+        self._rowcolidx = {}
+        for idx, pt in enumerate(self.pts):
+            self._rowcolidx[int(pt[0] * multiplier), int(pt[1] * multiplier)] = idx
+
+        # Build the KDTree for neighbor searching
+        self.kdt = KDTree(self.pts, leafsize=3)
 
         mesh_p_x = self.pts[:, 0]
         mesh_p_y = self.pts[:, 1]
@@ -50,8 +45,8 @@ class MeshParser(object):
         print "Mesh short-row boundary values: min_x: {}, miny: {}, max_x: {}, max_y: {}".format(
             self.short_row_min_x, self.short_row_min_y, self.short_row_max_x, self.short_row_max_y)
 
-        # Build the KDTree for neighbor searching
-        self.kdt = KDTree(self.pts, leafsize=3)
+    def rowcolidx(self, xy):
+        return self._rowcolidx[int(xy[0] * self.multiplier), int(xy[1] * self.multiplier)]
 
     def query_internal(self, points, k):
         """Returns the k nearest neighbors, while taking into account the mesh formation.
@@ -93,9 +88,7 @@ class MeshParser(object):
         return dists, surround_indices
 
     def query_cross(self, points, k):
-        """Returns the k nearest neighbors, while taking into account the mesh formation.
-        If a point is on the boudaries of the mesh, only the relevant neighbors will be returned,
-        and all others wil have distance -1, and location [-1, -1]"""
+        """Returns the k nearest neighbors"""
         dists, surround_indices = self.kdt.query(points, k)
 
         return dists, surround_indices
@@ -148,7 +141,7 @@ def barycentric(pt, verts_x, verts_y):
     l3 = 1 - l1 - l2
     return l1.reshape((-1, 1)).astype(np.float32), l2.reshape((-1, 1)).astype(np.float32), l3.reshape((-1, 1)).astype(np.float32)
 
-def make_cross_gradfun():
+def make_cross_gradfun(cross_slice_weight, cross_slice_winsor):
     # set up cost function for cross-section springs
     mesh1 = T.matrix('mesh1')
     mesh2 = T.matrix('mesh2')
@@ -170,10 +163,14 @@ def make_cross_gradfun():
     return theano.function([mesh1, mesh2,
                             idx1,
                             idx2_1, idx2_2, idx2_3,
-                            w1, w2, w3, separation],
-                           [this_cost, T.grad(this_cost, mesh1), T.grad(this_cost, mesh2)])
+                            w1, w2, w3,
+                            separation],
+                           [this_cost,
+                            theano.Out(T.grad(this_cost, mesh1), borrow=True),
+                            theano.Out(T.grad(this_cost, mesh2), borrow=True)],
+                           on_unused_input='warn')
 
-def make_internal_gradfun():
+def make_internal_gradfun(intra_slice_weight, intra_slice_winsor):
     # set up cost function for in-sectino springs
     mesh = T.matrix('mesh')
     neighbor_idx = T.ivector()
@@ -181,65 +178,11 @@ def make_internal_gradfun():
     lengths = regularized_lengths(mesh - mesh.take(neighbor_idx, axis=0))
     this_cost = link_cost(lengths, intra_slice_weight, intra_slice_winsor, rest_lengths)
     return theano.function([mesh, neighbor_idx, rest_lengths],
-                           [this_cost, T.grad(this_cost, mesh)])
+                           [this_cost,
+                            theano.Out(T.grad(this_cost, mesh), borrow=True)])
 
 
-def parse_mesh_file(mesh_file):
-    mesh = json.load(open(mesh_file))
-    pts = np.array([(p["x"], p["y"]) for p in mesh["points"]], dtype=np.float32)
-    rowcols = np.array([(p["row"], p["col"]) for p in mesh["points"]])
-
-    num_base = pts.shape[0]
-    print "# points in base mesh", num_base
-    return pts, rowcols
-
-def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict):
-    # set default values
-    max_iterations = 50
-
-    # read parameters from the configuration dictionary
-    if "cross_slice_weight" in conf_dict.keys():
-        cross_slice_weight = conf_dict["cross_slice_weight"]
-    if "cross_slice_winsor" in conf_dict.keys():
-        cross_slice_winsor = conf_dict["cross_slice_winsor"]
-    if "intra_slice_weight" in conf_dict.keys():
-        intra_slice_weight = conf_dict["intra_slice_weight"]
-    if "intra_slice_winsor" in conf_dict.keys():
-        intra_slice_winsor = conf_dict["intra_slice_winsor"]
-    if "max_iterations" in conf_dict.keys():
-        max_iterations = conf_dict["max_iterations"]
-
-    mesh = MeshParser(mesh_file)
-
-    # Adjust winsor values according to layer scale
-    cross_slice_winsor = int(round(cross_slice_winsor * mesh.layer_scale))
-    intra_slice_winsor = int(round(intra_slice_winsor * mesh.layer_scale))
-
-    print "cross_slice_winsor: {}, intra_slice_winsor: {}".format(cross_slice_winsor, intra_slice_winsor)
-    print "cross_slice_weight: {}, intra_slice_weight: {}".format(cross_slice_weight, intra_slice_weight)
-
-    # seed rowcolidx to match mesh_pts array
-    rowcolidx = {}
-    for idx, rc in enumerate(mesh.rowcols):
-        rowcolidx[tuple(rc)] = idx
-
-    # create a dictionary from the mesh p1 points x,y to a unique row,col (we compare shift 3 decimal points, and compare integers instead of floats)
-    points_multiplier = 10 ** 3
-    mesh_y_to_row_dict = dict([(int(p[1] * points_multiplier), rowcol[0]) for (p,rowcol) in zip(mesh.pts, mesh.rowcols)])
-    mesh_x_to_col_dict = dict([(int(p[0] * points_multiplier), rowcol[1]) for (p,rowcol) in zip(mesh.pts, mesh.rowcols)])
-
-#    print "mesh_x_to_col_dict:", sorted(mesh_x_to_col_dict.keys())
-#    print "mesh_y_to_row_dict:", sorted(mesh_y_to_row_dict.keys())
-
-    per_tile_mesh_pts = {}
-
-    def mesh_for_tile(tile_name):
-        if tile_name not in per_tile_mesh_pts:
-            per_tile_mesh_pts[tile_name] = theano.shared(mesh.pts, name=tile_name)  # not borrowed
-        return per_tile_mesh_pts[tile_name]
-
-    cross_links = []
-
+def load_matches(matches_files, mesh):
     pbar = ProgressBar(widgets=['Loading matches: ', Counter(), ' / ', str(len(matches_files)), " ", Bar(), ETA()])
 
     for midx, mf in enumerate(pbar(matches_files)):
@@ -252,9 +195,7 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict):
             # parse matches file, and get p1's mesh x and y points
             orig_p1s = np.array([(pair["p1"]["l"][0], pair["p1"]["l"][1]) for pair in m["correspondencePointPairs"]], dtype=np.float32)
 
-            p1_rc_indices = [rowcolidx[
-                mesh_y_to_row_dict[int(p1[1] * points_multiplier)],
-                mesh_x_to_col_dict[int(p1[0] * points_multiplier)]] for p1 in orig_p1s]
+            p1_rc_indices = [mesh.rowcolidx(p1) for p1 in orig_p1s]
 
             p2_locs = np.array([pair["p2"]["l"] for pair in m["correspondencePointPairs"]])
             dists, surround_indices = mesh.query_cross(p2_locs, 3)
@@ -262,11 +203,39 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict):
             tris_x = mesh.pts[surround_indices, 0]
             tris_y = mesh.pts[surround_indices, 1]
             w1, w2, w3 = barycentric(p2_locs, tris_x, tris_y)
+            yield m["url1"], m["url2"], p1_rc_indices, surround_indices, w1, w2, w3
 
-            cross_links.append((m["url1"], m["url2"], p1_rc_indices, surround_indices, w1, w2, w3))
 
-    Fcross = make_cross_gradfun()
-    Finternal = make_internal_gradfun()
+def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
+    # set default values
+    cross_slice_weight = conf_dict.get("cross_slice_weight", 1.0)
+    cross_slice_winsor = conf_dict.get("cross_slice_winsor", 1000)
+    intra_slice_weight = conf_dict.get("intra_slice_weight", 1.0 / 6)
+    intra_slice_winsor = conf_dict.get("intra_slice_winsor", 200)
+    max_iterations = conf_dict.get("max_iterations", 5000)
+
+    # Load the mesh
+    mesh = MeshParser(mesh_file)
+
+    # Adjust winsor values according to layer scale
+    cross_slice_winsor = cross_slice_winsor * mesh.layer_scale
+    intra_slice_winsor = intra_slice_winsor * mesh.layer_scale
+
+    # Create the per-tile meshes
+    per_tile_mesh = defaultdict(lambda: theano.shared(mesh.pts))  # not borrowed
+
+    cross_links = list(load_matches(matches_files, mesh))
+
+    # create url_to_layerid if it wasn't passed in
+    if url_to_layerid is None:
+        url_to_layerid = {}
+        for cl in cross_links:
+            for url in cl[:2]:
+                if url not in url_to_layerid:
+                    url_to_layerid[url] = int(url[:-5][-3:])
+
+    Fcross = make_cross_gradfun(cross_slice_weight, cross_slice_winsor)
+    Finternal = make_internal_gradfun(intra_slice_weight, intra_slice_winsor)
 
     # Build structural mesh
     dists, neighbor_indices = mesh.query_internal(mesh.pts, 7)
@@ -278,53 +247,101 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict):
 
     cost = 0.0
 
-    class Foo(object):
-        def update(self, ignore):
-            return '{:.2f}'.format(cost)
+    prev_cost = np.inf
+    stepsize = 0.1
+    grads = defaultdict(lambda: 0.0)
 
-    pbar = ProgressBar(widgets=['Iter ', Counter(), '/{0} '.format(max_iterations), Foo(), Bar(), ETA()])
+    class MonitorValues(object):
+        '''add cost, etc. to progress bar'''
+        def mean_cross_dist(self):
+            badcount = 0
+            mesh_values = {url: per_tile_mesh[url].get_value() for url in per_tile_mesh.keys()}
+            dists = []
+            for url1, url2, p1_rc, surround, w1, w2, w3 in cross_links:
+                separation = abs(url_to_layerid[url1] - url_to_layerid[url2])
+                pts1 = mesh_values[url1][p1_rc]
+                mesh2 = mesh_values[url2]
+                pts2 = (w1 * mesh2.take(surround[:, 0], axis=0) +
+                        w2 * mesh2.take(surround[:, 1], axis=0) +
+                        w3 * mesh2.take(surround[:, 2], axis=0))
+                sep = np.sqrt(((pts1 - pts2) ** 2).sum(axis=1))
+                badcount += sum(sep > 100)
+                if separation == 1:
+                    dists.append(sep.mean())
+            return np.mean(dists)
+
+        def update(self, count):
+            l = 0
+            if count.currval > 0:
+                l = self.mean_cross_dist()
+            return 'Err: {:.2f}  step: {:.2f}  |g|_1: {:.2f}  Len: {:.2f}'.format(cost, stepsize, sum(np.sum(abs(g)) for g in grads.values()), l)
+
+
+    pbar = ProgressBar(widgets=['Iter ', Counter(), '/{0} '.format(max_iterations), MonitorValues(), Bar(), ETA()])
     for iter in pbar(range(max_iterations)):
         cost = 0.0
-        grads = defaultdict(int)
+
+        new_grads = defaultdict(lambda: 0.0)
 
         for url1, url2, m1_indices, m2_surround_indices, w1, w2, w3 in cross_links:
             # TODO - the separation value needs to be set according to the diff in layer id (not the wafer/section number)
             # separation = abs(int(url1.split('.')[-2][-3:]) - int(url2.split('.')[-2][-3:]))
             separation = abs(url_to_layerid[url1] - url_to_layerid[url2])
-            c, g1, g2 = Fcross(mesh_for_tile(url1).eval(),
-                               mesh_for_tile(url2).eval(),
+            c, g1, g2 = Fcross(per_tile_mesh[url1].get_value(borrow=True),
+                               per_tile_mesh[url2].get_value(borrow=True),
                                m1_indices,
                                m2_surround_indices[:, 0], m2_surround_indices[:, 1], m2_surround_indices[:, 2],
                                w1, w2, w3,
                                separation)
             cost += c
-            grads[url1] += g1
-            grads[url2] += g2
+            new_grads[url1] += g1
+            new_grads[url2] += g2
             check_nan(g1)
             check_nan(g2)
 
-        for url in per_tile_mesh_pts.keys():
+        for url in per_tile_mesh.keys():
             for idx in range(1, 7):
-                c, g = Finternal(mesh_for_tile(url).eval(),
+                c, g = Finternal(per_tile_mesh[url].get_value(borrow=True),
                                  neighbor_indices[:, idx],
                                  dists[:, idx])
                 cost += c
-                grads[url] += g
+                new_grads[url] += g
                 check_nan(g)
 
-        for url in per_tile_mesh_pts.keys():
-            mesh_for_tile(url).set_value((mesh_for_tile(url) - stepsize * grads[url]).eval())
+        # step size adjustment
+        if cost <= prev_cost:
+            stepsize *= 1.05
+            if stepsize > 1.0:
+                stepsize = 1.0
+            # update with new gradients
+            for url in grads.keys():
+                grads[url] = new_grads[url] + 0.5 * grads[url]  # momentum of 0.5
+
+            # step to next evaluation point
+            for url in per_tile_mesh.keys():
+                per_tile_mesh[url].set_value(per_tile_mesh[url].eval() - stepsize * grads[url])
+
+            prev_cost = cost
+
+
+        else:  # we took a bad step: undo it, scale down stepsize, and start over
+            for url in per_tile_mesh.keys():
+                per_tile_mesh[url].set_value(per_tile_mesh[url].eval() + stepsize * grads[url])
+
+            stepsize *= 0.5
+
+            for url in grads.keys():
+                grads[url] *= 0.0  # clear momentum when we take too large a step
+
+            prev_cost = np.inf
+
 
     # Prepare per-layer output
     out_positions = {}
 
-    # create a dictionary from the mesh p1 row,col to the corresponding x,y points
-    mesh_row_to_y_dict = dict([(rowcol[0], p[1]) for (p, rowcol) in zip(mesh.pts, mesh.rowcols)])
-    mesh_col_to_x_dict = dict([(rowcol[1], p[0]) for (p, rowcol) in zip(mesh.pts, mesh.rowcols)])
-
-    for url in per_tile_mesh_pts.keys():
-        out_positions[url] = [[(mesh_col_to_x_dict[c] / mesh.layer_scale, mesh_row_to_y_dict[r] / mesh.layer_scale) for r, c in mesh.rowcols],
-                              [(float(new_x) / mesh.layer_scale, float(new_y) / mesh.layer_scale) for new_x, new_y in mesh_for_tile(url).eval()]]
+    for url in per_tile_mesh.keys():
+        out_positions[url] = [[(pt[0] / mesh.layer_scale, pt[1] / mesh.layer_scale) for pt in mesh.pts],
+                              [(pt[0] / mesh.layer_scale, pt[1] / mesh.layer_scale) for pt in per_tile_mesh[url].eval()]]
 
     return out_positions
 
@@ -333,109 +350,8 @@ if __name__ == '__main__':
     mesh_file = sys.argv[1]
     matches_files = glob.glob(os.path.join(sys.argv[2], '*W02_sec0[012]*W02_sec0[012]*.json'))
     print "Found {} match files".format(len(matches_files))
-
-    pts, rowcols = parse_mesh_file(mesh_file)
-
-    # Build the KDTree for neighbor searching
-    kdt = KDTree(pts, leafsize=3)
-
-    # seed rowcolidx to match pts array
-    rowcolidx = {}
-    for idx, rc in enumerate(rowcols):
-        rowcolidx[tuple(rc)] = idx
-
-    mesh_pts = {}
-
-    def mesh_for_tile(tile_name):
-        if tile_name not in mesh_pts:
-            mesh_pts[tile_name] = theano.shared(pts, name=tile_name)  # not borrowed
-        return mesh_pts[tile_name]
-
-    cross_links = []
-    costs_by_mesh = defaultdict(list)
-
-    pbar = ProgressBar(widgets=['Loading matches: ', Counter(), ' / ', str(len(matches_files)), " ", Bar(), ETA()])
-
-    for midx, mf in enumerate(pbar(matches_files)):
-        for m in json.load(open(mf)):
-            if not m['shouldConnect']:
-                continue
-
-            # find barycentric weights
-            p1s = (pair["p1"] for pair in m["correspondencePointPairs"])
-            p1_rc_indices = [rowcolidx[p1["row"], p1["col"]] for p1 in p1s]
-
-            p2_locs = np.array([pair["p2"]["l"] for pair in m["correspondencePointPairs"]])
-            dists, surround_indices = kdt.query(p2_locs, 3)
-            surround_indices = surround_indices.astype(np.int32)
-            tris_x = pts[surround_indices, 0]
-            tris_y = pts[surround_indices, 1]
-            w1, w2, w3 = barycentric(p2_locs, tris_x, tris_y)
-
-            cross_links.append((m["url1"], m["url2"], p1_rc_indices, surround_indices, w1, w2, w3))
-
-    Fcross = make_cross_gradfun()
-    Finternal = make_internal_gradfun()
-
-    # Build structural mesh
-    dists, neighbor_indices = kdt.query(pts, 7)
-    neighbor_indices = neighbor_indices.astype(np.int32)
-    dists = dists.astype(np.float32)
-
-    def check_nan(g):
-        assert not np.any(np.isnan(g))
-
-    cost = 0.0
-
-    class Foo(object):
-        '''class to get the cost into the progress bar'''
-        def update(self, ignore):
-            return '{:.2f}'.format(cost)
-
-    max_iterations = 1000
-
-    pbar = ProgressBar(widgets=['Iter ', Counter(), '/{0} '.format(max_iterations), Foo(), Bar(), ETA()])
-    for iter in pbar(range(max_iterations)):
-        cost = 0.0
-        grads = defaultdict(int)
-
-        for url1, url2, m1_indices, m2_surround_indices, w1, w2, w3 in cross_links:
-            separation = abs(int(url1.split('.')[-2][-3:]) - int(url2.split('.')[-2][-3:]))
-            c, g1, g2 = Fcross(mesh_for_tile(url1).eval(),
-                               mesh_for_tile(url2).eval(),
-                               m1_indices,
-                               m2_surround_indices[:, 0], m2_surround_indices[:, 1], m2_surround_indices[:, 2],
-                               w1, w2, w3,
-                               separation)
-            cost += c
-            grads[url1] += g1
-            grads[url2] += g2
-            check_nan(g1)
-            check_nan(g2)
-
-        for url in mesh_pts.keys():
-            for idx in range(1, 7):
-                c, g = Finternal(mesh_for_tile(url).eval(),
-                                 neighbor_indices[:, idx],
-                                 dists[:, idx])
-                cost += c
-                grads[url] += g
-                check_nan(g)
-
-        for url in mesh_pts.keys():
-            mesh_for_tile(url).set_value(mesh_for_tile(url).eval() - stepsize * grads[url])
-
-    new_positions = []
-    for url in mesh_pts.keys():
-        out_dict = {}
-        out_dict["url"] = url
-        out_dict["new_positions"] = [{"row": r,
-                                      "col": c,
-                                      "new_x": float(new_x),
-                                      "new_y": float(new_y)}
-                                     for ((r, c), (new_x, new_y)) in
-                                     zip(rowcols, mesh_for_tile(url).get_value())]
-        new_positions.append(out_dict)
+    url_to_layerid = None
+    new_positions = optimize_meshes(mesh_file, matches_files, url_to_layerid)
 
     out_file = sys.argv[3]
     json.dump(new_positions, open(out_file, "w"), indent=1)
