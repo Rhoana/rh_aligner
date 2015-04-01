@@ -53,6 +53,8 @@ public class TransformMesh implements InvertibleCoordinateTransform, Serializabl
 	 */
 	private static final long serialVersionUID = 888971997174932462L;
 
+	private static final boolean PRINT_DATA = false;
+	
 	final protected float width, height;
 	public float getWidth(){ return width; }
 	public float getHeight(){ return height; }
@@ -105,6 +107,14 @@ public class TransformMesh implements InvertibleCoordinateTransform, Serializabl
 		
 		final float dy = ( height - 1 ) / ( numYs - 1 );
 		final float dx = ( width - 1 ) / ( numXs - 1 );
+		
+		if ( PRINT_DATA )
+		{
+			System.out.println( "Actual (after scaling) mesh properties:" );
+			System.out.println( "\tsize: " + width + " x " + height );
+			System.out.println( "\tdx,dy: " + dx + ", " + dy );
+			System.out.println( "\tnumXs,numYs: " + numXs + ", " + numYs );
+		}
 		
 		int i = 0;
 		for ( int xi = 0; xi < numXs; ++xi )

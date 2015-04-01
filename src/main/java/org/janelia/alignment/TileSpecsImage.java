@@ -135,15 +135,33 @@ public class TileSpecsImage {
 	}
 	
 	public ByteProcessor render( int layer, int mipmapLevel, float scale, int width, int height, int offsetX, int offsetY ) {
+		// Make sure that the bounding box is computed
+		parseTileSpecs();
 		
 		/* create a target */
 		ByteProcessor tp = new ByteProcessor( (int) ( width * scale ),
 				(int) ( height * scale ) );
 		
+		BoundingBox fieldOfView = new BoundingBox( offsetX, offsetX + width, offsetY, offsetY + height );
+		
 		for ( TileSpec ts : tileSpecs ) {
 
 			if ( ts.layer != layer )
 				continue;
+			
+			// Verify that the tile image is needed to be rendered using the bounding box
+			if ( ts.bbox != null ) {
+				int fromX = ( int )Math.floor( ts.bbox[0] );
+				int toX = ( int )Math.ceil( ts.bbox[1] );
+				int fromY = ( int )Math.floor( ts.bbox[2] );
+				int toY = ( int )Math.ceil( ts.bbox[3] );
+				BoundingBox tileBBox = new BoundingBox( fromX, toX, fromY, toY );
+				
+				if ( !fieldOfView.overlap( tileBBox ) ) { // If the tile is not part of the field of view, skip it
+					System.out.println( "Skippping tile at bounding box: " + tileBBox + " (because the filed of view bbox is " + fieldOfView + ")" );
+					continue;
+				}
+			}
 			
 			ImageAndMask tsMipmapEntry = null;
 			ImageProcessor tsIp = null;

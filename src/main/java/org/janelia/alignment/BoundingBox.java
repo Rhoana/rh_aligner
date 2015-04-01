@@ -266,4 +266,16 @@ public class BoundingBox {
 
 		return new BoundingBox( minmaxX[0], minmaxX[1], minmaxY[0], minmaxY[1], startPoint.getZ(), endPoint.getZ() );
 	}
+	
+	/**
+	 * Returns true if there is intersection between the bboxes or a full containment
+	 * @param other
+	 * @return
+	 */
+	public boolean overlap( final BoundingBox other ) {
+		if ( ( startPoint.getX() < other.endPoint.getX() ) && ( endPoint.getX() > other.startPoint.getX() ) &&
+			 ( startPoint.getY() < other.endPoint.getY() ) && ( endPoint.getY() > other.startPoint.getY() ) )
+			return true;
+		return false;
+	}
 }

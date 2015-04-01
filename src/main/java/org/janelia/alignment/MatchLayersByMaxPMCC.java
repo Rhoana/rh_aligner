@@ -779,17 +779,6 @@ public class MatchLayersByMaxPMCC {
 		
 		long startTime = System.currentTimeMillis();
 		// Create the meshes for the tiles
-		/*
-		final List< TileSpec[] > tsList = new ArrayList< TileSpec[] >();
-		tsList.add( ts1 );
-		tsList.add( ts2 );
-		
-		final List< SpringMesh > meshes = Utils.createMeshes(
-				tsList, param.imageWidth, param.imageHeight,
-				param.springLengthSpringMesh, param.stiffnessSpringMesh,
-				param.maxStretchSpringMesh, param.layerScale, param.dampSpringMesh );
-		*/
-		
 		final int meshWidth = ( int )Math.ceil( param.imageWidth * param.layerScale );
 		final int meshHeight = ( int )Math.ceil( param.imageHeight * param.layerScale );
 		final SpringMesh[] meshes = new SpringMesh[2];
@@ -892,11 +881,7 @@ public class MatchLayersByMaxPMCC {
 		final FloatProcessor ip2Mask = new FloatProcessor( img2Width, img2Height );
 		*/
 
-		// TODO - find rendering bounding box for each of the images
-		// Get images size
-		final BoundingBox layer1BBox = layer1Img.getBoundingBox();
-		final BoundingBox layer2BBox = layer2Img.getBoundingBox();
-
+		// find rendering bounding box for each of the images
 		// Get rendering bounding box for image 1
 		BoundingBox renderLayer1BBox = new BoundingBox( colFromPixel, colToPixel, rowFromPixel, rowToPixel );
 		float[] img1OriginPoint = { colFromPixel, rowFromPixel };
@@ -968,18 +953,12 @@ public class MatchLayersByMaxPMCC {
 		final TranslationModel2D tran12Model = new TranslationModel2D();
 		tran12Model.set( renderLayer1BBox.getStartPoint().getX() - renderLayer2BBox.getStartPoint().getX(), renderLayer1BBox.getStartPoint().getY() - renderLayer2BBox.getStartPoint().getY() );
 
-		final TranslationModel2D tran12ModelA = new TranslationModel2D();
-		tran12ModelA.set( img1OriginPoint[0] - colFromPixel, img1OriginPoint[1] - rowFromPixel );
-		final TranslationModel2D tran12ModelB = new TranslationModel2D();
-		tran12ModelB.set( img2OriginPoint[0] - colFromPixel, img2OriginPoint[1] - rowFromPixel );
-		
 		final CoordinateTransformList< CoordinateTransform > scaledModel = new CoordinateTransformList< CoordinateTransform >();
 		scaledModel.add( scaleDownModel.createInverse() ); // scale up
 		scaledModel.add( tran1Model ); // translate the cropped img1 to the full img1 position
 		scaledModel.add( ( CoordinateTransform )model ); // apply model (full img1 -> full img2)
 		scaledModel.add( ( ( InvertibleCoordinateTransform )tran1Model ).createInverse() ); // translate back
 		scaledModel.add( ( ( InvertibleCoordinateTransform )tran12Model ).createInverse() );
-		//scaledModel.add( tran12ModelB );
 		scaledModel.add( scaleDownModel ); // scale down
 		
 		final CoordinateTransformList< CoordinateTransform > scaledInverseModel = new CoordinateTransformList< CoordinateTransform >();
@@ -988,12 +967,12 @@ public class MatchLayersByMaxPMCC {
 		scaledInverseModel.add( ( ( InvertibleCoordinateTransform )model ).createInverse() ); // apply inverse model (full img2 -> full img1)
 		scaledInverseModel.add( ( ( InvertibleCoordinateTransform )tran2Model ).createInverse() ); // translate back
 		scaledInverseModel.add( tran12Model );
-		//scaledInverseModel.add( tran12ModelA );
 		scaledInverseModel.add( scaleDownModel ); // scale down
 
 		
 		try
 		{
+			System.out.println( "Trying to match " + v1Filtered.size() + " vertices." );
 			startTime = System.currentTimeMillis();
 			BlockMatching.matchByMaximalPMCC(
 					ip1,
@@ -1141,6 +1120,7 @@ public class MatchLayersByMaxPMCC {
 
 		try
 		{
+			System.out.println( "Trying to match " + v2Filtered.size() + " vertices." );
 			startTime = System.currentTimeMillis();
 			BlockMatching.matchByMaximalPMCC(
 					ip2,
