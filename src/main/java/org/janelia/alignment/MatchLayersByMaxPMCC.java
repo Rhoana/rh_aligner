@@ -1,5 +1,7 @@
 package org.janelia.alignment;
 
+import ij.IJ;
+import ij.ImagePlus;
 import ij.process.ByteProcessor;
 import ij.process.ColorProcessor;
 import ij.process.FloatProcessor;
@@ -33,6 +35,7 @@ import mpicbg.models.Point;
 import mpicbg.models.PointMatch;
 import mpicbg.models.RigidModel2D;
 import mpicbg.models.SpringMesh;
+import mpicbg.models.TranslationModel2D;
 import mpicbg.models.Vertex;
 import mpicbg.trakem2.align.Util;
 import mpicbg.trakem2.transform.AffineModel2D;
@@ -295,6 +298,32 @@ public class MatchLayersByMaxPMCC {
 
 	/**
 	 * Receives a single layer, applies the transformations, and outputs the ip and mask
+	 * of the given level (render the ip and ipMask), according to a given bounding box
+	 * 
+	 * @param layerTileSpecs
+	 * @param ip
+	 * @param ipMask
+	 * @param mipmapLevel
+	 */
+	private static FloatProcessor tilespecToFloatAndMask(
+			final TileSpecsImage layerTileSpecsImage,
+			final int layer,
+			final int mipmapLevel,
+			final float layerScale,
+			final String meshesDir,
+			final BoundingBox bbox )
+	{
+		final ByteProcessor tp;
+		if ( meshesDir == null )
+			tp = layerTileSpecsImage.render( layer, mipmapLevel, layerScale, bbox.getWidth(), bbox.getHeight(), bbox.getStartPoint().getX(), bbox.getStartPoint().getY() );
+		else
+			throw new UnsupportedOperationException( "No support yet for rendering using meshes and bounding box" );
+			//tp = layerTileSpecsImage.renderFromMeshes( meshesDir, layer, mipmapLevel, layerScale, bbox.getWidth(), bbox.getHeight(), bbox.getStartPoint().getX(), bbox.getStartPoint().getY() );
+		return tp.convertToFloatProcessor();
+	}
+
+	/**
+	 * Receives a single layer, applies the transformations, and outputs the ip and mask
 	 * of the given level (render the ip and ipMask)
 	 * 
 	 * @param layerTileSpecs
@@ -471,13 +500,13 @@ public class MatchLayersByMaxPMCC {
 		
 		//final float springConstant  = 1.0f / ( layer2 - layer1 );
 		
-
 		// Scale the affine transformation
 		final AffineTransform scaleDown = new AffineTransform();
 		scaleDown.scale( param.layerScale, param.layerScale );
 		final AffineModel2D scaleDownModel = new AffineModel2D();
 		scaleDownModel.set( scaleDown );
 		
+
 		final CoordinateTransformList< CoordinateTransform > scaledModel = new CoordinateTransformList< CoordinateTransform >();
 		scaledModel.add( scaleDownModel.createInverse() );
 		scaledModel.add( ( CoordinateTransform )model );
@@ -814,7 +843,7 @@ public class MatchLayersByMaxPMCC {
 		final ArrayList< Vertex > v1 = m1.getVertices();
 		final ArrayList< Vertex > v2 = m2.getVertices();
 
-		// TODO - filter out vertices that are not in the rectangle
+		// filter out vertices that are not in the rectangle
 		final float fromX = colFromPixel * param.layerScale;
 		final float toX = colToPixel * param.layerScale;
 		final float fromY = rowFromPixel * param.layerScale;
@@ -862,12 +891,61 @@ public class MatchLayersByMaxPMCC {
 		final FloatProcessor ip1Mask = new FloatProcessor( img1Width, img1Height );
 		final FloatProcessor ip2Mask = new FloatProcessor( img2Width, img2Height );
 		*/
+
+		// TODO - find rendering bounding box for each of the images
+		// Get images size
+		final BoundingBox layer1BBox = layer1Img.getBoundingBox();
+		final BoundingBox layer2BBox = layer2Img.getBoundingBox();
+
+		// Get rendering bounding box for image 1
+		BoundingBox renderLayer1BBox = new BoundingBox( colFromPixel, colToPixel, rowFromPixel, rowToPixel );
+		float[] img1OriginPoint = { colFromPixel, rowFromPixel };
+		model.applyInPlace( img1OriginPoint );
+		// Stretch the rendering bounding box of image 1 according to the transformation between the layers
+		final BoundingBox renderLayer1BBoxTransformed = renderLayer1BBox.apply2DAffineTransformation( ( CoordinateTransform )model );
+		renderLayer1BBox.extendByBoundingBox( renderLayer1BBoxTransformed );
+		// Add a small buffer to the rendering bounding box of image 1 according to the search radius
+		renderLayer1BBox.extendByMinMax(
+				renderLayer1BBox.getStartPoint().getX() - param.searchRadius,
+				renderLayer1BBox.getEndPoint().getX() + param.searchRadius + param.blockRadius,
+				renderLayer1BBox.getStartPoint().getY() - param.searchRadius,
+				renderLayer1BBox.getEndPoint().getY() + param.searchRadius + param.blockRadius );
+
+		// Get rendering bounding box for image 2
+		BoundingBox renderLayer2BBox = new BoundingBox( colFromPixel, colToPixel, rowFromPixel, rowToPixel );
+		float[] img2OriginPoint = { colFromPixel, rowFromPixel };
+		( ( InvertibleCoordinateTransform )model ).createInverse().applyInPlace( img2OriginPoint );
+		// Stretch the rendering bounding box of image 1 according to the transformation between the layers
+		final BoundingBox renderLayer2BBoxTransformed = renderLayer2BBox.apply2DAffineTransformation( ( ( InvertibleCoordinateTransform )model ).createInverse() );
+		renderLayer2BBox.extendByBoundingBox( renderLayer2BBoxTransformed );
+		// Add a small buffer to the rendering bounding box of image 2 according to the search radius
+		renderLayer2BBox.extendByMinMax(
+				renderLayer2BBox.getStartPoint().getX() - param.searchRadius,
+				renderLayer2BBox.getEndPoint().getX() + param.searchRadius + param.blockRadius,
+				renderLayer2BBox.getStartPoint().getY() - param.searchRadius,
+				renderLayer2BBox.getEndPoint().getY() + param.searchRadius + param.blockRadius );
+		
+		// Translate the to be matches points according to the new rendered window
+		for ( Vertex v : v1Filtered )
+		{
+			float[] l = v.getL();
+			l[ 0 ] -= renderLayer1BBox.getStartPoint().getX() * param.layerScale;
+			l[ 1 ] -= renderLayer1BBox.getStartPoint().getY() * param.layerScale;
+		}
+		for ( Vertex v : v2Filtered )
+		{
+			float[] l = v.getL();
+			l[ 0 ] -= renderLayer2BBox.getStartPoint().getX() * param.layerScale;
+			l[ 1 ] -= renderLayer2BBox.getStartPoint().getY() * param.layerScale;
+		}
 		
 		// TODO: load the tile specs to FloatProcessor objects
-		final FloatProcessor ip1 = tilespecToFloatAndMask( layer1Img, layer1, mipmapLevel, param.layerScale, param.meshesDir1 );
-		final FloatProcessor ip2 = tilespecToFloatAndMask( layer2Img, layer2, mipmapLevel, param.layerScale, param.meshesDir2 );
+//		final FloatProcessor ip1 = tilespecToFloatAndMask( layer1Img, layer1, mipmapLevel, param.layerScale, param.meshesDir1 );
+//		final FloatProcessor ip2 = tilespecToFloatAndMask( layer2Img, layer2, mipmapLevel, param.layerScale, param.meshesDir2 );
 //		final ByteProcessor ip1 = tilespecToByteAndMask( layer1Img, layer1, mipmapLevel, param.layerScale, param.meshesDir1 );
 //		final ByteProcessor ip2 = tilespecToByteAndMask( layer2Img, layer2, mipmapLevel, param.layerScale, param.meshesDir2 );
+		final FloatProcessor ip1 = tilespecToFloatAndMask( layer1Img, layer1, mipmapLevel, param.layerScale, param.meshesDir1, renderLayer1BBox );
+		final FloatProcessor ip2 = tilespecToFloatAndMask( layer2Img, layer2, mipmapLevel, param.layerScale, param.meshesDir2, renderLayer2BBox );
 		endTime = System.currentTimeMillis();
 		if ( PRINT_TIME_PER_STEP )
 			System.out.println("Creating images took: " + ((endTime - startTime) / 1000.0) + " sec");
@@ -880,16 +958,38 @@ public class MatchLayersByMaxPMCC {
 		scaleDown.scale( param.layerScale, param.layerScale );
 		final AffineModel2D scaleDownModel = new AffineModel2D();
 		scaleDownModel.set( scaleDown );
+
+		final TranslationModel2D tran1Model = new TranslationModel2D();
+		tran1Model.set( renderLayer1BBox.getStartPoint().getX(), renderLayer1BBox.getStartPoint().getY() );
+
+		final TranslationModel2D tran2Model = new TranslationModel2D();
+		tran2Model.set( renderLayer2BBox.getStartPoint().getX(), renderLayer2BBox.getStartPoint().getY() );
+
+		final TranslationModel2D tran12Model = new TranslationModel2D();
+		tran12Model.set( renderLayer1BBox.getStartPoint().getX() - renderLayer2BBox.getStartPoint().getX(), renderLayer1BBox.getStartPoint().getY() - renderLayer2BBox.getStartPoint().getY() );
+
+		final TranslationModel2D tran12ModelA = new TranslationModel2D();
+		tran12ModelA.set( img1OriginPoint[0] - colFromPixel, img1OriginPoint[1] - rowFromPixel );
+		final TranslationModel2D tran12ModelB = new TranslationModel2D();
+		tran12ModelB.set( img2OriginPoint[0] - colFromPixel, img2OriginPoint[1] - rowFromPixel );
 		
 		final CoordinateTransformList< CoordinateTransform > scaledModel = new CoordinateTransformList< CoordinateTransform >();
-		scaledModel.add( scaleDownModel.createInverse() );
-		scaledModel.add( ( CoordinateTransform )model );
-		scaledModel.add( scaleDownModel );
+		scaledModel.add( scaleDownModel.createInverse() ); // scale up
+		scaledModel.add( tran1Model ); // translate the cropped img1 to the full img1 position
+		scaledModel.add( ( CoordinateTransform )model ); // apply model (full img1 -> full img2)
+		scaledModel.add( ( ( InvertibleCoordinateTransform )tran1Model ).createInverse() ); // translate back
+		scaledModel.add( ( ( InvertibleCoordinateTransform )tran12Model ).createInverse() );
+		//scaledModel.add( tran12ModelB );
+		scaledModel.add( scaleDownModel ); // scale down
 		
 		final CoordinateTransformList< CoordinateTransform > scaledInverseModel = new CoordinateTransformList< CoordinateTransform >();
-		scaledInverseModel.add( scaleDownModel.createInverse() );
-		scaledInverseModel.add( ( ( InvertibleCoordinateTransform )model ).createInverse() );
-		scaledInverseModel.add( scaleDownModel );
+		scaledInverseModel.add( scaleDownModel.createInverse() ); // scale up
+		scaledInverseModel.add( tran2Model ); // translate the cropped img2 to the full img2 position 
+		scaledInverseModel.add( ( ( InvertibleCoordinateTransform )model ).createInverse() ); // apply inverse model (full img2 -> full img1)
+		scaledInverseModel.add( ( ( InvertibleCoordinateTransform )tran2Model ).createInverse() ); // translate back
+		scaledInverseModel.add( tran12Model );
+		//scaledInverseModel.add( tran12ModelA );
+		scaledInverseModel.add( scaleDownModel ); // scale down
 
 		
 		try
@@ -934,6 +1034,17 @@ public class MatchLayersByMaxPMCC {
 			throw new RuntimeException( "Block matching interrupted." );
 		}
 
+//		// Move the match results back to their "original" coordinate system
+//		TranslationModel2D tran_back12 = new TranslationModel2D();
+//		tran_back12.set( renderLayer1BBox.getStartPoint().getX() * param.layerScale, renderLayer1BBox.getStartPoint().getY() * param.layerScale );
+//		for ( PointMatch pm: pm12 )
+//		{
+//			
+//			pm.getP1().getL();
+//			pm.apply( tran_back12 );
+//		}
+
+		
 		if ( param.useLocalSmoothnessFilter )
 		{
 
@@ -988,16 +1099,36 @@ public class MatchLayersByMaxPMCC {
 		for (PointMatch pm: pm12)
 		{
 			PointMatch actualPm;
-			try {
+//			try {
+				// translate the pointmatch local coordinates to the actual non-rectangular coordinate system
+				float[] pm1L = pm.getP1().getL();
+				pm1L[0] += renderLayer1BBox.getStartPoint().getX() * param.layerScale;
+				pm1L[1] += renderLayer1BBox.getStartPoint().getY() * param.layerScale;
+				float[] pm2L = pm.getP2().getL();
+				pm2L[0] += renderLayer2BBox.getStartPoint().getX() * param.layerScale;
+				pm2L[1] += renderLayer2BBox.getStartPoint().getY() * param.layerScale;
+				// translate the pointmatch world coordinates to the actual non-rectangular coordinate system
+				float[] pm1W = pm.getP1().getW();
+				pm1W[0] = ( pm1W[0] / param.layerScale ) + renderLayer1BBox.getStartPoint().getX();
+				pm1W[1] = ( pm1W[1] / param.layerScale ) + renderLayer1BBox.getStartPoint().getY();
+				float[] pm2W = pm.getP2().getW();
+				pm2W[0] = ( pm2W[0] / param.layerScale ) + renderLayer2BBox.getStartPoint().getX();
+				pm2W[1] = ( pm2W[1] / param.layerScale ) + renderLayer2BBox.getStartPoint().getY();
+				actualPm = new PointMatch(
+						new Point( pm1L, pm1W ),
+						new Point( pm2L, pm2W )
+						);
+/*
 				actualPm = new PointMatch(
 						new Point( pm.getP1().getL(), scaleDownModel.applyInverse( pm.getP1().getW() ) ),
 						new Point( pm.getP2().getL(), scaleDownModel.applyInverse( pm.getP2().getW() ) )
 						);
+*/
 				pm12_strip.add( actualPm );
-			} catch (NoninvertibleModelException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
+//			} catch (NoninvertibleModelException e) {
+//				// TODO Auto-generated catch block
+//				e.printStackTrace();
+//			}
 		}
 		
 		// TODO: Export / Import master sprint mesh vertices no calculated  individually per tile (v1, v2).
@@ -1049,6 +1180,14 @@ public class MatchLayersByMaxPMCC {
 			//IJ.showProgress( 1.0 );
 			throw new RuntimeException( "Block matching interrupted." );
 		}
+
+//		// Move the match results back to their "original" coordinate system
+//		TranslationModel2D tran_back21 = new TranslationModel2D();
+//		tran_back21.set( renderLayer2BBox.getStartPoint().getX() * param.layerScale, renderLayer2BBox.getStartPoint().getY() * param.layerScale );
+//		for ( PointMatch pm: pm21 )
+//		{
+//			pm.apply( tran_back21 );
+//		}
 
 		if ( param.useLocalSmoothnessFilter )
 		{
@@ -1102,6 +1241,27 @@ public class MatchLayersByMaxPMCC {
 		for (PointMatch pm: pm21)
 		{
 			PointMatch actualPm;
+			// translate the pointmatch local coordinates to the actual non-rectangular coordinate system
+			float[] pm1L = pm.getP1().getL();
+			pm1L[0] += renderLayer2BBox.getStartPoint().getX() * param.layerScale;
+			pm1L[1] += renderLayer2BBox.getStartPoint().getY() * param.layerScale;
+			float[] pm2L = pm.getP2().getL();
+			pm2L[0] += renderLayer1BBox.getStartPoint().getX() * param.layerScale;
+			pm2L[1] += renderLayer1BBox.getStartPoint().getY() * param.layerScale;
+			// translate the pointmatch world coordinates to the actual non-rectangular coordinate system
+			float[] pm1W = pm.getP1().getW();
+			pm1W[0] = ( pm1W[0] / param.layerScale ) + renderLayer2BBox.getStartPoint().getX();
+			pm1W[1] = ( pm1W[1] / param.layerScale ) + renderLayer2BBox.getStartPoint().getY();
+			float[] pm2W = pm.getP2().getW();
+			pm2W[0] = ( pm2W[0] / param.layerScale ) + renderLayer1BBox.getStartPoint().getX();
+			pm2W[1] = ( pm2W[1] / param.layerScale ) + renderLayer1BBox.getStartPoint().getY();
+			actualPm = new PointMatch(
+					new Point( pm1L, pm1W ),
+					new Point( pm2L, pm2W )
+					);
+			pm21_strip.add( actualPm );
+
+			/*
 			try {
 				actualPm = new PointMatch(
 						new Point( pm.getP1().getL(), scaleDownModel.applyInverse( pm.getP1().getW() ) ),
@@ -1112,6 +1272,7 @@ public class MatchLayersByMaxPMCC {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
+			*/
 		}
 
 		// TODO: Export / Import master sprint mesh vertices no calculated  individually per tile (v1, v2).
@@ -1297,11 +1458,17 @@ public class MatchLayersByMaxPMCC {
 					CorrespondenceSpec[] rectData = loadIntermediateResults( params, row, col );
 					if ( rectData == null )
 					{
+						
 						final List< CorrespondenceSpec > rectDataList = matchLayersByMaxPMCCByRectangle( 
 								params, (AbstractModel< ? >)model,
 								tilespecs1, tilespecs2, mipmapLevel,
 								fromRowPixel, toRowPixel, fromColPixel, toColPixel );
-						
+						/*
+						final List< CorrespondenceSpec > rectDataList = matchLayersByMaxPMCCByRectangle( 
+								params, (AbstractModel< ? >)model,
+								tilespecs1, tilespecs2, mipmapLevel,
+								0, params.imageHeight, 0, params.imageWidth );
+						*/
 						
 						// Save the intermediate data
 						saveIntermediateResults( rectDataList, params, row, col );

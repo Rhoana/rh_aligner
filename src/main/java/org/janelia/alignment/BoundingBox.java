@@ -1,5 +1,7 @@
 package org.janelia.alignment;
 
+import mpicbg.models.CoordinateTransform;
+
 public class BoundingBox {
 
 	/* Helping classes */
@@ -37,6 +39,7 @@ public class BoundingBox {
 			this.y = y;
 			this.z = z;
 		}
+
 	}
 	
 	public static class Dimensions {
@@ -91,7 +94,7 @@ public class BoundingBox {
 		endPoint = new Point3D( rightX, bottomY );
 		initialized = true;
 	}
-	
+
 	/* Public methods */
 	
 	public Point3D getStartPoint() {
@@ -236,5 +239,31 @@ public class BoundingBox {
 			endPoint.getY()
 		};
 		return arr;
+	}
+	
+	public BoundingBox apply2DAffineTransformation( CoordinateTransform model ) {
+		if ( !initialized )
+			throw new RuntimeException( "Cannot apply transformation to a non intialized bounding box" );
+		
+		// Apply the transformation to all boundary points
+		float[][] corners = new float[4][];
+		corners[0] = new float[] { startPoint.getX(), startPoint.getY() }; // top-left
+		corners[1] = new float[] { endPoint.getX(), startPoint.getY() }; // top-right
+		corners[2] = new float[] { startPoint.getX(), endPoint.getY() }; // bottom-left
+		corners[3] = new float[] { endPoint.getX(), endPoint.getY() }; // bottom-right
+		for ( int c = 0; c < corners.length; c++ )
+			model.applyInPlace( corners[ c ] );
+		
+		// Find the new bounding box
+		int[] minmaxX = { Math.round( corners[0][0] ), Math.round( corners[0][0] ) };
+		int[] minmaxY = { Math.round( corners[0][1] ), Math.round( corners[0][1] ) };
+		for ( int c = 1; c < corners.length; c++ ) {
+			minmaxX[0] = Math.min( minmaxX[0], Math.round( corners[ c ][ 0 ] ) );
+			minmaxX[1] = Math.max( minmaxX[1], Math.round( corners[ c ][ 0 ] ) );
+			minmaxY[0] = Math.min( minmaxY[0], Math.round( corners[ c ][ 1 ] ) );
+			minmaxY[1] = Math.max( minmaxY[1], Math.round( corners[ c ][ 1 ] ) );
+		}
+
+		return new BoundingBox( minmaxX[0], minmaxX[1], minmaxY[0], minmaxY[1], startPoint.getZ(), endPoint.getZ() );
 	}
 }
