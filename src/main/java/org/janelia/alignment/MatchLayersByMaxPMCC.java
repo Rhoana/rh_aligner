@@ -315,7 +315,7 @@ public class MatchLayersByMaxPMCC {
 	{
 		final ByteProcessor tp;
 		if ( meshesDir == null )
-			tp = layerTileSpecsImage.render( layer, mipmapLevel, layerScale, bbox.getWidth(), bbox.getHeight(), bbox.getStartPoint().getX(), bbox.getStartPoint().getY() );
+			tp = layerTileSpecsImage.render( layer, mipmapLevel, layerScale, bbox.getWidth(), bbox.getHeight(), bbox.getStartPoint().getX(), bbox.getStartPoint().getY(), true );
 		else
 			throw new UnsupportedOperationException( "No support yet for rendering using meshes and bounding box" );
 			//tp = layerTileSpecsImage.renderFromMeshes( meshesDir, layer, mipmapLevel, layerScale, bbox.getWidth(), bbox.getHeight(), bbox.getStartPoint().getX(), bbox.getStartPoint().getY() );
@@ -757,6 +757,8 @@ public class MatchLayersByMaxPMCC {
 			final AbstractModel< ? > model,
 			final TileSpec[] ts1,
 			final TileSpec[] ts2,
+			final TileSpecsImage layer1Img,
+			final TileSpecsImage layer2Img,
 			int mipmapLevel,
 			final int rowFromPixel,
 			final int rowToPixel,
@@ -860,11 +862,6 @@ public class MatchLayersByMaxPMCC {
 		/* Load images and masks into FloatProcessor objects */		
 		System.out.println( "Rendering layers" );
 		startTime = System.currentTimeMillis();
-		final TileSpecsImage layer1Img = new TileSpecsImage( ts1 );
-		final TileSpecsImage layer2Img = new TileSpecsImage( ts2 );
-		
-		layer1Img.setThreadsNum( param.numThreads );
-		layer2Img.setThreadsNum( param.numThreads );
 		
 		/*
 		final BoundingBox layer1BBox = layer1Img.getBoundingBox();
@@ -1088,11 +1085,11 @@ public class MatchLayersByMaxPMCC {
 				pm2L[1] += renderLayer2BBox.getStartPoint().getY() * param.layerScale;
 				// translate the pointmatch world coordinates to the actual non-rectangular coordinate system
 				float[] pm1W = pm.getP1().getW();
-				pm1W[0] = ( pm1W[0] / param.layerScale ) + renderLayer1BBox.getStartPoint().getX();
-				pm1W[1] = ( pm1W[1] / param.layerScale ) + renderLayer1BBox.getStartPoint().getY();
+				pm1W[0] = pm1L[0] / param.layerScale;
+				pm1W[1] = pm1L[1] / param.layerScale;
 				float[] pm2W = pm.getP2().getW();
-				pm2W[0] = ( pm2W[0] / param.layerScale ) + renderLayer2BBox.getStartPoint().getX();
-				pm2W[1] = ( pm2W[1] / param.layerScale ) + renderLayer2BBox.getStartPoint().getY();
+				pm2W[0] = pm2L[0] / param.layerScale;
+				pm2W[1] = pm2L[1] / param.layerScale;
 				actualPm = new PointMatch(
 						new Point( pm1L, pm1W ),
 						new Point( pm2L, pm2W )
@@ -1230,11 +1227,11 @@ public class MatchLayersByMaxPMCC {
 			pm2L[1] += renderLayer1BBox.getStartPoint().getY() * param.layerScale;
 			// translate the pointmatch world coordinates to the actual non-rectangular coordinate system
 			float[] pm1W = pm.getP1().getW();
-			pm1W[0] = ( pm1W[0] / param.layerScale ) + renderLayer2BBox.getStartPoint().getX();
-			pm1W[1] = ( pm1W[1] / param.layerScale ) + renderLayer2BBox.getStartPoint().getY();
+			pm1W[0] = pm1L[0] / param.layerScale;
+			pm1W[1] = pm1L[1] / param.layerScale;
 			float[] pm2W = pm.getP2().getW();
-			pm2W[0] = ( pm2W[0] / param.layerScale ) + renderLayer1BBox.getStartPoint().getX();
-			pm2W[1] = ( pm2W[1] / param.layerScale ) + renderLayer1BBox.getStartPoint().getY();
+			pm2W[0] = pm2L[0] / param.layerScale;
+			pm2W[1] = pm2L[1] / param.layerScale;
 			actualPm = new PointMatch(
 					new Point( pm1L, pm1W ),
 					new Point( pm2L, pm2W )
@@ -1414,6 +1411,12 @@ public class MatchLayersByMaxPMCC {
 			final List< List< PointMatch > > matches_layer_1to2 = new ArrayList< List< PointMatch > >();
 			final List< List< PointMatch > > matches_layer_2to1 = new ArrayList< List< PointMatch > >();
 
+			final TileSpecsImage layer1Img = new TileSpecsImage( tilespecs1 );
+			final TileSpecsImage layer2Img = new TileSpecsImage( tilespecs2 );
+			
+			layer1Img.setThreadsNum( params.numThreads );
+			layer2Img.setThreadsNum( params.numThreads );
+
 			int matchesNum_1to2 = 0;
 			int matchesNum_2to1 = 0;
 
@@ -1441,7 +1444,8 @@ public class MatchLayersByMaxPMCC {
 						
 						final List< CorrespondenceSpec > rectDataList = matchLayersByMaxPMCCByRectangle( 
 								params, (AbstractModel< ? >)model,
-								tilespecs1, tilespecs2, mipmapLevel,
+								tilespecs1, tilespecs2, 
+								layer1Img, layer2Img, mipmapLevel,
 								fromRowPixel, toRowPixel, fromColPixel, toColPixel );
 						/*
 						final List< CorrespondenceSpec > rectDataList = matchLayersByMaxPMCCByRectangle( 

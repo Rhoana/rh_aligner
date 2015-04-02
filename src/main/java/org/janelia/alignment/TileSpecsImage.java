@@ -17,6 +17,7 @@ import java.io.ObjectOutputStream;
 import java.io.Writer;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeMap;
@@ -64,6 +65,8 @@ public class TileSpecsImage {
 	private int threadsNum;
 	private boolean parsed;
 	
+	// A mapping between layer -> map[imageUrl -> image processor]
+	private HashMap< Integer, HashMap< String, ImageProcessor > > persistentImageCache;
 	
 	/* C'tors */
 	
@@ -133,8 +136,12 @@ public class TileSpecsImage {
 		
 		return render( layer, mipmapLevel, scale, width, height, offsetX, offsetY );
 	}
-	
+
 	public ByteProcessor render( int layer, int mipmapLevel, float scale, int width, int height, int offsetX, int offsetY ) {
+		return render( layer, mipmapLevel, scale, width, height, offsetX, offsetY, false );
+	}
+	
+	public ByteProcessor render( int layer, int mipmapLevel, float scale, int width, int height, int offsetX, int offsetY, boolean usePersistance ) {
 		// Make sure that the bounding box is computed
 		parseTileSpecs();
 		
@@ -178,22 +185,40 @@ public class TileSpecsImage {
 			tsMipmapEntry = tsMipmapLevels.get( key );
 			final String imgUrl = tsMipmapEntry.imageUrl;
 			System.out.println( "Rendering tile: " + imgUrl );
-			final ImagePlus imp = Utils.openImagePlusUrl( imgUrl );
-			if ( imp == null )
+			if ( ( usePersistance ) &&
+				 ( persistentImageCache.containsKey( layer ) ) && ( persistentImageCache.get( layer ).containsKey( imgUrl ) ) )
 			{
-				System.err.println( "Failed to load image '" + imgUrl + "'." );
-				continue;
-			}
-			tsIp = imp.getProcessor();
-			final int currentMipmapLevel = Integer.parseInt( key );
-			if ( currentMipmapLevel >= mipmapLevel )
-			{
-				mipmapLevel = currentMipmapLevel;
-				tsIpMipmap = tsIp;
+				// load from cache
+				HashMap< String, ImageProcessor > imgUrlToIp = persistentImageCache.get( layer );
+				tsIpMipmap = imgUrlToIp.get( imgUrl );
 			}
 			else
-				tsIpMipmap = Downsampler.downsampleImageProcessor( tsIp, mipmapLevel - currentMipmapLevel );
-
+			{
+				// If no persistence should be used, or the image is not in the cache, load it from disk
+				final ImagePlus imp = Utils.openImagePlusUrl( imgUrl );
+				if ( imp == null )
+				{
+					System.err.println( "Failed to load image '" + imgUrl + "'." );
+					throw new RuntimeException( "Failed to load image '" + imgUrl + "'." );
+				}
+				tsIp = imp.getProcessor();
+				final int currentMipmapLevel = Integer.parseInt( key );
+				if ( currentMipmapLevel >= mipmapLevel )
+				{
+					mipmapLevel = currentMipmapLevel;
+					tsIpMipmap = tsIp;
+				}
+				else
+					tsIpMipmap = Downsampler.downsampleImageProcessor( tsIp, mipmapLevel - currentMipmapLevel );
+				
+				if ( usePersistance )
+				{
+					if ( !persistentImageCache.containsKey( layer ) )
+						persistentImageCache.put( layer, new HashMap< String, ImageProcessor >() );
+					HashMap< String, ImageProcessor > imgUrlToIp = persistentImageCache.get( layer );
+					imgUrlToIp.put( imgUrl, tsIpMipmap );
+				}
+			}
 			
 			/* open mask */
 			final ByteProcessor bpMaskSource;
@@ -543,6 +568,7 @@ public class TileSpecsImage {
 		boundingBox = null;
 		threadsNum = Runtime.getRuntime().availableProcessors();
 		parsed = false;
+		persistentImageCache = new HashMap<Integer, HashMap<String,ImageProcessor>>();
 	}
 	
 
