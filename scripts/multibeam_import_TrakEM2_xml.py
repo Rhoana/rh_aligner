@@ -383,8 +383,6 @@ def write_layer(out_data, layer, layer_patches):
 
 
 def write_patch(out_data, tile):
-    print("***********")
-    print(tile)
     patch_lines = \
 """                        <t2_patch
                                 """ + 'oid="{}"'.format(fetch_and_increase_oid()) + """
@@ -476,10 +474,8 @@ if __name__ == '__main__':
 
     # Command line parser
     parser = argparse.ArgumentParser(description='Creates the TrakEM2 xml file for images that were acquired using the multiebeam EM.')
-    parser.add_argument('input_file', metavar='input_file', type=str, 
-                    help='a full_coordinates txt file that contains a specific section images')
-    parser.add_argument('images_dir', metavar='images_dir', type=str, 
-                    help='the directory where the sections images are')
+    parser.add_argument('input_folder', metavar='input_folder', type=str, 
+                    help='a directory that contains sections subdirectories in which a full_coordinates txt file per section')
     parser.add_argument('-o', '--output_xml', type=str, 
                     help='the xml file where all the tiles will be stored (default: ./output.xml)',
                     default='./output.xml')
@@ -489,23 +485,45 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    xml_file_name =  os.path.basename(args.output_xml)
+    xml_file_name = os.path.basename(args.output_xml)
+
+    print("Parsing all subsections from folder: {}".format(args.input_folder))
+    all_sub_folders = sorted(glob.glob(os.path.join(args.input_folder, '*')))
 
 
-    images, x, y = parse_coordinates_file(args.input_file)
-    x = offset_list(x)
-    y = offset_list(y)
+    max_layer_width = 0
+    max_layer_height = 0
 
-    layer_data = parse_layer(args.images_dir, images, x, y)
-    print(layer_data)
-    max_layer_width = int(math.ceil(max(x)))
-    max_layer_height = int(math.ceil(max(y)))
+    all_layers = []
+
+    for sub_folder in all_sub_folders:
+        if os.path.isdir(sub_folder):
+            print("Parsing subfolder: {}".format(sub_folder))
+            coords_file = os.path.join(sub_folder, "full_image_coordinates.txt")
+            if os.path.exists(coords_file):
+                images, x, y = parse_coordinates_file(coords_file)
+                x = offset_list(x)
+                y = offset_list(y)
+                cur_layer = parse_layer(sub_folder, images, x, y)
+                max_layer_width = max(max_layer_width, cur_layer["width"])
+                max_layer_height = max(max_layer_height, cur_layer["height"])
+                layer = int(sub_folder.split(os.path.sep)[-1])
+                cur_layer["layer_num"] = layer
+                all_layers.append(cur_layer)
+            else:
+                print("Could not find full_image_coordinates.txt, skipping subfolder")
+
+    max_layer_width = int(math.ceil(max_layer_width))
+    max_layer_height = int(math.ceil(max_layer_height))
+
+    print("Done parsing, writing xml file")
 
     # Create the output file and write the first lines of the xml
     out_data = open(args.output_xml, "w")
     write_pre_xml(out_data, xml_file_name, max_layer_width, max_layer_height)
     # write the tiles per layer
-    write_layer(out_data, 1, layer_data["tiles"])
+    for cur_layer in all_layers:
+        write_layer(out_data, cur_layer["layer_num"], cur_layer["tiles"])
 
     # write the last lines of the xml
     write_post_xml(out_data, max_layer_width, max_layer_height)
