@@ -8,11 +8,42 @@ import urlparse, urllib
 import argparse
 import csv
 import math
-import cv2
 import time
 
 # a global object id counter for the different objects for TrakEM2
 global_oid_counter = 5
+
+def read_bmp_dimensions(bmp_file):
+    """ Taken from: http://runnable.com/UqJdRnCIohYmAAGP/reading-binary-files-in-python-for-io """
+    import struct
+    dims = None
+    # When reading a binary file, always add a 'b' to the file open mode
+    with open(bmp_file, 'rb') as f:
+        # BMP files store their width and height statring at byte 18 (12h), so seek
+        # to that position
+        f.seek(18)
+
+        # The width and height are 4 bytes each, so read 8 bytes to get both of them
+        bytes = f.read(8)
+
+        # Here, we decode the byte array from the last step. The width and height
+        # are each unsigned, little endian, 4 byte integers, so they have the format
+        # code '<II'. See http://docs.python.org/3/library/struct.html for more info
+        size = struct.unpack('<II', bytes)
+
+        dims = [size[1], size[0]]
+    return dims
+
+def read_dimensions(img_file):
+    if img_file.lower().endswith(".bmp"):
+        return read_bmp_dimensions(img_file)
+    else:
+        import cv2
+        im = cv2.imread(image_file, cv2.IMREAD_GRAYSCALE)
+        if im is None:
+            print('Cannot read tile image: {}'.format(image_file))
+            sys.exit(1)
+        return im.shape
 
 
 def fetch_and_increase_oid():
@@ -415,11 +446,7 @@ def parse_layer(base_dir, images, x, y):
         image_file = os.path.join(base_dir, img)
         tile = {}
         if image_size is None:
-            im = cv2.imread(image_file, cv2.IMREAD_GRAYSCALE)
-            if im is None:
-                print('Cannot read tile image: {}'.format(image_file))
-                sys.exit(1)
-            image_size = im.shape
+            image_size = read_dimensions(image_file)
         tile["file_full_path"] = os.path.abspath(image_file)
         tile["file_base_name"] = os.path.basename(tile["file_full_path"])
         tile["width"] = image_size[1]
