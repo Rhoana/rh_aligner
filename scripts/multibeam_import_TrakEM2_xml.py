@@ -54,7 +54,7 @@ def fetch_and_increase_oid():
     global_oid_counter += 1
     return res
 
-def write_pre_xml(out_data, xml_file_name, layer_width, layer_height):
+def write_pre_xml(out_data, xml_file_name, layer_width, layer_height, mipmap_threads):
     unuid="{}.1224689168.2106301".format(int(round(time.time() * 1000)))
     lines = """<?xml version="1.0" encoding="ISO-8859-1"?>
 <!DOCTYPE trakem2_anything [
@@ -327,7 +327,7 @@ def write_pre_xml(out_data, xml_file_name, layer_width, layer_height):
                 storage_folder=""
                 mipmaps_format="4"
                 image_resizing_mode="Area downsampling"
-                n_mipmap_threads="8"
+                """ + 'n_mipmap_threads="{}"'.format(mipmap_threads) + """
                 n_undo_steps="32"
                 look_ahead_cache="0"
         >
@@ -505,6 +505,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Creates the TrakEM2 xml file for images that were acquired using the multiebeam EM.')
     parser.add_argument('input_folder', metavar='input_folder', type=str, 
                     help='a directory that contains sections subdirectories in which a full_coordinates txt file per section')
+    parser.add_argument('-t', '--mipmap_threads', type=int, 
+                    help='number of mipmap threads that should be used (default: 8)',
+                    default=8)
     parser.add_argument('-o', '--output_xml', type=str, 
                     help='the xml file where all the tiles will be stored (default: ./output.xml)',
                     default='./output.xml')
@@ -549,7 +552,7 @@ if __name__ == '__main__':
 
     # Create the output file and write the first lines of the xml
     out_data = open(args.output_xml, "w")
-    write_pre_xml(out_data, xml_file_name, max_layer_width, max_layer_height)
+    write_pre_xml(out_data, xml_file_name, max_layer_width, max_layer_height, args.mipmap_threads)
     # write the tiles per layer
     for cur_layer in all_layers:
         write_layer(out_data, cur_layer["layer_num"], cur_layer["tiles"])
