@@ -323,7 +323,7 @@ def write_pre_xml(out_data, xml_file_name, layer_width, layer_height, mipmap_thr
                 id="0"
                 title=""" + '"' + xml_file_name + '"' + """
                 """ + 'unuid="{}"'.format(unuid) + """
-                """ + 'mipmaps_folder="trakem2.{}/trakem2.mipmaps/'.format(unuid) + """
+                """ + 'mipmaps_folder="trakem2.{}/trakem2.mipmaps/"'.format(unuid) + """
                 storage_folder=""
                 mipmaps_format="4"
                 image_resizing_mode="Area downsampling"
