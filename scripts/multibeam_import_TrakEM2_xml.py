@@ -29,7 +29,9 @@ def read_bmp_dimensions(bmp_file):
         # Here, we decode the byte array from the last step. The width and height
         # are each unsigned, little endian, 4 byte integers, so they have the format
         # code '<II'. See http://docs.python.org/3/library/struct.html for more info
-        size = struct.unpack('<II', bytes)
+        # Our test showed that we needed to use 2's complement (so using 'i' instead of 'I', and taking absolute value)
+        size = struct.unpack('<ii', bytes)
+        size = [abs(size[0]), abs(size[1])]
 
         dims = [size[1], size[0]]
     return dims
