@@ -1,9 +1,11 @@
+#cython: boundscheck=False, wraparound=False
 from __future__ import division
 import numpy as np
 cimport numpy
 from libc.math cimport sin, cos, acos, exp, sqrt, fabs, M_PI
 
 ctypedef numpy.float64_t float32
+ctypedef numpy.uint32_t uint32
 
 cdef:
     float32 small_value = 0.001
@@ -69,6 +71,59 @@ cpdef reglen(vx, vy):
         float32 drx, dry
     val = c_reglen(<float32> vx, <float32> vy, <float32> 1.0, 1.0, &(drx), &(dry))
     return val, drx, dry
+
+##################################################
+# MESH CROSS-LINK DERIVS
+##################################################
+cpdef float32 compute_mesh_derivs(float32[:, :] mesh1,
+                                  float32[:, :] mesh2,
+                                  float32[:, :] d_cost_d_mesh1,
+                                  float32[:, :] d_cost_d_mesh2,
+                                  uint32[:] idx1,
+                                  uint32[:, :] idx2,
+                                  float32[:, :] weight2,
+                                  float32 all_weight,
+                                  float32 sigma):
+    cdef:
+        int i
+        float32 px, py, qx, qy
+        float32 r, h
+        float32 dr_dx, dr_dy, dh_dx, dh_dy
+        float32 cost
+
+    cost = 0
+    with nogil:
+        for i in range(idx1.shape[0]):
+            px = mesh1[idx1[i], 0]
+            py = mesh1[idx1[i], 1]
+            qx = (mesh2[idx2[i, 0], 0] * weight2[i, 0] +
+                  mesh2[idx2[i, 1], 0] * weight2[i, 1] +
+                  mesh2[idx2[i, 2], 0] * weight2[i, 2])
+            qy = (mesh2[idx2[i, 0], 1] * weight2[i, 0] +
+                  mesh2[idx2[i, 1], 1] * weight2[i, 1] +
+                  mesh2[idx2[i, 2], 1] * weight2[i, 2])
+            r = c_reglen(px - qx, py - qy,
+                         1, 1,
+                         &(dr_dx), &(dr_dy))
+            h = c_huber(r, 0, sigma,
+                        dr_dx, dr_dy,
+                        &(dh_dx), &(dh_dy))
+            cost += h * all_weight
+            dh_dx *= all_weight
+            dh_dy *= all_weight
+
+            # update derivs
+            d_cost_d_mesh1[idx1[i], 0] += dh_dx
+            d_cost_d_mesh1[idx1[i], 1] += dh_dy
+            # opposite direction for other end of spring, and distributed according to weight
+            d_cost_d_mesh2[idx2[i, 0], 0] -= weight2[i, 0] * dh_dx
+            d_cost_d_mesh2[idx2[i, 1], 0] -= weight2[i, 1] * dh_dx
+            d_cost_d_mesh2[idx2[i, 2], 0] -= weight2[i, 2] * dh_dx
+            d_cost_d_mesh2[idx2[i, 0], 1] -= weight2[i, 0] * dh_dy
+            d_cost_d_mesh2[idx2[i, 1], 1] -= weight2[i, 1] * dh_dy
+            d_cost_d_mesh2[idx2[i, 2], 1] -= weight2[i, 2] * dh_dy
+    return cost
+
 
 def compare(x, y, eps, restlen, sigma):
     l, dl_dx, dl_dy = reglen(x, y)
