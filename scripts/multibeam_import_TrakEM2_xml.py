@@ -445,6 +445,10 @@ def parse_layer(base_dir, images, x, y):
     image_size = None
 
     for i, img in enumerate(images):
+        # If not using windows, change the folder separator
+        if os.name == "posix":
+            img = img.replace('\\', '/')
+
         image_file = os.path.join(base_dir, img)
         tile = {}
         if image_size is None:
@@ -480,18 +484,27 @@ def parse_coordinates_file(input_file):
     with open(input_file, 'r') as csvfile:
         data_reader = csv.reader(csvfile, delimiter='\t')
         for row in data_reader:
-            img = row[0]
-            # If not using windows, change the folder separator
-            if os.name == "posix":
-                img = img.replace('\\', '/')
+            img_fname = row[0]
+            img_sec_mfov_beam = '_'.join(img_fname.split('\\')[-1].split('_')[:3])
             # Make sure that no duplicates appear
-            if img not in images_dict.keys():
-                images.append(img)
-                images_dict[img] = True
+            if img_sec_mfov_beam not in images_dict.keys():
+                images.append(img_fname)
+                images_dict[img_sec_mfov_beam] = img_fname
                 cur_x = float(row[1])
                 cur_y = float(row[2])
                 x.append(cur_x)
                 y.append(cur_y)
+            else:
+                # Either the image is duplicated, or a newer version was taken,
+                # so make sure that the newer version is used
+                prev_img = images_dict[img_sec_mfov_beam]
+                prev_img_date = prev_img.split('\\')[-1].split('_')[-1]
+                curr_img_date = img_fname.split('\\')[-1].split('_')[-1]
+                if curr_img_date > prev_img_date:
+                    idx = images.index(prev_img)
+                    images[idx] = img_fname
+                    images_dict[img_sec_mfov_beam] = img_fname
+
     return images, x, y
 
 def offset_list(lst):
