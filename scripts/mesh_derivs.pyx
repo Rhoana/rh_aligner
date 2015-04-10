@@ -4,11 +4,13 @@ import numpy as np
 cimport numpy
 from libc.math cimport sin, cos, acos, exp, sqrt, fabs, M_PI
 
+__all__ = ['compute_mesh_derivs']
+
 ctypedef numpy.float64_t float32
 ctypedef numpy.uint32_t uint32
 
 cdef:
-    float32 small_value = 0.001
+    float32 small_value = 0.0001
 
 
 ##################################################
@@ -75,15 +77,15 @@ cpdef reglen(vx, vy):
 ##################################################
 # MESH CROSS-LINK DERIVS
 ##################################################
-cpdef float32 compute_mesh_derivs(float32[:, :] mesh1,
-                                  float32[:, :] mesh2,
-                                  float32[:, :] d_cost_d_mesh1,
-                                  float32[:, :] d_cost_d_mesh2,
-                                  uint32[:] idx1,
-                                  uint32[:, :] idx2,
-                                  float32[:, :] weight2,
-                                  float32 all_weight,
-                                  float32 sigma):
+cpdef float32 crosslink_mesh_derivs(float32[:, :] mesh1,
+                                    float32[:, :] mesh2,
+                                    float32[:, :] d_cost_d_mesh1,
+                                    float32[:, :] d_cost_d_mesh2,
+                                    uint32[:] idx1,
+                                    uint32[:, :] idx2,
+                                    float32[:, :] weight2,
+                                    float32 all_weight,
+                                    float32 sigma):
     cdef:
         int i
         float32 px, py, qx, qy
@@ -122,6 +124,50 @@ cpdef float32 compute_mesh_derivs(float32[:, :] mesh1,
             d_cost_d_mesh2[idx2[i, 0], 1] -= weight2[i, 0] * dh_dy
             d_cost_d_mesh2[idx2[i, 1], 1] -= weight2[i, 1] * dh_dy
             d_cost_d_mesh2[idx2[i, 2], 1] -= weight2[i, 2] * dh_dy
+    return cost
+
+
+##################################################
+# MESH INTERNAL-LINK DERIVS
+##################################################
+cpdef float32 internal_mesh_derivs(float32[:, :] mesh,
+                                   float32[:, :] d_cost_d_mesh,
+                                   uint32[:] idx,
+                                   float32[:] rest_lengths,
+                                   float32 all_weight,
+                                   float32 sigma):
+    cdef:
+        int i
+        float32 px, py, qx, qy
+        float32 r, h
+        float32 dr_dx, dr_dy, dh_dx, dh_dy
+        float32 cost
+
+    cost = 0
+    with nogil:
+        for i in range(mesh.shape[0]):
+            if idx[i] == i:
+                cost += small_value / 2.0
+                continue
+            px = mesh[i, 0]
+            py = mesh[i, 1]
+            qx = mesh[idx[i], 0]
+            qy = mesh[idx[i], 1]
+            r = c_reglen(px - qx, py - qy,
+                         1, 1,
+                         &(dr_dx), &(dr_dy))
+            h = c_huber(r, rest_lengths[i], sigma,
+                        dr_dx, dr_dy,
+                        &(dh_dx), &(dh_dy))
+            cost += h * all_weight
+            dh_dx *= all_weight
+            dh_dy *= all_weight
+
+            # update derivs
+            d_cost_d_mesh[i, 0] += dh_dx
+            d_cost_d_mesh[i, 1] += dh_dy
+            d_cost_d_mesh[idx[i], 0] -= dh_dx
+            d_cost_d_mesh[idx[i], 1] -= dh_dy
     return cost
 
 

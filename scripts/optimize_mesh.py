@@ -5,9 +5,16 @@ import os.path
 import theano
 import theano.tensor as T
 import numpy as np
+from numpy.linalg import lstsq
+import cPickle as pickle
 from scipy.spatial import cKDTree as KDTree  # for searching surrounding points
 from collections import defaultdict
 from progressbar import ProgressBar, ETA, Bar, Counter
+
+import pyximport; pyximport.install()
+import mesh_derivs
+
+print dir(mesh_derivs)
 
 sys.setrecursionlimit(10000)  # for grad
 
@@ -19,7 +26,7 @@ class MeshParser(object):
         self.rowcols = np.array([(p["row"], p["col"]) for p in self.mesh["points"]])
         self.layer_scale = float(self.mesh["layerScale"])
 
-        print "# points in base mesh", self.pts.shape[0]
+        print("# points in base mesh {}".format(self.pts.shape[0]))
 
         self.multiplier = multiplier
         # seed rowcolidx to match mesh_pts array
@@ -36,14 +43,14 @@ class MeshParser(object):
         self.long_row_min_y = min(mesh_p_y)
         self.long_row_max_x = max(mesh_p_x)
         self.long_row_max_y = max(mesh_p_y)
-        print "Mesh long-row boundary values: min_x: {}, miny: {}, max_x: {}, max_y: {}".format(
-            self.long_row_min_x, self.long_row_min_y, self.long_row_max_x, self.long_row_max_y)
+        print("Mesh long-row boundary values: min_x: {}, miny: {}, max_x: {}, max_y: {}".format(
+            self.long_row_min_x, self.long_row_min_y, self.long_row_max_x, self.long_row_max_y))
         self.short_row_min_x = min(mesh_p_x[mesh_p_x > self.long_row_min_x])
         self.short_row_min_y = min(mesh_p_y[mesh_p_y > self.long_row_min_y])
         self.short_row_max_x = max(mesh_p_x[mesh_p_x < self.long_row_max_x])
         self.short_row_max_y = max(mesh_p_y[mesh_p_y < self.long_row_max_y])
-        print "Mesh short-row boundary values: min_x: {}, miny: {}, max_x: {}, max_y: {}".format(
-            self.short_row_min_x, self.short_row_min_y, self.short_row_max_x, self.short_row_max_y)
+        print("Mesh short-row boundary values: min_x: {}, miny: {}, max_x: {}, max_y: {}".format(
+            self.short_row_min_x, self.short_row_min_y, self.short_row_max_x, self.short_row_max_y))
 
     def rowcolidx(self, xy):
         return self._rowcolidx[int(xy[0] * self.multiplier), int(xy[1] * self.multiplier)]
@@ -123,7 +130,7 @@ def link_cost(lengths, weight, winsor, rest_length):
     # return weight * bisquare(lengths, rest_length, winsor)
 
 def regularized_lengths(vec):
-    return T.sqrt(T.sum(T.sqr(vec) + 0.01, axis=1))
+    return T.sqrt(T.sum(T.sqr(vec), axis=1) + 0.0001)
 
 def barycentric(pt, verts_x, verts_y):
     '''computes the barycentric weights to reconstruct an array of points in an
@@ -152,19 +159,17 @@ def make_cross_gradfun(cross_slice_weight, cross_slice_winsor):
     w1 = T.col('w1')
     w2 = T.col('w2')
     w3 = T.col('w3')
-    separation = T.scalar('separation')
 
     p1_locs = mesh1.take(idx1, axis=0)
     p2_locs = (w1 * mesh2.take(idx2_1, axis=0) +
                w2 * mesh2.take(idx2_2, axis=0) +
                w3 * mesh2.take(idx2_3, axis=0))
     lengths = regularized_lengths(p1_locs - p2_locs)
-    this_cost = link_cost(lengths, cross_slice_weight / separation, cross_slice_winsor, 0)
+    this_cost = link_cost(lengths, cross_slice_weight, cross_slice_winsor, 0)
     return theano.function([mesh1, mesh2,
                             idx1,
                             idx2_1, idx2_2, idx2_3,
-                            w1, w2, w3,
-                            separation],
+                            w1, w2, w3],
                            [this_cost,
                             theano.Out(T.grad(this_cost, mesh1), borrow=True),
                             theano.Out(T.grad(this_cost, mesh2), borrow=True)],
@@ -185,7 +190,7 @@ def make_internal_gradfun(intra_slice_weight, intra_slice_winsor):
 def load_matches(matches_files, mesh):
     pbar = ProgressBar(widgets=['Loading matches: ', Counter(), ' / ', str(len(matches_files)), " ", Bar(), ETA()])
 
-    for midx, mf in enumerate(pbar(matches_files)):
+    for midx, mf in enumerate(pbar(sorted(matches_files))):
         for m in json.load(open(mf)):
             if not m['shouldConnect']:
                 continue
@@ -203,8 +208,19 @@ def load_matches(matches_files, mesh):
             tris_x = mesh.pts[surround_indices, 0]
             tris_y = mesh.pts[surround_indices, 1]
             w1, w2, w3 = barycentric(p2_locs, tris_x, tris_y)
+            m["url1"] = m["url1"].replace("/n/regal/pfister_lab/adisuis/Alyssa_P3_W02_to_W08", "/data/Adi/mesh_optimization/data")
+            m["url2"] = m["url2"].replace("/n/regal/pfister_lab/adisuis/Alyssa_P3_W02_to_W08", "/data/Adi/mesh_optimization/data")
             yield m["url1"], m["url2"], p1_rc_indices, surround_indices, w1, w2, w3
 
+def linearize_grad(positions, gradients):
+    '''perform a least-squares fit, then return the values from that fit'''
+    newpos = np.hstack((positions, np.ones((positions.shape[0], 1))))
+    fit, residuals, rank, s = lstsq(newpos, gradients)
+    return np.dot(newpos, fit).astype(np.float32)
+
+def blend(a, b, t):
+    '''at t=0, return a, at t=1, return b'''
+    return a + (b - a) * t
 
 def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
     # set default values
@@ -212,8 +228,8 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
     cross_slice_winsor = conf_dict.get("cross_slice_winsor", 1000)
     intra_slice_weight = conf_dict.get("intra_slice_weight", 1.0 / 6)
     intra_slice_winsor = conf_dict.get("intra_slice_winsor", 200)
-    max_iterations = conf_dict.get("max_iterations", 5000)
-
+    max_iterations = conf_dict.get("max_iterations", 200)
+    max_iterations = 301  # make sure there's an iteration #300 for saving displacements between slices
     # Load the mesh
     mesh = MeshParser(mesh_file)
 
@@ -251,14 +267,27 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
     stepsize = 0.1
     grads = defaultdict(lambda: 0.0)
 
+    # compute layer separations taking into account missing slices
+    all_cross_link_pairs = set((v[0], v[1]) for v in cross_links)
+
+    # make sure every slice that is in url_to_layerid has matches with all of
+    # its neighbors that are also present
+    present_slices = sorted(list(set(url_to_layerid[v[0]] for v in all_cross_link_pairs) | set(url_to_layerid[v[1]] for v in all_cross_link_pairs)))
+    print present_slices
+    separations = {}
+    for url1, url2 in all_cross_link_pairs:
+        lo, hi = sorted([url_to_layerid[url1], url_to_layerid[url2]])
+        separations[url1, url2] = present_slices[present_slices.index(lo):].index(hi)
+
     class MonitorValues(object):
         '''add cost, etc. to progress bar'''
-        def mean_cross_dist(self):
+        def mean_cross_dist(self, save_all):
             badcount = 0
             mesh_values = {url: per_tile_mesh[url].get_value() for url in per_tile_mesh.keys()}
             dists = []
+            match_pts = {}
             for url1, url2, p1_rc, surround, w1, w2, w3 in cross_links:
-                separation = abs(url_to_layerid[url1] - url_to_layerid[url2])
+                separation = separations[url1, url2]
                 pts1 = mesh_values[url1][p1_rc]
                 mesh2 = mesh_values[url2]
                 pts2 = (w1 * mesh2.take(surround[:, 0], axis=0) +
@@ -268,17 +297,21 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
                 badcount += sum(sep > 100)
                 if separation == 1:
                     dists.append(sep.mean())
-            return np.mean(dists)
+                if separation == 1 or save_all:
+                    match_pts[url_to_layerid[url1], url_to_layerid[url2]] = [pts1, pts2]
+            return np.mean(dists), match_pts
 
-        def update(self, count):
+        def update(self, pbar):
             l = 0
-            if count.currval > 0:
-                l = self.mean_cross_dist()
+            if pbar.currval > 0:
+                l, match_pts = self.mean_cross_dist(pbar.currval % 50 == 0)
+                pickle.dump(match_pts, open("match_pts_{}.pickle".format(pbar.currval), "wb"))
             return 'Err: {:.2f}  step: {:.2f}  |g|_1: {:.2f}  Len: {:.2f}'.format(cost, stepsize, sum(np.sum(abs(g)) for g in grads.values()), l)
-
 
     pbar = ProgressBar(widgets=['Iter ', Counter(), '/{0} '.format(max_iterations), MonitorValues(), Bar(), ETA()])
     for iter in pbar(range(max_iterations)):
+        print("")  # keep progress lines from overwriting
+
         cost = 0.0
 
         new_grads = defaultdict(lambda: 0.0)
@@ -286,16 +319,32 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
         for url1, url2, m1_indices, m2_surround_indices, w1, w2, w3 in cross_links:
             # TODO - the separation value needs to be set according to the diff in layer id (not the wafer/section number)
             # separation = abs(int(url1.split('.')[-2][-3:]) - int(url2.split('.')[-2][-3:]))
-            separation = abs(url_to_layerid[url1] - url_to_layerid[url2])
+            separation = separations[url1, url2]
             c, g1, g2 = Fcross(per_tile_mesh[url1].get_value(borrow=True),
                                per_tile_mesh[url2].get_value(borrow=True),
                                m1_indices,
                                m2_surround_indices[:, 0], m2_surround_indices[:, 1], m2_surround_indices[:, 2],
-                               w1, w2, w3,
-                               separation)
-            cost += c
-            new_grads[url1] += g1
-            new_grads[url2] += g2
+                               w1, w2, w3)
+            cost += c / separation
+            new_grads[url1] += g1 / separation
+            new_grads[url2] += g2 / separation
+
+            m1 = per_tile_mesh[url1].get_value(borrow=True).astype(np.float64).copy()
+            m2 = per_tile_mesh[url2].get_value(borrow=True).astype(np.float64).copy()
+            d_d1 = np.zeros_like(m1)
+            d_d2 = np.zeros_like(m2)
+            w = np.hstack((w1, w2, w3)).astype(np.float64).copy()
+
+            tc = mesh_derivs.crosslink_mesh_derivs(m1, m2,
+                                                   d_d1, d_d2,
+                                                   np.array(m1_indices, dtype=np.uint32),
+                                                   m2_surround_indices.astype(np.uint32),
+                                                   w, 1.0,
+                                                   np.float64(cross_slice_winsor))
+            assert(abs(d_d1 - g1).max() < 0.01)
+            assert(abs(d_d2 - g2).max() < 0.01)
+            assert(abs(tc - c) / c < 0.01)
+
             check_nan(g1)
             check_nan(g2)
 
@@ -306,16 +355,35 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
                                  dists[:, idx])
                 cost += c
                 new_grads[url] += g
+
+                m = per_tile_mesh[url].get_value(borrow=True).astype(np.float64).copy()
+                d_dm = np.zeros_like(m)
+                tc = mesh_derivs.internal_mesh_derivs(m,
+                                                      d_dm,
+                                                      neighbor_indices[:, idx].astype(np.uint32),
+                                                      dists[:, idx].astype(np.float64),
+                                                      np.float64(intra_slice_weight),
+                                                      np.float64(intra_slice_winsor))
+                assert(abs(d_dm - g).max() < 0.01)
+                assert((abs(tc - c) / c < 0.01) or (abs(tc - c) < 0.05))
+
                 check_nan(g)
+
+        # relaxation of the mesh
+        relaxation_end = 250
+        if iter < relaxation_end:
+            for url in new_grads.keys():
+                linearized = linearize_grad(per_tile_mesh[url].eval(), new_grads[url])
+                new_grads[url] = blend(linearized, new_grads[url], iter / float(relaxation_end))
 
         # step size adjustment
         if cost <= prev_cost:
-            stepsize *= 1.05
+            stepsize *= 1.1
             if stepsize > 1.0:
                 stepsize = 1.0
             # update with new gradients
             for url in grads.keys():
-                grads[url] = new_grads[url] + 0.5 * grads[url]  # momentum of 0.5
+                grads[url] = new_grads[url] + 0.75 * grads[url]  # momentum of 0.5
 
             # step to next evaluation point
             for url in per_tile_mesh.keys():
@@ -335,7 +403,6 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
 
             prev_cost = np.inf
 
-
     # Prepare per-layer output
     out_positions = {}
 
@@ -349,7 +416,7 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
 if __name__ == '__main__':
     mesh_file = sys.argv[1]
     matches_files = glob.glob(os.path.join(sys.argv[2], '*W02_sec0[012]*W02_sec0[012]*.json'))
-    print "Found {} match files".format(len(matches_files))
+    print("Found {} match files".format(len(matches_files)))
     url_to_layerid = None
     new_positions = optimize_meshes(mesh_file, matches_files, url_to_layerid)
 
