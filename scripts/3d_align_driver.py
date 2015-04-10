@@ -65,9 +65,9 @@ parser.add_argument('--to_layer', type=int,
 parser.add_argument('-s', '--skip_layers', type=str, 
                     help='the range of layers (sections) that will not be processed e.g., "2,3,9-11,18" (default: no skipped sections)',
                     default=None)
-parser.add_argument('-M', '--manual_match', type=str, nargs="*",
-                    help='pairs of layers (sections) that will need to be manually aligned (not part of the max_layer_distance) e.g., "2:10,7:21" (default: none)',
-                    default=None)
+# parser.add_argument('-M', '--manual_match', type=str, nargs="*",
+#                     help='pairs of layers (sections) that will need to be manually aligned (not part of the max_layer_distance) e.g., "2:10,7:21" (default: none)',
+#                     default=None)
 
 
 
@@ -191,36 +191,42 @@ print "All json files prefix are: {0}".format(layer_to_json_prefix)
 fixed_layers = [ all_layers[len(all_layers)//2] ]
 
 # Handle manual matches
-manual_matches = {}
-if args.manual_match is not None:
-    for match in args.manual_match:
-        # parse the manual match string
-        match_layers = [int(l) for l in match.split(':')]
-        # add a manual match between the lower layer and the higher layer
-        if min(match_layers) not in manual_matches.keys():
-            manual_matches[min(match_layers)] = []
-        manual_matches[min(match_layers)].append(max(match_layers))
+# manual_matches = {}
+# if args.manual_match is not None:
+#     for match in args.manual_match:
+#         # parse the manual match string
+#         match_layers = [int(l) for l in match.split(':')]
+#         # add a manual match between the lower layer and the higher layer
+#         if min(match_layers) not in manual_matches.keys():
+#             manual_matches[min(match_layers)] = []
+#         manual_matches[min(match_layers)].append(max(match_layers))
 
 
 # Match and optimize each two layers in the required distance
 all_pmcc_files = []
 all_local_smoothness_files = []
 for i in all_layers:
-    layers_to_process = min(i + args.max_layer_distance + 1, all_layers[-1] + 1) - i
-    to_range = range(1, layers_to_process)
-    # add manual matches
-    if i in manual_matches.keys():
-        for second_layer in manual_matches[i]:
-            diff_layers = second_layer - i
-            if diff_layers not in to_range:
-                to_range.append(diff_layers)
+    # layers_to_process = min(i + args.max_layer_distance + 1, all_layers[-1] + 1) - i
+    # to_range = range(1, layers_to_process)
+    # # add manual matches
+    # if i in manual_matches.keys():
+    #     for second_layer in manual_matches[i]:
+    #         diff_layers = second_layer - i
+    #         if diff_layers not in to_range:
+    #             to_range.append(diff_layers)
     # Process all matched layers
     print "layers_to_process {0}".format(to_range[-1])
-    for j in to_range:
+    matched_after_layers = 0
+    j = 1
+    while matched_after_layers < args.max_layer_distance:
+        if ei + j >= len(all_layers):
+            break
+
         if i in skipped_layers or (i+j) in skipped_layers:
             print "Skipping matching of layers {} and {}, because at least one of them should be skipped".format(i, i+j)
+            j += 1
             continue
-        print "j {0}".format(j)
+
         fname1_prefix = layer_to_json_prefix[i]
         fname2_prefix = layer_to_json_prefix[i + j]
 
@@ -254,6 +260,10 @@ for i in all_layers:
                 print "Smoothing layers by Local Filter: {0} and {1}".format(i, i + j)
                 filter_local_smoothness(pmcc_fname, local_smoothness_fname, args.jar_file, conf=conf)
             all_local_smoothness_files.append(local_smoothness_fname)
+
+        
+        j += 1
+        matched_after_layers += 1
 
 print "All pmcc files: {0}".format(all_pmcc_files)
 

@@ -278,9 +278,9 @@ if __name__ == '__main__':
                         default=None)
     parser.add_argument('-r', '--render_meshes_first', action='store_true',
                         help='before working with json files, "render" their transfromations (saves repeated work on large images)')
-    parser.add_argument('-M', '--manual_match', type=str, nargs="*",
-                        help='pairs of layers (sections) that will need to be manually aligned (not part of the max_layer_distance) e.g., "2:10,7:21" (default: none)',
-                        default=None)
+    # parser.add_argument('-M', '--manual_match', type=str, nargs="*",
+    #                     help='pairs of layers (sections) that will need to be manually aligned (not part of the max_layer_distance) e.g., "2:10,7:21" (default: none)',
+    #                     default=None)
     parser.add_argument('-F', '--fix_every_nth', type=int, 
                         help='each Nth layer will be fixed (default: only middle layer)',
                         default=0)
@@ -423,38 +423,44 @@ if __name__ == '__main__':
     else:
         fixed_layers = all_layers[::args.fix_every_nth]
 
-    manual_matches = {}
-    if args.manual_match is not None:
-        for match in args.manual_match:
-            # parse the manual match string
-            match_layers = [int(l) for l in match.split(':')]
-            # add a manual match between the lower layer and the higher layer
-            if min(match_layers) not in manual_matches.keys():
-                manual_matches[min(match_layers)] = []
-            manual_matches[min(match_layers)].append(max(match_layers))
+    # manual_matches = {}
+    # if args.manual_match is not None:
+    #     for match in args.manual_match:
+    #         # parse the manual match string
+    #         match_layers = [int(l) for l in match.split(':')]
+    #         # add a manual match between the lower layer and the higher layer
+    #         if min(match_layers) not in manual_matches.keys():
+    #             manual_matches[min(match_layers)] = []
+    #         manual_matches[min(match_layers)].append(max(match_layers))
 
 
     # Match and optimize each two layers in the required distance
     all_pmcc_files = []
     pmcc_jobs = []
-    for i in all_layers:
+    for ei, i in enumerate(all_layers):
         si = str(i)
         layers_data[si]['matched_sifts'] = {}
         layers_data[si]['ransac'] = {}
         layers_data[si]['matched_pmcc'] = {}
-        layers_to_process = min(i + args.max_layer_distance + 1, all_layers[-1] + 1) - i
-        to_range = range(1, layers_to_process)
-        # add manual matches
-        if i in manual_matches.keys():
-            for second_layer in manual_matches[i]:
-                diff_layers = second_layer - i
-                if diff_layers not in to_range:
-                    to_range.append(diff_layers)
+        # layers_to_process = min(i + args.max_layer_distance + 1, all_layers[-1] + 1) - i
+        # to_range = range(1, layers_to_process)
+        # # add manual matches
+        # if i in manual_matches.keys():
+        #     for second_layer in manual_matches[i]:
+        #         diff_layers = second_layer - i
+        #         if diff_layers not in to_range:
+        #             to_range.append(diff_layers)
         # Process all matched layers
-        for j in to_range:
+        matched_after_layers = 0
+        j = 1
+        while matched_after_layers < args.max_layer_distance:
+            if ei + j >= len(all_layers):
+                break
+
             sij = str(i + j)
             if i in skipped_layers or (i+j) in skipped_layers:
                 print "Skipping matching of layers {} and {}, because at least one of them should be skipped".format(i, i+j)
+                j += 1
                 continue
 
             fname1_prefix = layers_data[si]['prefix']
@@ -542,6 +548,10 @@ if __name__ == '__main__':
 
             all_pmcc_files.append(pmcc_fname)
 
+            
+            j += 1
+            matched_after_layers += 1
+
 
 
     print "all_pmcc_files: {0}".format(all_pmcc_files)
@@ -561,9 +571,12 @@ if __name__ == '__main__':
         sections_outputs.append(out_section)
 
     dependencies = all_running_jobs
-    job_optimize = OptimizeLayersElastic(dependencies, sections_outputs, [ ts_list_file ], [ pmcc_list_file ], \
+    #job_optimize = OptimizeLayersElastic(dependencies, sections_outputs, [ ts_list_file ], [ pmcc_list_file ],
+    #    imageWidth, imageHeight, fixed_layers, args.output_dir, args.max_layer_distance, args.jar_file, conf_fname=args.conf_file_name,
+    #    skip_layers=args.skip_layers, threads_num=32, manual_matches=args.manual_match)
+    job_optimize = OptimizeLayersElastic(dependencies, sections_outputs, [ ts_list_file ], [ pmcc_list_file ],
         imageWidth, imageHeight, fixed_layers, args.output_dir, args.max_layer_distance, args.jar_file, conf_fname=args.conf_file_name,
-        skip_layers=args.skip_layers, threads_num=32, manual_matches=args.manual_match)
+        skip_layers=args.skip_layers, threads_num=32)
 
 
     # Run all jobs
