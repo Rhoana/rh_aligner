@@ -6,7 +6,7 @@ from libc.math cimport sin, cos, acos, exp, sqrt, fabs, M_PI
 
 __all__ = ['compute_mesh_derivs']
 
-ctypedef numpy.float64_t float32
+ctypedef numpy.float32_t float32
 ctypedef numpy.uint32_t uint32
 
 cdef:
@@ -77,13 +77,13 @@ cpdef reglen(vx, vy):
 ##################################################
 # MESH CROSS-LINK DERIVS
 ##################################################
-cpdef float32 crosslink_mesh_derivs(float32[:, :] mesh1,
-                                    float32[:, :] mesh2,
-                                    float32[:, :] d_cost_d_mesh1,
-                                    float32[:, :] d_cost_d_mesh2,
+cpdef float32 crosslink_mesh_derivs(float32[:, ::1] mesh1,
+                                    float32[:, ::1] mesh2,
+                                    float32[:, ::1] d_cost_d_mesh1,
+                                    float32[:, ::1] d_cost_d_mesh2,
                                     uint32[:] idx1,
-                                    uint32[:, :] idx2,
-                                    float32[:, :] weight2,
+                                    uint32[:, ::1] idx2,
+                                    float32[:, ::1] weight2,
                                     float32 all_weight,
                                     float32 sigma):
     cdef:
@@ -130,8 +130,8 @@ cpdef float32 crosslink_mesh_derivs(float32[:, :] mesh1,
 ##################################################
 # MESH INTERNAL-LINK DERIVS
 ##################################################
-cpdef float32 internal_mesh_derivs(float32[:, :] mesh,
-                                   float32[:, :] d_cost_d_mesh,
+cpdef float32 internal_mesh_derivs(float32[:, ::1] mesh,
+                                   float32[:, ::1] d_cost_d_mesh,
                                    uint32[:] idx,
                                    float32[:] rest_lengths,
                                    float32 all_weight,
@@ -145,6 +145,8 @@ cpdef float32 internal_mesh_derivs(float32[:, :] mesh,
 
     cost = 0
     with nogil:
+        with gil:
+            print "in"
         for i in range(mesh.shape[0]):
             if idx[i] == i:
                 cost += small_value / 2.0
@@ -168,6 +170,8 @@ cpdef float32 internal_mesh_derivs(float32[:, :] mesh,
             d_cost_d_mesh[i, 1] += dh_dy
             d_cost_d_mesh[idx[i], 0] -= dh_dx
             d_cost_d_mesh[idx[i], 1] -= dh_dy
+
+    print "out"
     return cost
 
 
