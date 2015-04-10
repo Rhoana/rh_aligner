@@ -132,6 +132,9 @@ for tiles_fname in glob.glob(os.path.join(args.input_dir, '*.json')):
         if layer > args.to_layer:
             continue
 
+    if layer in skipped_layers:
+        continue
+
 
     all_layers.append(layer)
 
@@ -261,7 +264,7 @@ for i in all_layers:
                 filter_local_smoothness(pmcc_fname, local_smoothness_fname, args.jar_file, conf=conf)
             all_local_smoothness_files.append(local_smoothness_fname)
 
-        
+
         j += 1
         matched_after_layers += 1
 

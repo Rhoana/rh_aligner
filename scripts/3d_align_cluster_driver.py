@@ -345,6 +345,9 @@ if __name__ == '__main__':
         # read the layer from the file
         layer = read_layer_from_file(f)
 
+        if layer in skipped_layers:
+            continue
+
         slayer = str(layer)
 
         if not (slayer in layers_data.keys()):
@@ -548,7 +551,7 @@ if __name__ == '__main__':
 
             all_pmcc_files.append(pmcc_fname)
 
-            
+
             j += 1
             matched_after_layers += 1
 
