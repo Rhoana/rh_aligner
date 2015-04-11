@@ -9,8 +9,6 @@ import cPickle as pickle
 from scipy.spatial import cKDTree as KDTree  # for searching surrounding points
 from collections import defaultdict
 from progressbar import ProgressBar, ETA, Bar, Counter
-import threading
-import Queue
 
 import pyximport
 pyximport.install()
@@ -59,8 +57,8 @@ class MeshParser(object):
     def query_internal(self, points, k):
         """Returns the k nearest neighbors, while taking into account the mesh formation.
         If a point is on the boudaries of the mesh, only the relevant neighbors will be returned,
-        and all others wil have distance -1, and location [-1, -1]"""
-        dists, surround_indices = self.kdt.query(points, k)
+        and all others will have distance 0, and neighbor index == the query point"""
+        dists, surround_indices = self.kdt.query(points, k + 1)  # we're querying against ourselves, usually
 
         # Find out if the point is on the "boundary"
         for i, p in enumerate(points):
@@ -93,7 +91,7 @@ class MeshParser(object):
                 dists[i][tris_y < self.short_row_max_y] = 0.0
                 surround_indices[i][tris_y < self.short_row_max_y] = surround_indices[i][0]
 
-        return dists, surround_indices
+        return dists[:, 1:], surround_indices[:, 1:]  # chop off first closest (= self)
 
     def query_cross(self, points, k):
         """Returns the k nearest neighbors"""
@@ -149,7 +147,7 @@ def barycentric(pt, verts_x, verts_y):
     l3 = 1 - l1 - l2
     return l1.reshape((-1, 1)).astype(np.float32), l2.reshape((-1, 1)).astype(np.float32), l3.reshape((-1, 1)).astype(np.float32)
 
-def load_matches(matches_files, mesh):
+def load_matches(matches_files, mesh, url_to_layerid):
     pbar = ProgressBar(widgets=['Loading matches: ', Counter(), ' / ', str(len(matches_files)), " ", Bar(), ETA()])
 
     for midx, mf in enumerate(pbar(sorted(matches_files))):
@@ -178,7 +176,7 @@ def load_matches(matches_files, mesh):
             surround_indices = surround_indices[reorder, :]
             weights = np.hstack((w1, w2, w3)).astype(np.float32)[reorder, :]
             assert p1_rc_indices.shape[0] == weights.shape[0]
-            yield m["url1"], m["url2"], p1_rc_indices, surround_indices, weights
+            yield url_to_layerid[m["url1"]], url_to_layerid[m["url2"]], p1_rc_indices, surround_indices, weights
 
 def linearize_grad(positions, gradients):
     '''perform a least-squares fit, then return the values from that fit'''
@@ -189,64 +187,6 @@ def linearize_grad(positions, gradients):
 def blend(a, b, t):
     '''at t=0, return a, at t=1, return b'''
     return a + (b - a) * t
-
-def compute_derivs_worker(queue, mesh_locks, costs,
-                          per_tile_mesh, new_grads,
-                          neighbor_indices, dists,
-                          source_indices, surround_indices, bary_weights,
-                          intra_slice_weight, intra_slice_winsor,
-                          separations, cross_slice_winsor):
-    '''worker thread for computing derivatives'''
-    while True:
-        url1, url2 = queue.get()
-        # try to acquire the locks (nonblocking)
-        locked_1 = True
-        locked_2 = True
-        # locked_1 = mesh_locks[url1].acquire(True)
-        # locked_2 = mesh_locks[url2].acquire(False)
-        if locked_1 and locked_2:
-            # we have the locks, do some work
-            if url1 == url2:
-                # compute within-mesh cost and derivs
-                cost = 0
-                for idx in range(1, 7):
-                    m = per_tile_mesh[url1]
-                    tc = mesh_derivs.internal_mesh_derivs(m,
-                                                          new_grads[url1],
-                                                          neighbor_indices[:, idx],
-                                                          dists[:, idx],
-                                                          np.float64(intra_slice_weight),
-                                                          np.float64(intra_slice_winsor))
-                    cost += tc
-                costs[url1, url2] = cost
-            else:
-                # compute between-mesh cost and derivs
-                separation = separations[url1, url2]
-                m1 = per_tile_mesh[url1]
-                m2 = per_tile_mesh[url2]
-                cost = mesh_derivs.crosslink_mesh_derivs(m1, m2,
-                                                         new_grads[url1],
-                                                         new_grads[url2],
-                                                         source_indices[url1, url2],
-                                                         surround_indices[url1, url2],
-                                                         bary_weights[url1, url2],
-                                                         1.0 / separation,
-                                                         np.float32(cross_slice_winsor))
-                costs[url1, url2] = cost
-        else:  # we didn't get the locks. :sad_face:
-            # put the work back into the queue (note that this creates a separate instance of this task)
-            queue.put((url1, url2))
-
-        # mark this task as done
-        queue.task_done()
-        # release locks
-        if locked_1:
-            pass # mesh_locks[url1].release()
-        if locked_2:
-            pass # mesh_locks[url2].release()
-
-
-
 
 def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
     # set default values
@@ -259,122 +199,86 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
 
     # Load the mesh
     mesh = MeshParser(mesh_file)
+    num_pts = mesh.pts.shape[0]
 
     # Adjust winsor values according to layer scale
     cross_slice_winsor = cross_slice_winsor * mesh.layer_scale
     intra_slice_winsor = intra_slice_winsor * mesh.layer_scale
 
-    # Create the per-tile meshes
-    per_tile_mesh = defaultdict(lambda: mesh.pts.copy())
-
-    cross_links = list(load_matches(matches_files, mesh))
-
-    # Build structural mesh
-    dists, neighbor_indices = mesh.query_internal(mesh.pts, 7)
-    neighbor_indices = neighbor_indices.astype(np.uint32)
-    dists = dists.astype(np.float32)
-
-    def check_nan(g):
-        assert not np.any(np.isnan(g))
-
-    cost = 0.0
-
-    prev_cost = np.inf
-    stepsize = 0.1
-    grads = defaultdict(lambda: 0.0)
-
-    # compute layer separations taking into account missing slices
-    all_cross_link_pairs = set((v[0], v[1]) for v in cross_links)
+    # load the slice-to-slice matches
+    cross_links = dict(((v[0], v[1]), v[2:]) for v in load_matches(matches_files, mesh, url_to_layerid))
 
     # make sure every slice that is in url_to_layerid has matches with all of
     # its neighbors that are also present
-    present_slices = sorted(list(set(url_to_layerid[v[0]] for v in all_cross_link_pairs) | set(url_to_layerid[v[1]] for v in all_cross_link_pairs)))
+    present_slices = sorted([k for v in cross_links.keys() for k in v])
 
     separations = {}
-    for url1, url2 in all_cross_link_pairs:
-        lo, hi = sorted([url_to_layerid[url1], url_to_layerid[url2]])
-        separations[url1, url2] = present_slices[present_slices.index(lo):].index(hi)
+    for id1, id2 in cross_links.keys():
+        lo, hi = sorted([id1, id2])
+        separations[id1, id2] = present_slices[present_slices.index(lo):].index(hi)
 
-    class MonitorValues(object):
-        '''add cost, etc. to progress bar'''
-        def mean_cross_dist(self, save_all):
-            badcount = 0
-            dists = []
-            match_pts = {}
-            for url1, url2, p1_rc, surround, bary_weights in cross_links:
-                separation = separations[url1, url2]
-                pts1 = per_tile_mesh[url1][p1_rc]
-                mesh2 = per_tile_mesh[url2]
-                pts2 = (bary_weights[:, 0].reshape((-1, 1)) * mesh2.take(surround[:, 0], axis=0) +
-                        bary_weights[:, 1].reshape((-1, 1)) * mesh2.take(surround[:, 1], axis=0) +
-                        bary_weights[:, 2].reshape((-1, 1)) * mesh2.take(surround[:, 2], axis=0))
-                sep = np.sqrt(((pts1 - pts2) ** 2).sum(axis=1))
-                badcount += sum(sep > 100)
-                if separation == 1:
-                    dists.append(sep.mean())
-                if separation == 1 or save_all:
-                    match_pts[url_to_layerid[url1], url_to_layerid[url2]] = [pts1, pts2]
-            return np.mean(dists), match_pts
+    # build mesh array for all meshes
+    all_mesh_pts = np.concatenate([mesh.pts[np.newaxis, ...]] * len(present_slices), axis=0)
+    mesh_pt_offsets = dict(zip(present_slices,
+                               num_pts * np.arange(len(present_slices))))
 
-        def update(self, pbar):
-            l = 0
-            if pbar.currval > 0:
-                l, match_pts = self.mean_cross_dist(pbar.currval % 50 == 0)
-                pickle.dump(match_pts, open("match_pts_{}.pickle".format(pbar.currval), "wb"))
-            return 'Err: {:.2f}  step: {:.2f}  |g|_1: {:.2f}  Len: {:.2f}'.format(cost, stepsize, sum(np.sum(abs(g)) for g in grads.values()), l)
-
-    # This will get emptied after each loop through all the meshes
-    new_grads = defaultdict(lambda: np.zeros_like(mesh.pts))
-
-    # locks for each mesh
-    mesh_locks = defaultdict(lambda: threading.RLock())
-
-    # costs for each iteration
-    costs = {}
+    # Build internal structural mesh
+    dists, neighbor_indices = mesh.query_internal(mesh.pts, 6)
+    neighbor_indices = neighbor_indices.astype(np.uint32)
+    dists = dists.astype(np.float32)
 
     # cross-mesh links
-    source_indices = {}
-    surround_indices = {}
-    bary_weights = {}
-    for url1, url2, m1_indices, m2_surround_indices, b_weights in cross_links:
-        source_indices[url1, url2] = m1_indices
-        surround_indices[url1, url2] = m2_surround_indices
-        bary_weights[url1, url2] = b_weights
-        assert m1_indices.shape[0] == b_weights.shape[0]
 
-    # the work queue
-    queue = Queue.Queue()
+    # we assume nearly every point has a match, so we store a set of 3
+    # barycentric neighbor indices & weights for each point in the mesh, and
+    # use neighbor[0] == -1 to indicate no match.
+    bary_indices = []
+    bary_weights = []
+    bary_offsets = {}
+    for (id1, id2), (m1_indices, m2_surround_indices, m2_weights) in cross_links.iteritems():
+        id1 = present_slices.index(id1)
+        id2 = present_slices.index(id2)
+        cur_bary_indices = -np.ones((num_pts, 3), np.int32)
+        cur_bary_weights = np.zeros((num_pts, 3), np.float32)
+        for idx, bn_indices, bn_weights in zip(m1_indices, m2_surround_indices, m2_weights):
+            cur_bary_indices[idx, :] = bn_indices
+            cur_bary_weights[idx ,:] = bn_weights
+        assert m1_indices.shape[0] == m2_surround_indices.shape[0] == m2_weights.shape[0]
+        bary_indices.append(cur_bary_indices)
+        bary_weights.append(cur_bary_weights)
+        bary_offsets[id1, id2] = len(bary_indices) * num_pts
 
-    # start threads
-    num_threads = 5
-    for i in range(num_threads):
-        t = threading.Thread(target=compute_derivs_worker, args=(queue, mesh_locks, costs,
-                                                                 per_tile_mesh, new_grads,
-                                                                 neighbor_indices, dists,
-                                                                 source_indices, surround_indices, bary_weights,
-                                                                 intra_slice_weight, intra_slice_winsor,
-                                                                 separations, cross_slice_winsor))
-        t.daemon = True
-        t.start()
+    bary_indices = np.vstack(bary_indices)
+    bary_weights = np.vstack(bary_weights)
+    # build the list of all pairs with their offsets
+    all_pairs = np.vstack([(id1, id2, bary_offsets[id1, id2], bary_offsets[id2, id1])
+                           for id1, id2 in bary_offsets.keys() if id1 < id2]).astype(np.uint32)
+    assert 2 * len(all_pairs) == len(cross_links)
+    between_mesh_weights = np.array([cross_slice_weight / float(abs(id1 - id2))
+                                     for id1, id2, _, _ in all_pairs],
+                                    dtype=np.float32)
 
-    pbar = ProgressBar(widgets=['Iter ', Counter(), '/{0} '.format(max_iterations), MonitorValues(), Bar(), ETA()])
+    d_cost_d_meshes = np.zeros_like(all_mesh_pts)
+
+    pbar = ProgressBar(widgets=['Iter ', Counter(), '/{0} '.format(max_iterations), Bar(), ETA()])
     for iter in pbar(range(max_iterations)):
         print("")  # keep progress lines from overwriting
 
-        new_grads.clear()
-        costs.clear()
-
-        # send work to the workers
-        for url1, url2, _, _, _ in cross_links:
-            queue.put((url1, url2))
-
         start = time.time()
-        for url in per_tile_mesh.keys():
-            queue.put((url, url))
+        print "ALL", all_mesh_pts.shape
+        cost = mesh_derivs.all_derivs(all_mesh_pts,
+                                      d_cost_d_meshes,
+                                      neighbor_indices,
+                                      dists,
+                                      bary_indices,
+                                      bary_weights,
+                                      between_mesh_weights,
+                                      intra_slice_weight,
+                                      cross_slice_winsor,
+                                      intra_slice_winsor,
+                                      all_pairs,
+                                      1)
 
-        # wait for all derivatives to be computed
-        queue.join()
-        cost = sum(costs.values())
         tottime = time.time() - start
         print tottime, cost
 

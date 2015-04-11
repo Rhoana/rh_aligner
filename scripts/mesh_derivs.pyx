@@ -1,12 +1,12 @@
-#cython: boundscheck=False, wraparound=False
+#cython: boundscheck=True, wraparound=False
 from __future__ import division
 import numpy as np
 cimport numpy
+from cython.parallel import parallel, threadid
 from libc.math cimport sin, cos, acos, exp, sqrt, fabs, M_PI
 
-__all__ = ['compute_mesh_derivs']
-
 ctypedef numpy.float32_t float32
+ctypedef numpy.int32_t int32
 ctypedef numpy.uint32_t uint32
 
 cdef:
@@ -81,11 +81,10 @@ cpdef float32 crosslink_mesh_derivs(float32[:, ::1] mesh1,
                                     float32[:, ::1] mesh2,
                                     float32[:, ::1] d_cost_d_mesh1,
                                     float32[:, ::1] d_cost_d_mesh2,
-                                    uint32[:] idx1,
-                                    uint32[:, ::1] idx2,
+                                    int32[:, ::1] idx2,
                                     float32[:, ::1] weight2,
                                     float32 all_weight,
-                                    float32 sigma):
+                                    float32 sigma) nogil:
     cdef:
         int i
         float32 px, py, qx, qy
@@ -94,36 +93,43 @@ cpdef float32 crosslink_mesh_derivs(float32[:, ::1] mesh1,
         float32 cost
 
     cost = 0
-    with nogil:
-        for i in range(idx1.shape[0]):
-            px = mesh1[idx1[i], 0]
-            py = mesh1[idx1[i], 1]
-            qx = (mesh2[idx2[i, 0], 0] * weight2[i, 0] +
-                  mesh2[idx2[i, 1], 0] * weight2[i, 1] +
-                  mesh2[idx2[i, 2], 0] * weight2[i, 2])
-            qy = (mesh2[idx2[i, 0], 1] * weight2[i, 0] +
-                  mesh2[idx2[i, 1], 1] * weight2[i, 1] +
-                  mesh2[idx2[i, 2], 1] * weight2[i, 2])
-            r = c_reglen(px - qx, py - qy,
-                         1, 1,
-                         &(dr_dx), &(dr_dy))
-            h = c_huber(r, 0, sigma,
-                        dr_dx, dr_dy,
-                        &(dh_dx), &(dh_dy))
-            cost += h * all_weight
-            dh_dx *= all_weight
-            dh_dy *= all_weight
+    with gil:
+        print "in cross", mesh1.shape[0], idx2.shape[0], weight2.shape[0]
+    for i in range(mesh1.shape[0]):
+        if idx2[i, 0] == -1:
+            continue
+        px = mesh1[i, 0]
+        py = mesh1[i, 1]
+        with gil:
+            print "postp", i, idx2[i, 0], idx2[i, 1], idx2[i, 2], "from", mesh2.shape[0], mesh2.shape[1], weight2.shape[0], weight2.shape[1]
+        qx = (mesh2[idx2[i, 0], 0] * weight2[i, 0] +
+              mesh2[idx2[i, 1], 0] * weight2[i, 1] +
+              mesh2[idx2[i, 2], 0] * weight2[i, 2])
+        qy = (mesh2[idx2[i, 0], 1] * weight2[i, 0] +
+              mesh2[idx2[i, 1], 1] * weight2[i, 1] +
+              mesh2[idx2[i, 2], 1] * weight2[i, 2])
+        with gil:
+            print "postq"
+        r = c_reglen(px - qx, py - qy,
+                     1, 1,
+                     &(dr_dx), &(dr_dy))
+        h = c_huber(r, 0, sigma,
+                    dr_dx, dr_dy,
+                    &(dh_dx), &(dh_dy))
+        cost += h * all_weight
+        dh_dx *= all_weight
+        dh_dy *= all_weight
 
-            # update derivs
-            d_cost_d_mesh1[idx1[i], 0] += dh_dx
-            d_cost_d_mesh1[idx1[i], 1] += dh_dy
-            # opposite direction for other end of spring, and distributed according to weight
-            d_cost_d_mesh2[idx2[i, 0], 0] -= weight2[i, 0] * dh_dx
-            d_cost_d_mesh2[idx2[i, 1], 0] -= weight2[i, 1] * dh_dx
-            d_cost_d_mesh2[idx2[i, 2], 0] -= weight2[i, 2] * dh_dx
-            d_cost_d_mesh2[idx2[i, 0], 1] -= weight2[i, 0] * dh_dy
-            d_cost_d_mesh2[idx2[i, 1], 1] -= weight2[i, 1] * dh_dy
-            d_cost_d_mesh2[idx2[i, 2], 1] -= weight2[i, 2] * dh_dy
+        # update derivs
+        d_cost_d_mesh1[i, 0] += dh_dx
+        d_cost_d_mesh1[i, 1] += dh_dy
+        # opposite direction for other end of spring, and distributed according to weight
+        d_cost_d_mesh2[idx2[i, 0], 0] -= weight2[i, 0] * dh_dx
+        d_cost_d_mesh2[idx2[i, 1], 0] -= weight2[i, 1] * dh_dx
+        d_cost_d_mesh2[idx2[i, 2], 0] -= weight2[i, 2] * dh_dx
+        d_cost_d_mesh2[idx2[i, 0], 1] -= weight2[i, 0] * dh_dy
+        d_cost_d_mesh2[idx2[i, 1], 1] -= weight2[i, 1] * dh_dy
+        d_cost_d_mesh2[idx2[i, 2], 1] -= weight2[i, 2] * dh_dy
     return cost
 
 
@@ -135,7 +141,7 @@ cpdef float32 internal_mesh_derivs(float32[:, ::1] mesh,
                                    uint32[:] idx,
                                    float32[:] rest_lengths,
                                    float32 all_weight,
-                                   float32 sigma):
+                                   float32 sigma) nogil:
     cdef:
         int i
         float32 px, py, qx, qy
@@ -144,35 +150,110 @@ cpdef float32 internal_mesh_derivs(float32[:, ::1] mesh,
         float32 cost
 
     cost = 0
-    with nogil:
-        with gil:
-            print "in"
-        for i in range(mesh.shape[0]):
-            if idx[i] == i:
-                cost += small_value / 2.0
-                continue
-            px = mesh[i, 0]
-            py = mesh[i, 1]
-            qx = mesh[idx[i], 0]
-            qy = mesh[idx[i], 1]
-            r = c_reglen(px - qx, py - qy,
-                         1, 1,
-                         &(dr_dx), &(dr_dy))
-            h = c_huber(r, rest_lengths[i], sigma,
-                        dr_dx, dr_dy,
-                        &(dh_dx), &(dh_dy))
-            cost += h * all_weight
-            dh_dx *= all_weight
-            dh_dy *= all_weight
+    for i in range(mesh.shape[0]):
+        if idx[i] == i:
+            cost += small_value / 2.0
+            continue
+        px = mesh[i, 0]
+        py = mesh[i, 1]
+        qx = mesh[idx[i], 0]
+        qy = mesh[idx[i], 1]
+        r = c_reglen(px - qx, py - qy,
+                     1, 1,
+                     &(dr_dx), &(dr_dy))
+        h = c_huber(r, rest_lengths[i], sigma,
+                    dr_dx, dr_dy,
+                    &(dh_dx), &(dh_dy))
+        cost += h * all_weight
+        dh_dx *= all_weight
+        dh_dy *= all_weight
 
-            # update derivs
-            d_cost_d_mesh[i, 0] += dh_dx
-            d_cost_d_mesh[i, 1] += dh_dy
-            d_cost_d_mesh[idx[i], 0] -= dh_dx
-            d_cost_d_mesh[idx[i], 1] -= dh_dy
+        # update derivs
+        d_cost_d_mesh[i, 0] += dh_dx
+        d_cost_d_mesh[i, 1] += dh_dy
+        d_cost_d_mesh[idx[i], 0] -= dh_dx
+        d_cost_d_mesh[idx[i], 1] -= dh_dy
 
-    print "out"
     return cost
+
+##################################################
+# ALL DERIVS IN PARALLEL
+##################################################
+
+cpdef float32 all_derivs(float32[:, :, ::1] meshes,
+                         float32[:, :, ::1] d_cost_d_meshes,
+                         uint32[:, ::1] internal_neighbor_idx,   # same for all meshes
+                         float32[:, ::1] internal_rest_lengths,  # same for all meshes
+                         int32[:, ::1] bary_indices,
+                         float32[:, ::1] bary_weights,
+                         float32[::1] between_mesh_weights,
+                         float32 within_mesh_weight,
+                         float32 between_winsor,
+                         float32 within_winsor,
+                         uint32[:, ::1] pairs_and_offsets,
+                         int num_threads):
+    cdef:
+        int num_meshes, num_pairs, num_internal_neighbors, num_pts
+        float32[:, :, :, ::1] d_cost_per_thread
+        int m1, m2, i, j, k, tid
+        uint32 boffset
+
+    num_meshes = meshes.shape[0]
+    num_pts = meshes.shape[1]
+    num_pairs = pairs_and_offsets.shape[0]
+    num_internal_neighbors = internal_neighbor_idx.shape[1]
+    _scratch = np.zeros((num_threads, meshes.shape[0], meshes.shape[1], 2), dtype=np.float32)
+    d_cost_per_thread = _scratch
+
+    with nogil, parallel(num_threads=num_threads):
+        tid = threadid()
+        for i from tid <= i < num_pairs by num_threads:
+            m1 = pairs_and_offsets[i, 0]
+            m2 = pairs_and_offsets[i, 1]
+            boffset = pairs_and_offsets[i, 2]
+            with gil:
+                print "here", tid, i, num_pts, bary_indices.shape[0], bary_weights.shape[0], boffset, between_mesh_weights.shape[0]
+                print "mehses", m1, m2, meshes.shape[0]
+                print "d_c", d_cost_per_thread.shape[0], d_cost_per_thread.shape[1], d_cost_per_thread.shape[2], d_cost_per_thread.shape[3]
+            crosslink_mesh_derivs(meshes[m1, ...],
+                                  meshes[m2, ...],
+                                  d_cost_per_thread[tid, m1, ...],
+                                  d_cost_per_thread[tid, m2, ...],
+                                  bary_indices[boffset:(boffset + num_pts), ...],
+                                  bary_weights[boffset:(boffset + num_pts), ...],
+                                  between_mesh_weights[i],
+                                  between_winsor)
+            with gil:
+                print "hereaf", tid
+            # swap and do the other direction
+            m1, m2 = m2, m1
+            boffset = pairs_and_offsets[i, 3]
+            crosslink_mesh_derivs(meshes[m1, ...],
+                                  meshes[m2, ...],
+                                  d_cost_per_thread[tid, m1, ...],
+                                  d_cost_per_thread[tid, m2, ...],
+                                  bary_indices[boffset:(boffset + num_pts), ...],
+                                  bary_weights[boffset:(boffset + num_pts), ...],
+                                  between_mesh_weights[i],
+                                  between_winsor)
+
+        with gil:
+            print "here2", tid
+        # compute interior costs and derivs, and sum into output derivs
+        for i from tid <= i < num_meshes by num_threads:
+            d_cost_d_meshes[i, ...] = 0
+            for j from 0 <= j < num_internal_neighbors:
+                internal_mesh_derivs(meshes[i, ...],
+                                     d_cost_d_meshes[i, ...],
+                                     internal_neighbor_idx[:, j],
+                                     internal_rest_lengths[:, j],
+                                     within_mesh_weight,
+                                     within_winsor)
+            for j from 0 <= j < num_threads:
+                for k from 0 <= k < num_pts:
+                    d_cost_d_meshes[i, k, 0] += d_cost_per_thread[j, i, k, 0]
+                    d_cost_d_meshes[i, k, 1] += d_cost_per_thread[j, i, k, 1]
+
 
 
 def compare(x, y, eps, restlen, sigma):
