@@ -14,6 +14,8 @@ import pyximport
 pyximport.install()
 import mesh_derivs
 
+FLOAT_TYPE = np.float64
+
 
 sys.setrecursionlimit(10000)  # for grad
 
@@ -21,9 +23,13 @@ class MeshParser(object):
     def __init__(self, mesh_file, multiplier=1000):
         # load the mesh
         self.mesh = json.load(open(mesh_file))
-        self.pts = np.array([(p["x"], p["y"]) for p in self.mesh["points"]], dtype=np.float32)
+        self.pts = np.array([(p["x"], p["y"]) for p in self.mesh["points"]], dtype=FLOAT_TYPE)
         self.rowcols = np.array([(p["row"], p["col"]) for p in self.mesh["points"]])
         self.layer_scale = float(self.mesh["layerScale"])
+
+        reorder = np.lexsort((self.pts[:, 1], self.pts[:, 0]))
+        self.pts = self.pts[reorder, :]
+        self.rowcols = self.rowcols[reorder, :]
 
         print("# points in base mesh {}".format(self.pts.shape[0]))
 
@@ -32,7 +38,8 @@ class MeshParser(object):
         self._rowcolidx = {}
         for idx, pt in enumerate(self.pts):
             self._rowcolidx[int(pt[0] * multiplier), int(pt[1] * multiplier)] = idx
-
+        print self.pts[:3, :]
+        print mesh_file
         # Build the KDTree for neighbor searching
         self.kdt = KDTree(self.pts, leafsize=3)
 
@@ -150,7 +157,8 @@ def barycentric(pt, verts_x, verts_y):
 def load_matches(matches_files, mesh, url_to_layerid):
     pbar = ProgressBar(widgets=['Loading matches: ', Counter(), ' / ', str(len(matches_files)), " ", Bar(), ETA()])
 
-    for midx, mf in enumerate(pbar(sorted(matches_files))):
+    for midx, mf in enumerate(matches_files):
+        print midx, mf
         for m in json.load(open(mf)):
             if not m['shouldConnect']:
                 continue
@@ -158,13 +166,16 @@ def load_matches(matches_files, mesh, url_to_layerid):
             # TODO - if one of the layers should be skipped, we don't need to add its meshes
 
             # parse matches file, and get p1's mesh x and y points
-            orig_p1s = np.array([(pair["p1"]["l"][0], pair["p1"]["l"][1]) for pair in m["correspondencePointPairs"]], dtype=np.float32)
+            orig_p1s = np.array([(pair["p1"]["l"][0], pair["p1"]["l"][1]) for pair in m["correspondencePointPairs"]], dtype=FLOAT_TYPE)
 
             p1_rc_indices = [mesh.rowcolidx(p1) for p1 in orig_p1s]
+            print "RC", p1_rc_indices[:3]
+            print "orig", orig_p1s[0, :]
 
             p2_locs = np.array([pair["p2"]["l"] for pair in m["correspondencePointPairs"]])
             dists, surround_indices = mesh.query_cross(p2_locs, 3)
             surround_indices = surround_indices.astype(np.uint32)
+            print "SI", surround_indices[0, :]
             tris_x = mesh.pts[surround_indices, 0]
             tris_y = mesh.pts[surround_indices, 1]
             w1, w2, w3 = barycentric(p2_locs, tris_x, tris_y)
@@ -174,15 +185,17 @@ def load_matches(matches_files, mesh, url_to_layerid):
             reorder = np.argsort(p1_rc_indices)
             p1_rc_indices = np.array(p1_rc_indices).astype(np.uint32)[reorder]
             surround_indices = surround_indices[reorder, :]
-            weights = np.hstack((w1, w2, w3)).astype(np.float32)[reorder, :]
+            weights = np.hstack((w1, w2, w3)).astype(FLOAT_TYPE)[reorder, :]
             assert p1_rc_indices.shape[0] == weights.shape[0]
+            print m["url1"], m["url2"]
+            print surround_indices[p1_rc_indices == 0, :]
             yield url_to_layerid[m["url1"]], url_to_layerid[m["url2"]], p1_rc_indices, surround_indices, weights
 
 def linearize_grad(positions, gradients):
     '''perform a least-squares fit, then return the values from that fit'''
     newpos = np.hstack((positions, np.ones((positions.shape[0], 1))))
     fit, residuals, rank, s = lstsq(newpos, gradients)
-    return np.dot(newpos, fit).astype(np.float32)
+    return np.dot(newpos, fit).astype(FLOAT_TYPE)
 
 def blend(a, b, t):
     '''at t=0, return a, at t=1, return b'''
@@ -208,24 +221,17 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
     # load the slice-to-slice matches
     cross_links = dict(((v[0], v[1]), v[2:]) for v in load_matches(matches_files, mesh, url_to_layerid))
 
-    # make sure every slice that is in url_to_layerid has matches with all of
-    # its neighbors that are also present
-    present_slices = sorted([k for v in cross_links.keys() for k in v])
-
-    separations = {}
-    for id1, id2 in cross_links.keys():
-        lo, hi = sorted([id1, id2])
-        separations[id1, id2] = present_slices[present_slices.index(lo):].index(hi)
+    # find all the slices represented
+    present_slices = sorted(list(set(k for v in cross_links.keys() for k in v)))
 
     # build mesh array for all meshes
     all_mesh_pts = np.concatenate([mesh.pts[np.newaxis, ...]] * len(present_slices), axis=0)
-    mesh_pt_offsets = dict(zip(present_slices,
-                               num_pts * np.arange(len(present_slices))))
+    mesh_pt_offsets = dict(zip(present_slices, np.arange(len(present_slices))))
 
     # Build internal structural mesh
     dists, neighbor_indices = mesh.query_internal(mesh.pts, 6)
     neighbor_indices = neighbor_indices.astype(np.uint32)
-    dists = dists.astype(np.float32)
+    dists = dists.astype(FLOAT_TYPE)
 
     # cross-mesh links
 
@@ -236,27 +242,30 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
     bary_weights = []
     bary_offsets = {}
     for (id1, id2), (m1_indices, m2_surround_indices, m2_weights) in cross_links.iteritems():
-        id1 = present_slices.index(id1)
-        id2 = present_slices.index(id2)
         cur_bary_indices = -np.ones((num_pts, 3), np.int32)
-        cur_bary_weights = np.zeros((num_pts, 3), np.float32)
+        cur_bary_weights = np.zeros((num_pts, 3), FLOAT_TYPE)
         for idx, bn_indices, bn_weights in zip(m1_indices, m2_surround_indices, m2_weights):
             cur_bary_indices[idx, :] = bn_indices
             cur_bary_weights[idx ,:] = bn_weights
         assert m1_indices.shape[0] == m2_surround_indices.shape[0] == m2_weights.shape[0]
         bary_indices.append(cur_bary_indices)
         bary_weights.append(cur_bary_weights)
-        bary_offsets[id1, id2] = len(bary_indices) * num_pts
+        bary_offsets[id1, id2] = (len(bary_indices) - 1) * num_pts
 
     bary_indices = np.vstack(bary_indices)
     bary_weights = np.vstack(bary_weights)
+
     # build the list of all pairs with their offsets
-    all_pairs = np.vstack([(id1, id2, bary_offsets[id1, id2], bary_offsets[id2, id1])
+    all_pairs = np.vstack([(mesh_pt_offsets[id1],
+                            mesh_pt_offsets[id2],
+                            bary_offsets[id1, id2],
+                            bary_offsets[id2, id1])
                            for id1, id2 in bary_offsets.keys() if id1 < id2]).astype(np.uint32)
     assert 2 * len(all_pairs) == len(cross_links)
-    between_mesh_weights = np.array([cross_slice_weight / float(abs(id1 - id2))
+    between_mesh_weights = np.array([cross_slice_weight / float(abs(int(id1) - int(id2)))
                                      for id1, id2, _, _ in all_pairs],
-                                    dtype=np.float32)
+                                    dtype=FLOAT_TYPE)
+    print cross_slice_weight, id1, id2
 
     d_cost_d_meshes = np.zeros_like(all_mesh_pts)
 
@@ -264,8 +273,9 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
     for iter in pbar(range(max_iterations)):
         print("")  # keep progress lines from overwriting
 
+        print "BT", between_mesh_weights
         start = time.time()
-        print "ALL", all_mesh_pts.shape
+        all_mesh_pts[1, 1500, 0] += 0.01
         cost = mesh_derivs.all_derivs(all_mesh_pts,
                                       d_cost_d_meshes,
                                       neighbor_indices,
@@ -280,8 +290,23 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
                                       1)
 
         tottime = time.time() - start
-        print tottime, cost
+        print "TIME", tottime, cost
 
+        all_mesh_pts[1, 1500, 0] += 0.000001
+        costn = mesh_derivs.all_derivs(all_mesh_pts,
+                                      d_cost_d_meshes,
+                                      neighbor_indices,
+                                      dists,
+                                      bary_indices,
+                                      bary_weights,
+                                      between_mesh_weights,
+                                      intra_slice_weight,
+                                      cross_slice_winsor,
+                                      intra_slice_winsor,
+                                      all_pairs,
+                                      1)
+        print "END", costn, costn - cost, d_cost_d_meshes[1, 1500, 0] * 0.000001
+        die
         # relaxation of the mesh
         relaxation_end = int(max_iterations * 0.75)
         if iter < relaxation_end:

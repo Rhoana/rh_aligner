@@ -6,3 +6,4 @@ release.properties
 .DS_Store
 *.pyc
 *~
+*.pickle
