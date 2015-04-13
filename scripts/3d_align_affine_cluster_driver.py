@@ -165,7 +165,7 @@ class OptimizeLayersAffine(Job):
         self.threads = threads_num
         self.threads_str = '-t {0}'.format(threads_num)
         self.dependencies = dependencies
-        self.memory = 100000
+        self.memory = 50000
         self.time = 1400
         self.is_java_job = True
         self.output = outputs
@@ -175,7 +175,7 @@ class OptimizeLayersAffine(Job):
         return ['python -u',
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'optimize_layers_affine.py'),
                 self.output_dir, self.jar_file, self.conf_fname, self.fixed_layers,
-                self.max_layer_distance, self.threads_str, self.manual_matches, self.skip_layers, self.tiles_fnames, self.corr_fnames, self.model_files]
+                self.max_layer_distance, self.threads_str, self.manual_matches, self.skip_layers, self.tiles_fnames, self.corr_fnames, self.model_fnames]
 
 
 
@@ -442,7 +442,7 @@ if __name__ == '__main__':
     dependencies = all_running_jobs
     job_optimize = OptimizeLayersAffine(dependencies, sections_outputs, [ ts_list_file ], [ matched_sifts_list_file ], [ model_list_file ],
         fixed_layers, args.output_dir, args.max_layer_distance, args.jar_file, conf_fname=args.conf_file_name,
-        skip_layers=args.skip_layers, threads_num=32)
+        skip_layers=args.skip_layers, threads_num=8)
 
 
     # Run all jobs

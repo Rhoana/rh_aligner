@@ -27,7 +27,7 @@ def optimize_layers_affine(tile_files, corr_files, model_files, fixed_layers, ou
 
 
     # Assuming that at least 4 threads will be allocated for this job, and increasing the number of gc threads to 4 will make it faster
-    java_cmd = 'java -Xmx96g -XX:ParallelGCThreads={0} -Djava.awt.headless=true -cp "{1}" org.janelia.alignment.OptimizeLayersAffine --tilespecFiles {2} --corrFiles {3} \
+    java_cmd = 'java -Xmx46g -XX:ParallelGCThreads={0} -Djava.awt.headless=true -cp "{1}" org.janelia.alignment.OptimizeLayersAffine --tilespecFiles {2} --corrFiles {3} \
             --modelFiles {4} {5} {6} --threads {7} --maxLayersDistance {8} {9} --targetDir {10} {11}'.format(
         utils.get_gc_threads_num(threads_num),
         jar_file,
@@ -51,7 +51,7 @@ def main():
                         help='the list of tile spec files to align')
     parser.add_argument('--corr_files', metavar='corr_files', type=str, nargs='+', required=True,
                         help='the list of corr spec files that contain the matched layers')
-    parser.add_argument('--mode_files', metavar='corr_files', type=str, nargs='+', required=True,
+    parser.add_argument('--model_files', metavar='corr_files', type=str, nargs='+', required=True,
                         help='the list of model spec files that contain the matched layers')
     parser.add_argument('-o', '--output_dir', type=str, 
                         help='an output directory that will include the aligned sections tiles (default: .)',
