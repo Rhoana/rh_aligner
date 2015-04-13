@@ -17,12 +17,13 @@ USE_SBATCH = True
 
 SBATCH_QUEUE = 'serial_requeue'
 #SBATCH_QUEUE = 'general'
+#SBATCH_QUEUE = 'holyseasgpu'
 
 #SBATCH_ACCOUNT = None
 SBATCH_ACCOUNT = 'lichtman_lab'
 
 #SBATCH_EXCLUDED = None
-SBATCH_EXCLUDED = 'nelson01,regal01,regal02,regal03,regal04,regal10,regal09,regal08,regal11,regal13,regal18,jenny02'
+SBATCH_EXCLUDED = 'nelson01,regal01,regal02,regal03,regal04,regal10,regal09,regal08,regal11,regal13,regal18,jenny02,hsph05,hsph06,holy2a13104,regal14'
 
 # Make sure the logs directory exists
 if not os.path.exists(LOGS_DIR) or not os.path.isdir(os.path.dirname(LOGS_DIR)):
@@ -108,10 +109,6 @@ class Job(object):
         # if self.get_threads_num() > 1:
         #     work_queue = "general"
 
-        account_str = ""
-        if SBATCH_ACCOUNT is not None:
-            account_str = "--account={}".format(SBATCH_ACCOUNT)
-
         if RUN_LOCAL:
             subprocess.check_call(self.command())
         elif USE_SBATCH:
@@ -125,10 +122,12 @@ class Job(object):
                 "--cpus-per-task", str(self.get_threads_num()),        # Number of threads
                 "-t", str(self.time),              # Time in munites 1440 = 24 hours
                 "--mem-per-cpu", str(self.memory), # Max memory in MB (strict - attempts to allocate more memory will fail)
-                account_str,
                 "--open-mode=append",              # Append to log files
                 "-o", LOGS_DIR + "/out." + self.name,     # Standard out file
                 "-e", LOGS_DIR + "/error." + self.name]   # Error out file
+
+            if SBATCH_ACCOUNT is not None:
+                command_list.append("--account={}".format(SBATCH_ACCOUNT))
 
             if SBATCH_EXCLUDED is not None:
                 command_list.append("--exclude")
@@ -517,8 +516,6 @@ class JobBlock(object):
         #     work_queue = "general"
 
         account_str = ""
-        if SBATCH_ACCOUNT is not None:
-            account_str = "--account={}".format(SBATCH_ACCOUNT)
 
         if USE_SBATCH:
             command_list = ["sbatch",
@@ -531,10 +528,12 @@ class JobBlock(object):
 #                "-n", str(required_cores),        # Number of processors
                 "-t", str(self.required_full_time),              # Time in munites 1440 = 24 hours
                 "--mem", str(self.required_memory), # Max memory in MB (strict - attempts to allocate more memory will fail)
-                account_str,
                 "--open-mode=append",              # Append to log files
                 "-o", LOGS_DIR + "/out." + block_name,     # Standard out file
                 "-e", LOGS_DIR + "/error." + block_name]   # Error out file
+
+            if SBATCH_ACCOUNT is not None:
+                command_list.append("--account={}".format(SBATCH_ACCOUNT))
 
             if SBATCH_EXCLUDED is not None:
                 command_list.append("--exclude")
