@@ -169,13 +169,10 @@ def load_matches(matches_files, mesh, url_to_layerid):
             orig_p1s = np.array([(pair["p1"]["l"][0], pair["p1"]["l"][1]) for pair in m["correspondencePointPairs"]], dtype=FLOAT_TYPE)
 
             p1_rc_indices = [mesh.rowcolidx(p1) for p1 in orig_p1s]
-            print "RC", p1_rc_indices[:3]
-            print "orig", orig_p1s[0, :]
 
             p2_locs = np.array([pair["p2"]["l"] for pair in m["correspondencePointPairs"]])
             dists, surround_indices = mesh.query_cross(p2_locs, 3)
             surround_indices = surround_indices.astype(np.uint32)
-            print "SI", surround_indices[0, :]
             tris_x = mesh.pts[surround_indices, 0]
             tris_y = mesh.pts[surround_indices, 1]
             w1, w2, w3 = barycentric(p2_locs, tris_x, tris_y)
@@ -187,8 +184,6 @@ def load_matches(matches_files, mesh, url_to_layerid):
             surround_indices = surround_indices[reorder, :]
             weights = np.hstack((w1, w2, w3)).astype(FLOAT_TYPE)[reorder, :]
             assert p1_rc_indices.shape[0] == weights.shape[0]
-            print m["url1"], m["url2"]
-            print surround_indices[p1_rc_indices == 0, :]
             yield url_to_layerid[m["url1"]], url_to_layerid[m["url2"]], p1_rc_indices, surround_indices, weights
 
 def linearize_grad(positions, gradients):
@@ -265,7 +260,6 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
     between_mesh_weights = np.array([cross_slice_weight / float(abs(int(id1) - int(id2)))
                                      for id1, id2, _, _ in all_pairs],
                                     dtype=FLOAT_TYPE)
-    print cross_slice_weight, id1, id2
 
     d_cost_d_meshes = np.zeros_like(all_mesh_pts)
 
@@ -273,39 +267,44 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
     for iter in pbar(range(max_iterations)):
         print("")  # keep progress lines from overwriting
 
-        print "BT", between_mesh_weights
         start = time.time()
-        all_mesh_pts[1, 1500, 0] += 0.01
-        cost = mesh_derivs.all_derivs(all_mesh_pts,
-                                      d_cost_d_meshes,
-                                      neighbor_indices,
-                                      dists,
-                                      bary_indices,
-                                      bary_weights,
-                                      between_mesh_weights,
-                                      intra_slice_weight,
-                                      cross_slice_winsor,
-                                      intra_slice_winsor,
-                                      all_pairs,
-                                      1)
+        for _ in range(20):
+            cost = mesh_derivs.all_derivs(all_mesh_pts,
+                                          d_cost_d_meshes,
+                                          neighbor_indices,
+                                          dists,
+                                          bary_indices,
+                                          bary_weights,
+                                          between_mesh_weights,
+                                          intra_slice_weight,
+                                          cross_slice_winsor,
+                                          intra_slice_winsor,
+                                          all_pairs,
+                                          1)
 
-        tottime = time.time() - start
-        print "TIME", tottime, cost
+            tottime = time.time() - start
+            print "TIME", tottime, cost
+            print "\n\n"
 
-        all_mesh_pts[1, 1500, 0] += 0.000001
-        costn = mesh_derivs.all_derivs(all_mesh_pts,
-                                      d_cost_d_meshes,
-                                      neighbor_indices,
-                                      dists,
-                                      bary_indices,
-                                      bary_weights,
-                                      between_mesh_weights,
-                                      intra_slice_weight,
-                                      cross_slice_winsor,
-                                      intra_slice_winsor,
-                                      all_pairs,
-                                      1)
-        print "END", costn, costn - cost, d_cost_d_meshes[1, 1500, 0] * 0.000001
+        dup = d_cost_d_meshes.copy()
+        for _ in range(300):
+            start = time.time()
+            cost = mesh_derivs.all_derivs(all_mesh_pts,
+                                          d_cost_d_meshes,
+                                          neighbor_indices,
+                                          dists,
+                                          bary_indices,
+                                          bary_weights,
+                                          between_mesh_weights,
+                                          intra_slice_weight,
+                                          cross_slice_winsor,
+                                          intra_slice_winsor,
+                                          all_pairs,
+                                          4)
+
+            tottime = time.time() - start
+            print "TIME", tottime, cost
+            assert np.allclose(dup, d_cost_d_meshes)
         die
         # relaxation of the mesh
         relaxation_end = int(max_iterations * 0.75)
