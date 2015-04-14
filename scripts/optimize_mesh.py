@@ -287,7 +287,7 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
         return np.mean(means)
 
     pbar = ProgressBar(widgets=['Iter ', Counter(), '/{0} '.format(max_iterations), Bar(), ETA()])
-    for iter in range(1000):
+    for iter in range(1):
         cost = mesh_derivs.all_derivs(all_mesh_pts,
                                       gradient,
                                       neighbor_indices,
