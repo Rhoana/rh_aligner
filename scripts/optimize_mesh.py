@@ -27,7 +27,7 @@ class MeshParser(object):
         self.rowcols = np.array([(p["row"], p["col"]) for p in self.mesh["points"]])
         self.layer_scale = float(self.mesh["layerScale"])
 
-        reorder = np.lexsort((self.pts[:, 1], self.pts[:, 0]))
+        reorder = np.lexsort(self.pts.T)
         self.pts = self.pts[reorder, :]
         self.rowcols = self.rowcols[reorder, :]
 
@@ -156,7 +156,7 @@ def barycentric(pt, verts_x, verts_y):
 def load_matches(matches_files, mesh, url_to_layerid):
     pbar = ProgressBar(widgets=['Loading matches: ', Counter(), ' / ', str(len(matches_files)), " ", Bar(), ETA()])
 
-    for midx, mf in enumerate(pbar(matches_files)):
+    for midx, mf in enumerate((matches_files)):
         for m in json.load(open(mf)):
             if not m['shouldConnect']:
                 continue
@@ -176,6 +176,15 @@ def load_matches(matches_files, mesh, url_to_layerid):
             w1, w2, w3 = barycentric(p2_locs, tris_x, tris_y)
             m["url1"] = m["url1"].replace("/n/regal/pfister_lab/adisuis/Alyssa_P3_W02_to_W08", "/data/Adi/mesh_optimization/data")
             m["url2"] = m["url2"].replace("/n/regal/pfister_lab/adisuis/Alyssa_P3_W02_to_W08", "/data/Adi/mesh_optimization/data")
+
+            print "PT LOC"
+            assert 636 in p1_rc_indices
+            idx_636 = p1_rc_indices.index(636)
+            print "idx", idx_636, "m1", mesh.pts[636, :], "m2", p2_locs[idx_636, :]
+            print "SURROUND FOR 636", surround_indices[idx_636, :]
+            print [mesh.pts[i, :] for i in surround_indices[idx_636, :]]
+            print "W", w1[idx_636], w2[idx_636], w3[idx_636]
+
 
             # TODO: figure out why this is needed
             reorder = np.argsort(p1_rc_indices)
@@ -300,8 +309,24 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
                                       intra_slice_winsor,
                                       all_pairs,
                                       4)
+
         print
         print "MO:", mean_offset(), cost, stepsize
+
+        cost = mesh_derivs.all_derivs(all_mesh_pts -0.1 * gradient,
+                                      gradient,
+                                      neighbor_indices,
+                                      dists,
+                                      bary_indices,
+                                      bary_weights,
+                                      between_mesh_weights,
+                                      intra_slice_weight,
+                                      cross_slice_winsor,
+                                      intra_slice_winsor,
+                                      all_pairs,
+                                      4)
+        print "ONE STEP", cost
+        die
 
         # relaxation of the mesh
         # initially, mesh is held rigid (all points transform together).
