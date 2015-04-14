@@ -260,7 +260,8 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
     between_mesh_weights = np.array([cross_slice_weight / float(abs(int(id1) - int(id2)))
                                      for id1, id2, _, _ in all_pairs],
                                     dtype=FLOAT_TYPE)
-
+    between_mesh_weights = np.ones_like(between_mesh_weights)
+    
     prev_cost = np.inf
     gradient = np.zeros_like(all_mesh_pts)
     gradient_with_momentum = 0
@@ -301,7 +302,7 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
                                       4)
         print
         print "MO:", mean_offset(), cost, stepsize
-        
+
         # relaxation of the mesh
         # initially, mesh is held rigid (all points transform together).
         # mesh is allowed to deform as iterations progress.
