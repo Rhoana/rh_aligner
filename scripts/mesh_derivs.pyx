@@ -26,7 +26,7 @@ allow_gil()
 ##################################################
 # HUBER LOSS FUNCTION
 ##################################################
-cdef  FLOAT_TYPE c_huber(FLOAT_TYPE value,
+cdef  inline FLOAT_TYPE c_huber(FLOAT_TYPE value,
                                FLOAT_TYPE target,
                                FLOAT_TYPE sigma,
                                FLOAT_TYPE d_value_dx,
@@ -58,7 +58,7 @@ cpdef huber(value, target, sigma, dx, dy):
 # REGULARIZED LENGTH FUNCTION
 ##################################################
 
-cdef  FLOAT_TYPE c_reglen(FLOAT_TYPE vx,
+cdef  inline FLOAT_TYPE c_reglen(FLOAT_TYPE vx,
                                 FLOAT_TYPE vy,
                                 FLOAT_TYPE d_vx_dx,
                                 FLOAT_TYPE d_vy_dy,
@@ -272,4 +272,4 @@ if __name__ == '__main__':
     compare(10.0, 2.0, eps, 3.0, 20.0)
     compare(10.0, 2.0, eps, 3.0, 2.0)
     compare(-10.0, -2.0, eps, 3.0, 2.0)
-2
+

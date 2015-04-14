@@ -38,8 +38,7 @@ class MeshParser(object):
         self._rowcolidx = {}
         for idx, pt in enumerate(self.pts):
             self._rowcolidx[int(pt[0] * multiplier), int(pt[1] * multiplier)] = idx
-        print self.pts[:3, :]
-        print mesh_file
+
         # Build the KDTree for neighbor searching
         self.kdt = KDTree(self.pts, leafsize=3)
 
@@ -157,8 +156,7 @@ def barycentric(pt, verts_x, verts_y):
 def load_matches(matches_files, mesh, url_to_layerid):
     pbar = ProgressBar(widgets=['Loading matches: ', Counter(), ' / ', str(len(matches_files)), " ", Bar(), ETA()])
 
-    for midx, mf in enumerate(matches_files):
-        print midx, mf
+    for midx, mf in enumerate(pbar(matches_files)):
         for m in json.load(open(mf)):
             if not m['shouldConnect']:
                 continue
@@ -179,6 +177,7 @@ def load_matches(matches_files, mesh, url_to_layerid):
             m["url1"] = m["url1"].replace("/n/regal/pfister_lab/adisuis/Alyssa_P3_W02_to_W08", "/data/Adi/mesh_optimization/data")
             m["url2"] = m["url2"].replace("/n/regal/pfister_lab/adisuis/Alyssa_P3_W02_to_W08", "/data/Adi/mesh_optimization/data")
 
+            # TODO: figure out why this is needed
             reorder = np.argsort(p1_rc_indices)
             p1_rc_indices = np.array(p1_rc_indices).astype(np.uint32)[reorder]
             surround_indices = surround_indices[reorder, :]
@@ -218,6 +217,7 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
 
     # find all the slices represented
     present_slices = sorted(list(set(k for v in cross_links.keys() for k in v)))
+    num_meshes = len(present_slices)
 
     # build mesh array for all meshes
     all_mesh_pts = np.concatenate([mesh.pts[np.newaxis, ...]] * len(present_slices), axis=0)
@@ -236,7 +236,7 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
     bary_indices = []
     bary_weights = []
     bary_offsets = {}
-    for (id1, id2), (m1_indices, m2_surround_indices, m2_weights) in cross_links.iteritems():
+    for (id1, id2), (m1_indices, m2_surround_indices, m2_weights) in sorted(cross_links.iteritems()):
         cur_bary_indices = -np.ones((num_pts, 3), np.int32)
         cur_bary_weights = np.zeros((num_pts, 3), FLOAT_TYPE)
         for idx, bn_indices, bn_weights in zip(m1_indices, m2_surround_indices, m2_weights):
@@ -261,57 +261,56 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
                                      for id1, id2, _, _ in all_pairs],
                                     dtype=FLOAT_TYPE)
 
-    d_cost_d_meshes = np.zeros_like(all_mesh_pts)
+    prev_cost = np.inf
+    gradient = np.zeros_like(all_mesh_pts)
+    gradient_with_momentum = 0
+    stepsize = 0.1
+
+    def mean_offset():
+        num_pts = all_mesh_pts.shape[1]
+        means = []
+        for id1, id2, baryoff1, baryoff2 in all_pairs:
+            if abs(int(id1) - int(id2)) == 1:
+                mesh1 = all_mesh_pts[id1, ...]
+                mesh2 = all_mesh_pts[id2, ...]
+                bindices = bary_indices[baryoff1:(baryoff1 + num_pts), ...]
+                mesh_1_matches = mesh2[bindices, ...]
+                mesh_1_matches *= bary_weights[baryoff1:(baryoff1 + num_pts), ..., np.newaxis]
+                delta = (mesh1 - mesh_1_matches.sum(axis=1)) ** 2
+                means.append(delta.sum(axis=1)[bindices[:, 0] != -1].mean())
+                bindices = bary_indices[baryoff2:(baryoff2 + num_pts), ...]
+                mesh_2_matches = mesh1[bindices, ...]
+                mesh_2_matches *= bary_weights[baryoff2:(baryoff2 + num_pts), ..., np.newaxis]
+                delta = (mesh2 - mesh_2_matches.sum(axis=1)) ** 2
+                means.append(delta.sum(axis=1)[bindices[:, 0] != -1].mean())
+        return np.mean(means)
 
     pbar = ProgressBar(widgets=['Iter ', Counter(), '/{0} '.format(max_iterations), Bar(), ETA()])
-    for iter in pbar(range(max_iterations)):
-        print("")  # keep progress lines from overwriting
-
-        start = time.time()
-        for _ in range(20):
-            cost = mesh_derivs.all_derivs(all_mesh_pts,
-                                          d_cost_d_meshes,
-                                          neighbor_indices,
-                                          dists,
-                                          bary_indices,
-                                          bary_weights,
-                                          between_mesh_weights,
-                                          intra_slice_weight,
-                                          cross_slice_winsor,
-                                          intra_slice_winsor,
-                                          all_pairs,
-                                          1)
-
-            tottime = time.time() - start
-            print "TIME", tottime, cost
-            print "\n\n"
-
-        dup = d_cost_d_meshes.copy()
-        for _ in range(300):
-            start = time.time()
-            cost = mesh_derivs.all_derivs(all_mesh_pts,
-                                          d_cost_d_meshes,
-                                          neighbor_indices,
-                                          dists,
-                                          bary_indices,
-                                          bary_weights,
-                                          between_mesh_weights,
-                                          intra_slice_weight,
-                                          cross_slice_winsor,
-                                          intra_slice_winsor,
-                                          all_pairs,
-                                          4)
-
-            tottime = time.time() - start
-            print "TIME", tottime, cost
-            assert np.allclose(dup, d_cost_d_meshes)
-        die
+    for iter in range(1000):
+        cost = mesh_derivs.all_derivs(all_mesh_pts,
+                                      gradient,
+                                      neighbor_indices,
+                                      dists,
+                                      bary_indices,
+                                      bary_weights,
+                                      between_mesh_weights,
+                                      intra_slice_weight,
+                                      cross_slice_winsor,
+                                      intra_slice_winsor,
+                                      all_pairs,
+                                      4)
+        print
+        print "MO:", mean_offset(), cost, stepsize
+        
         # relaxation of the mesh
+        # initially, mesh is held rigid (all points transform together).
+        # mesh is allowed to deform as iterations progress.
         relaxation_end = int(max_iterations * 0.75)
         if iter < relaxation_end:
-            for url in new_grads.keys():
-                linearized = linearize_grad(per_tile_mesh[url], new_grads[url])
-                new_grads[url] = blend(linearized, new_grads[url], iter / float(relaxation_end))
+            # for each mesh, compute a linear fit to the gradient
+            for meshidx in range(num_meshes):
+                linearized = linearize_grad(all_mesh_pts[meshidx, ...], gradient[meshidx, ...])
+                gradient[meshidx, ...] = blend(linearized, gradient[meshidx, ...], iter / float(relaxation_end))
 
         # step size adjustment
         if cost <= prev_cost:
@@ -319,26 +318,16 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
             if stepsize > 1.0:
                 stepsize = 1.0
             # update with new gradients
-            for url in grads.keys():
-                grads[url] = new_grads[url] + 0.75 * grads[url]  # momentum of 0.5
-
-            # step to next evaluation point
-            for url in per_tile_mesh.keys():
-                per_tile_mesh[url] = (per_tile_mesh[url] - stepsize * grads[url])
-
+            gradient_with_momentum = gradient + 0.5 * gradient_with_momentum
+            all_mesh_pts = (all_mesh_pts - stepsize * gradient_with_momentum)
             prev_cost = cost
-
         else:  # we took a bad step: undo it, scale down stepsize, and start over
-            for url in per_tile_mesh.keys():
-                per_tile_mesh[url] = (per_tile_mesh[url] + stepsize * grads[url])
-
+            all_mesh_pts = (all_mesh_pts + stepsize * gradient_with_momentum)
             stepsize *= 0.5
-
-            for url in grads.keys():
-                grads[url] *= 0.0  # clear momentum when we take too large a step
-
+            gradient_with_momentum = 0.0
             prev_cost = np.inf
 
+    die
     # Prepare per-layer output
     out_positions = {}
 
