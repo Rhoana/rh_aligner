@@ -313,19 +313,21 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
         print
         print "MO:", mean_offset(), cost, stepsize
 
-        cost = mesh_derivs.all_derivs(all_mesh_pts -0.1 * gradient,
-                                      gradient,
-                                      neighbor_indices,
-                                      dists,
-                                      bary_indices,
-                                      bary_weights,
-                                      between_mesh_weights,
-                                      intra_slice_weight,
-                                      cross_slice_winsor,
-                                      intra_slice_winsor,
-                                      all_pairs,
-                                      4)
-        print "ONE STEP", cost
+        for idx in range(5):
+            all_mesh_pts -= 0.1 * gradient
+            cost = mesh_derivs.all_derivs(all_mesh_pts,
+                                          gradient,
+                                          neighbor_indices,
+                                          dists,
+                                          bary_indices,
+                                          bary_weights,
+                                          between_mesh_weights,
+                                          intra_slice_weight,
+                                          cross_slice_winsor,
+                                          intra_slice_winsor,
+                                          all_pairs,
+                                          4)
+            print "ONE STEP", cost
         die
 
         # relaxation of the mesh
