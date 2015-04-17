@@ -232,6 +232,8 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
 
     # find all the slices represented
     present_slices = sorted(list(set(k for v in cross_links.keys() for k in v)))
+    assert 1452 in present_slices
+    print "PS", present_slices
     num_meshes = len(present_slices)
 
     # build mesh array for all meshes
