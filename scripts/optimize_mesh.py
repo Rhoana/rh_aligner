@@ -266,17 +266,19 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
     bary_weights = np.vstack(bary_weights)
 
     # build the list of all pairs with their offsets
-    all_pairs = np.vstack([(mesh_pt_offsets[id1],
-                            mesh_pt_offsets[id2],
-                            bary_offsets[id1, id2],
-                            bary_offsets[id2, id1])
-                           for id1, id2 in bary_offsets.keys() if id1 < id2]).astype(np.uint32)
+    all_pairs = np.vstack(sorted([(mesh_pt_offsets[id1],
+                                   mesh_pt_offsets[id2],
+                                   bary_offsets[id1, id2],
+                                   bary_offsets[id2, id1])
+                                  for id1, id2 in bary_offsets.keys() if id1 < id2])).astype(np.uint32)
     assert 2 * len(all_pairs) == len(cross_links)
     between_mesh_weights = np.array([cross_slice_weight / float(abs(int(id1) - int(id2)))
                                      for id1, id2, _, _ in all_pairs],
                                     dtype=FLOAT_TYPE)
-    between_mesh_weights = np.ones_like(between_mesh_weights)
-    
+
+    for idx in range(len(all_pairs)):
+        print int(all_pairs[idx, 0]), int(all_pairs[idx, 1]), between_mesh_weights[idx]
+
     prev_cost = np.inf
     gradient = np.zeros_like(all_mesh_pts)
     gradient_with_momentum = 0
