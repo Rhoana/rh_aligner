@@ -28,8 +28,8 @@ class MeshParser(object):
         self.layer_scale = float(self.mesh["layerScale"])
 
         reorder = np.lexsort(self.pts.T)
-        self.pts = self.pts[reorder, :]
-        self.rowcols = self.rowcols[reorder, :]
+        #self.pts = self.pts[reorder, :]
+        #self.rowcols = self.rowcols[reorder, :]
 
         print("# points in base mesh {}".format(self.pts.shape[0]))
 
@@ -177,13 +177,19 @@ def load_matches(matches_files, mesh, url_to_layerid):
             m["url1"] = m["url1"].replace("/n/regal/pfister_lab/adisuis/Alyssa_P3_W02_to_W08", "/data/Adi/mesh_optimization/data")
             m["url2"] = m["url2"].replace("/n/regal/pfister_lab/adisuis/Alyssa_P3_W02_to_W08", "/data/Adi/mesh_optimization/data")
 
-            print "PT LOC"
-            assert 636 in p1_rc_indices
-            idx_636 = p1_rc_indices.index(636)
-            print "idx", idx_636, "m1", mesh.pts[636, :], "m2", p2_locs[idx_636, :]
-            print "SURROUND FOR 636", surround_indices[idx_636, :]
-            print [mesh.pts[i, :] for i in surround_indices[idx_636, :]]
-            print "W", w1[idx_636], w2[idx_636], w3[idx_636]
+            if False:  # only for 2-mesh subset
+                idx = np.nonzero((mesh.pts[:, 0].astype(int) == 2431) &
+                                 (mesh.pts[:, 1].astype(int) == 509))[0]
+                print "AT IDX", mesh.pts[idx, :]
+                idx_636 = p1_rc_indices.index(idx)
+
+                print "PT LOC"
+                #assert 636 in p1_rc_indices
+                #idx_636 = p1_rc_indices.index(636)
+                print "idx", idx_636, "m1", mesh.pts[636, :], "m2", p2_locs[idx_636, :]
+                print "SURROUND FOR 636", surround_indices[idx_636, :]
+                print [mesh.pts[i, :] for i in surround_indices[idx_636, :]]
+                print "W", w1[idx_636], w2[idx_636], w3[idx_636]
 
 
             # TODO: figure out why this is needed
