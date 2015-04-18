@@ -200,11 +200,19 @@ def load_matches(matches_files, mesh, url_to_layerid):
             assert p1_rc_indices.shape[0] == weights.shape[0]
             yield url_to_layerid[m["url1"]], url_to_layerid[m["url2"]], p1_rc_indices, surround_indices, weights
 
-def linearize_grad(positions, gradients):
+def linearize_grad_slow(positions, gradients):
     '''perform a least-squares fit, then return the values from that fit'''
     newpos = np.hstack((positions, np.ones((positions.shape[0], 1))))
     fit, residuals, rank, s = lstsq(newpos, gradients)
     return np.dot(newpos, fit).astype(FLOAT_TYPE)
+
+def linearize_grad(positions, gradients):
+    '''perform a least-squares fit, then return the values from that fit'''
+    positions = np.hstack((positions, np.ones((positions.shape[0], 1))))
+    XTX = np.dot(positions.T, positions)
+    XTY = np.dot(positions.T, gradients)
+    Beta = np.dot(np.linalg.inv(XTX), XTY)
+    return np.dot(positions, Beta)
 
 def blend(a, b, t):
     '''at t=0, return a, at t=1, return b'''
@@ -232,7 +240,6 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
 
     # find all the slices represented
     present_slices = sorted(list(set(k for v in cross_links.keys() for k in v)))
-    assert 1452 in present_slices
     print "PS", present_slices
     num_meshes = len(present_slices)
 
@@ -297,16 +304,18 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
                 mesh_1_matches = mesh2[bindices, ...]
                 mesh_1_matches *= bary_weights[baryoff1:(baryoff1 + num_pts), ..., np.newaxis]
                 delta = (mesh1 - mesh_1_matches.sum(axis=1)) ** 2
-                means.append(delta.sum(axis=1)[bindices[:, 0] != -1].mean())
+                means.append(np.sqrt(delta.sum(axis=1)[bindices[:, 0] != -1]).mean())
+
                 bindices = bary_indices[baryoff2:(baryoff2 + num_pts), ...]
                 mesh_2_matches = mesh1[bindices, ...]
                 mesh_2_matches *= bary_weights[baryoff2:(baryoff2 + num_pts), ..., np.newaxis]
                 delta = (mesh2 - mesh_2_matches.sum(axis=1)) ** 2
-                means.append(delta.sum(axis=1)[bindices[:, 0] != -1].mean())
+                means.append(np.sqrt(delta.sum(axis=1)[bindices[:, 0] != -1]).mean())
         return np.mean(means)
 
+    oldtick = time.time()
     pbar = ProgressBar(widgets=['Iter ', Counter(), '/{0} '.format(max_iterations), Bar(), ETA()])
-    for iter in range(1):
+    for iter in range(3 * max_iterations):
         cost = mesh_derivs.all_derivs(all_mesh_pts,
                                       gradient,
                                       neighbor_indices,
@@ -320,25 +329,9 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
                                       all_pairs,
                                       4)
 
-        print
-        print "MO:", mean_offset(), cost, stepsize
-
-        for idx in range(5):
-            all_mesh_pts -= 0.1 * gradient
-            cost = mesh_derivs.all_derivs(all_mesh_pts,
-                                          gradient,
-                                          neighbor_indices,
-                                          dists,
-                                          bary_indices,
-                                          bary_weights,
-                                          between_mesh_weights,
-                                          intra_slice_weight,
-                                          cross_slice_winsor,
-                                          intra_slice_winsor,
-                                          all_pairs,
-                                          4)
-            print "ONE STEP", cost
-        die
+        if iter % 10 == 0:
+            print iter, "COST:", cost, "MO:", mean_offset(), "SZ:", stepsize, time.time() - oldtick
+            oldtick = time.time()
 
         # relaxation of the mesh
         # initially, mesh is held rigid (all points transform together).
@@ -348,6 +341,8 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
             # for each mesh, compute a linear fit to the gradient
             for meshidx in range(num_meshes):
                 linearized = linearize_grad(all_mesh_pts[meshidx, ...], gradient[meshidx, ...])
+#                lin2 = linearize_grad_slow(all_mesh_pts[meshidx, ...], gradient[meshidx, ...])
+#                print "LIN", abs(lin2 - linearized).max()
                 gradient[meshidx, ...] = blend(linearized, gradient[meshidx, ...], iter / float(relaxation_end))
 
         # step size adjustment
