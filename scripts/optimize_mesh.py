@@ -116,6 +116,8 @@ def barycentric(pt, verts_x, verts_y):
     l1 = ((y_2 - y_3) * (x - x_3) + (x_3 - x_2) * (y - y_3)) / den
     l2 = ((y_3 - y_1) * (x - x_3) + (x_1 - x_3) * (y - y_3)) / den
     l3 = 1 - l1 - l2
+    mask = (den == 0)
+    l1[mask] = l2[mask] = l3[mask] = 1.0 / 3
     return l1.reshape((-1, 1)).astype(np.float32), l2.reshape((-1, 1)).astype(np.float32), l3.reshape((-1, 1)).astype(np.float32)
 
 def load_matches(matches_files, mesh, url_to_layerid):
@@ -193,7 +195,6 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
     block_step = conf_dict.get("block_step", 25)
     rigid_iterations = conf_dict.get("rigid_iterations", 50)
     min_iterations = conf_dict.get("min_iterations", 200)
-    max_iterations = conf_dict.get("max_iterations", )
     max_iterations = conf_dict.get("max_iterations", 2000)
     num_threads = conf_dict.get("optimization_threads", 4)
 
@@ -259,7 +260,7 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
 
     pbar = ProgressBar(widgets=[Bar(), ETA()])
 
-    for block_lo in pbar(range(0, num_meshes - block_size + 1, block_step)):
+    for block_lo in (range(0, max(1, num_meshes - block_size + 1), block_step)):
         print
         block_hi = min(block_lo + block_size, num_meshes)
 
