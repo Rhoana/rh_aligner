@@ -47,17 +47,17 @@ public class MatchSiftFeaturesAndFilter {
         @Parameter( names = "--tilespecfile", description = "TileSpec file", required = true )
         private String tilespecfile;
 
-        @Parameter( names = "--featurefile", description = "Feature file", required = true )
-        private String featurefile;
+        @Parameter( names = "--featurefile1", description = "Feature file of the first tile", required = true )
+        private String featurefile1;
+
+        @Parameter( names = "--featurefile2", description = "Feature file of the second tile", required = true )
+        private String featurefile2;
 
         @Parameter( names = "--targetPath", description = "Path for the output correspondences", required = true )
         public String targetPath;
 
-        @Parameter( names = "--indices", description = "Pair of indices within feature file, comma separated (each pair is separated by a colon)", required = false )
-        public List<String> indices = new ArrayList<String>();
-
-        @Parameter( names = "--all", description = "Compute for all tiles", required = false )
-        private boolean all = false;
+        @Parameter( names = "--indices", description = "The pair of indices that correspond to the first feature file and to the second, seperated by a colon", required = true )
+        public String indices;
 
         @Parameter( names = "--threads", description = "Number of threads to be used", required = false )
         public int numThreads = Runtime.getRuntime().availableProcessors();
@@ -137,26 +137,18 @@ public class MatchSiftFeaturesAndFilter {
 		return modelFound;
 	}
 	
-	private static boolean checkBBoxOverlapping( float[] bbox1, float[] bbox2 )
-	{
-		//Returns true if there is intersection between the bboxes or a full containment
-		if (( bbox1[0] < bbox2[1] ) && ( bbox1[1] > bbox2[0] ) &&
-			( bbox1[2] < bbox2[3] ) && ( bbox1[3] > bbox2[2] ) )
-				return true;
-		return false;
-	}
-	
 	private static CorrespondenceSpec matchAndFilter(
 			final int idx1,
 			final int idx2,
 			final TileSpec[] tileSpecs,
-			final FeatureSpec[] featureSpecs,
+			final FeatureSpec[] featureSpecs1,
+			final FeatureSpec[] featureSpecs2,
 			final Params params )
 	{
 		final int mipmapLevel = 0;
 		
-		final ImageAndFeatures iaf1 = featureSpecs[idx1].getMipmapImageAndFeatures( mipmapLevel );
-		final ImageAndFeatures iaf2 = featureSpecs[idx2].getMipmapImageAndFeatures( mipmapLevel );
+		final ImageAndFeatures iaf1 = featureSpecs1[0].getMipmapImageAndFeatures( mipmapLevel );
+		final ImageAndFeatures iaf2 = featureSpecs2[0].getMipmapImageAndFeatures( mipmapLevel );
 
 		final List< Feature > fs1 = iaf1.featureList;
 		final List< Feature > fs2 = iaf2.featureList;
@@ -270,11 +262,6 @@ public class MatchSiftFeaturesAndFilter {
                 return;
             }
         	
-        	if ( ( !params.all ) && ( params.indices.size() == 0 ) )
-        	{
-        		System.err.println( "Either \"--all\" flag must be set or a list of index pair (using \"--indices\")");
-        		return;
-        	}
         }
         catch ( final Exception e )
         {
@@ -318,11 +305,13 @@ public class MatchSiftFeaturesAndFilter {
 		}
 
 		/* open featurespec */
-		final FeatureSpec[] featureSpecs;
+		final FeatureSpec[] featureSpecs1;
+		final FeatureSpec[] featureSpecs2;
 		try
 		{
 			final Gson gson = new Gson();
-			featureSpecs = gson.fromJson( new FileReader( params.featurefile.replace("file://", "").replace("file:/", "") ), FeatureSpec[].class );
+			featureSpecs1 = gson.fromJson( new FileReader( params.featurefile1.replace("file://", "").replace("file:/", "") ), FeatureSpec[].class );
+			featureSpecs2 = gson.fromJson( new FileReader( params.featurefile2.replace("file://", "").replace("file:/", "") ), FeatureSpec[].class );
 		}
 		catch ( final JsonSyntaxException e )
 		{
@@ -336,121 +325,33 @@ public class MatchSiftFeaturesAndFilter {
 			return;
 		}
 
-		if ( params.all ) {
-			// Create a map between a tilespec url and its corresponding feature index
-			HashMap< String, Integer > tsToFeatureIdx = new HashMap< String, Integer >();
-			for ( int i = 0; i < featureSpecs.length; i++ ) {
-				String tsUrl = featureSpecs[ i ].getMipmapImageAndFeatures( mipmapLevel ).imageUrl;
-				// We assume that each ts-url has only a single entry inside the feature spec file
-				tsToFeatureIdx.put( tsUrl, i );
-			}
-			
-			// Check if the bounding box of each two tiles is overlapping, and if so, add them to the indices
-			params.indices.clear();
-			for ( int i = 0; i < tileSpecs.length; i++ ) {
-				float[] bboxI = tileSpecs[i].bbox;
-				String tileIUrl = tileSpecs[i].getMipmapLevels().get( String.valueOf( mipmapLevel ) ).imageUrl;
-				if ( ! tsToFeatureIdx.containsKey( tileIUrl ) )
-					continue;
-				
-				int idxI = tsToFeatureIdx.get( tileIUrl );
-				for ( int j = i + 1; j < tileSpecs.length; j++ ) {
-					float[] bboxJ = tileSpecs[j].bbox;
-					String tileJUrl = tileSpecs[j].getMipmapLevels().get( String.valueOf( mipmapLevel ) ).imageUrl;
-					if ( ! tsToFeatureIdx.containsKey( tileJUrl ) )
-						continue;
-					
-					int idxJ = tsToFeatureIdx.get( tileJUrl );
-					if ( checkBBoxOverlapping( bboxI, bboxJ ) ) {
-						System.out.println( "Adding " + idxI + ":" + idxJ );
-						params.indices.add( idxI + ":" + idxJ );
-					}
-				}
-			}
-		}
 		
-		final CorrespondenceSpec[] corr_data = new CorrespondenceSpec[ params.indices.size() ];
+		final CorrespondenceSpec[] corr_data = new CorrespondenceSpec[ 1 ];
 
-		if ( params.numThreads == 1 )
-		{
-	        int counter = 0;
-			for (String idx_pair : params.indices) {
-				
-				String[] vals = idx_pair.split(":");
-				if (vals.length != 2)
-					throw new IllegalArgumentException("Index pair not in correct format:" + idx_pair);
-				final int idx1 = Integer.parseInt(vals[0]);
-				final int idx2 = Integer.parseInt(vals[1]);
-				
-				CorrespondenceSpec corrSpec = matchAndFilter(
-						idx1, idx2,
-						tileSpecs, featureSpecs,
-						params );
-
-				corr_data[ counter ] = corrSpec;
-				counter++;
-			}
-		}
-		else
-		{
-			// Initialize threads
-	        final ExecutorService exec = Executors.newFixedThreadPool( params.numThreads );
-	        final ArrayList< Future< ? > > tasks = new ArrayList< Future< ? > >();
-			
-	        int counter = 0;
-			for (String idx_pair : params.indices) {
-				
-				String[] vals = idx_pair.split(":");
-				if (vals.length != 2)
-					throw new IllegalArgumentException("Index pair not in correct format:" + idx_pair);
-				final int idx1 = Integer.parseInt(vals[0]);
-				final int idx2 = Integer.parseInt(vals[1]);
-				
-				final int curCounter = counter;
-				tasks.add( exec.submit( new Runnable() {
-	
-					@Override
-					public void run() {
-						CorrespondenceSpec corrSpec = matchAndFilter(
-								idx1, idx2,
-								tileSpecs, featureSpecs,
-								params );
-	
-						corr_data[ curCounter ] = corrSpec;
-					}
-				}));
-	
-				counter++;
-			}
-	
-			for ( Future< ? > task : tasks )
-			{
-				try {
-					task.get();
-				} catch (InterruptedException e) {
-					exec.shutdownNow();
-					e.printStackTrace();
-				} catch (ExecutionException e) {
-					exec.shutdownNow();
-					e.printStackTrace();
-				}
-			}
-			exec.shutdown();
-		}
+		String[] vals = params.indices.split(":");
+		if ( vals.length != 2 )
+			throw new IllegalArgumentException("Index pair not in correct format: " + params.indices);
+		final int idx1 = Integer.parseInt(vals[0]);
+		final int idx2 = Integer.parseInt(vals[1]);
 		
-		if (corr_data.length > 0) {
-			try {
-				Writer writer = new FileWriter(params.targetPath);
-				//Gson gson = new GsonBuilder().create();
-				Gson gson = new GsonBuilder().setPrettyPrinting().create();
-				gson.toJson(corr_data, writer);
-				writer.close();
-			}
-			catch ( final IOException e )
-			{
-				System.err.println( "Error writing JSON file: " + params.targetPath );
-				e.printStackTrace( System.err );
-			}
+		CorrespondenceSpec corrSpec = matchAndFilter(
+				idx1, idx2,
+				tileSpecs, featureSpecs1, featureSpecs2,
+				params );
+
+		corr_data[ 0 ] = corrSpec;
+		
+		try {
+			Writer writer = new FileWriter(params.targetPath);
+			//Gson gson = new GsonBuilder().create();
+			Gson gson = new GsonBuilder().setPrettyPrinting().create();
+			gson.toJson(corr_data, writer);
+			writer.close();
+		}
+		catch ( final IOException e )
+		{
+			System.err.println( "Error writing JSON file: " + params.targetPath );
+			e.printStackTrace( System.err );
 		}
 	}
 

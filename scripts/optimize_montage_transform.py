@@ -14,9 +14,9 @@ from subprocess import call
 import utils
 
 
-def optimize_montage_transform(correspondence_file, tilespec_file, fixed_tiles, output_file, jar_file, conf_fname=None, threads_num=None):
+def optimize_montage_transform(correspondence_files_list, tilespec_file, fixed_tiles, output_file, jar_file, conf_fname=None, threads_num=None):
 
-    corr_url = utils.path2url(correspondence_file)
+    corr_url = utils.path2url(correspondence_files_list)
     tiles_url = utils.path2url(tilespec_file)
     conf_args = utils.conf_args_from_file(conf_fname, 'OptimizeMontageTransform')
 
@@ -28,7 +28,7 @@ def optimize_montage_transform(correspondence_file, tilespec_file, fixed_tiles, 
     if threads_num != None:
         threads_str = "--threads {0}".format(threads_num)
 
-    java_cmd = 'java -Xmx5g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.OptimizeMontageTransform {1} --inputfile {2} --tilespecfile {3} {4} {5} --targetPath {6}'.format(\
+    java_cmd = 'java -Xmx5g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.OptimizeMontageTransform {1} --corrfileslst {2} --tilespecfile {3} {4} {5} --targetPath {6}'.format(\
         jar_file, conf_args, corr_url, tiles_url, fixed_str, threads_str, output_file)
     utils.execute_shell_command(java_cmd)
 
@@ -39,8 +39,8 @@ def main():
     # Command line parser
     parser = argparse.ArgumentParser(description='Takes a correspondence list json file, \
         and optimizes the montage by perfroming the transform on each tile in the file.')
-    parser.add_argument('correspondence_file', metavar='correspondence_file', type=str, 
-                        help='a correspondence_spec file')
+    parser.add_argument('correspondence_files_list', metavar='correspondence_files_list', type=str, 
+                        help='a correspondence_spec file list in a single txt file')
     parser.add_argument('tilespec_file', metavar='tilespec_file', type=str, 
                         help='a tilespec file containing all the tiles')
     parser.add_argument('-o', '--output_file', type=str, 
@@ -65,7 +65,7 @@ def main():
     #print args
 
     try:
-        optimize_montage_transform(args.correspondence_file, args.tilespec_file, args.fixed_tiles, args.output_file, args.jar_file, \
+        optimize_montage_transform(args.correspondence_files_list, args.tilespec_file, args.fixed_tiles, args.output_file, args.jar_file,
             conf_fname=args.conf_file_name, threads_num=args.threads_num)
     except:
         sys.exit("Error while executing: {0}".format(sys.argv))

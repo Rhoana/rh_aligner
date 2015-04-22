@@ -57,87 +57,98 @@ public class OptimizeMontageTransform
 	static private class Params
 	{
 		@Parameter( names = "--help", description = "Display this note", help = true )
-        private final boolean help = false;
+		private final boolean help = false;
 
-        @Parameter( names = "--inputfile", description = "Correspondence list file", required = true )
-        private String inputfile;
-                        
-        @Parameter( names = "--tilespecfile", description = "Tilespec file containing all tiles for this montage and current transforms", required = true )
-        private String tilespecfile;
+		@Parameter( names = "--corrfileslst", description = "Correspondence matches files list", required = true )
+		private List< String > inputfiles;
 
-        @Parameter( names = "--fixedTiles", description = "Fixed tiles indices (space separated)", variableArity = true, required = true )
-        public List<Integer> fixedTiles = new ArrayList<Integer>();
+		@Parameter( names = "--tilespecfile", description = "Tilespec file containing all tiles for this montage and current transforms", required = true )
+		private String tilespecfile;
 
-        @Parameter( names = "--modelIndex", description = "Model Index: 0=Translation, 1=Rigid, 2=Similarity, 3=Affine, 4=Homography", required = false )
-        private int modelIndex = 1;
-                        
-        @Parameter( names = "--filterOutliers", description = "Filter outliers during optimization", required = false )
-        private boolean filterOutliers = false;
-                        
-        @Parameter( names = "--maxEpsilon", description = "Max epsilon", required = false )
-        private float maxEpsilon = 100.0f;
-                        
-        @Parameter( names = "--maxIterations", description = "Max iterations", required = false )
-        private int maxIterations = 2000;
-        
-        @Parameter( names = "--maxPlateauwidth", description = "Max plateau width", required = false )
-        private int maxPlateauwidth = 200;
-                                
-        @Parameter( names = "--meanFactor", description = "Mean factor", required = false )
-        private float meanFactor = 3.0f;
+		@Parameter( names = "--fixedTiles", description = "Fixed tiles indices (space separated)", variableArity = true, required = true )
+		public List<Integer> fixedTiles = new ArrayList<Integer>();
 
-        @Parameter( names = "--meshResolution", description = "The mesh resolution for the bounding box transformation", required = false )
-        private int meshResolution = 20;
+		@Parameter( names = "--modelIndex", description = "Model Index: 0=Translation, 1=Rigid, 2=Similarity, 3=Affine, 4=Homography", required = false )
+		private int modelIndex = 1;
 
-        @Parameter( names = "--minimalMatchesNum", description = "The minimal number of matches between two tiles, to consider them as connected", required = false )
-        private int minimalMatchesNum = 2;
+		@Parameter( names = "--filterOutliers", description = "Filter outliers during optimization", required = false )
+		private boolean filterOutliers = false;
 
-        @Parameter( names = "--targetPath", description = "Path for the output correspondences", required = true )
-        public String targetPath;
-        
-        @Parameter( names = "--threads", description = "Number of threads to be used", required = false )
-        public int numThreads = Runtime.getRuntime().availableProcessors();
-        
-        
+		@Parameter( names = "--maxEpsilon", description = "Max epsilon", required = false )
+		private float maxEpsilon = 100.0f;
+
+		@Parameter( names = "--maxIterations", description = "Max iterations", required = false )
+		private int maxIterations = 2000;
+
+		@Parameter( names = "--maxPlateauwidth", description = "Max plateau width", required = false )
+		private int maxPlateauwidth = 200;
+
+		@Parameter( names = "--meanFactor", description = "Mean factor", required = false )
+		private float meanFactor = 3.0f;
+
+		@Parameter( names = "--meshResolution", description = "The mesh resolution for the bounding box transformation", required = false )
+		private int meshResolution = 20;
+
+		@Parameter( names = "--minimalMatchesNum", description = "The minimal number of matches between two tiles, to consider them as connected", required = false )
+		private int minimalMatchesNum = 2;
+
+		@Parameter( names = "--targetPath", description = "Path for the output correspondences", required = true )
+		public String targetPath;
+
+		@Parameter( names = "--threads", description = "Number of threads to be used", required = false )
+		public int numThreads = Runtime.getRuntime().availableProcessors();
+
+
 	}
-	
+
 	private OptimizeMontageTransform() {}
-	
+
 	public static void main( final String[] args )
 	{
-		
+
 		final Params params = new Params();
-		
+
 		/* Initialization */
 		try
-        {
+		{
 			final JCommander jc = new JCommander( params, args );
-        	if ( params.help )
-            {
-        		jc.usage();
-                return;
-            }
-        }
-        catch ( final Exception e )
-        {
-        	e.printStackTrace();
-            final JCommander jc = new JCommander( params );
-        	jc.setProgramName( "java [-options] -cp render.jar org.janelia.alignment.RenderTile" );
-        	jc.usage(); 
-        	return;
-        }
-		
+			if ( params.help )
+			{
+				jc.usage();
+				return;
+			}
+		}
+		catch ( final Exception e )
+		{
+			e.printStackTrace();
+			final JCommander jc = new JCommander( params );
+			jc.setProgramName( "java [-options] -cp render.jar org.janelia.alignment.RenderTile" );
+			jc.usage(); 
+			return;
+		}
+
 		// The mipmap level to work on
 		// TODO: Should be a parameter from the user,
 		//       and decide whether or not to create the mipmaps if they are missing
 		int mipmapLevel = 0;
+		List< String > actualCorrSpecFiles;
+		if ( params.inputfiles.size() == 1 )
+			// It might be a non-json file that contains a list of
+			actualCorrSpecFiles = Utils.getListFromFile( params.inputfiles.get( 0 ) );
+		else
+			actualCorrSpecFiles = params.inputfiles;
 
-		final CorrespondenceSpec[] corr_data;
+		final List< CorrespondenceSpec > corr_data = new ArrayList< CorrespondenceSpec >();
 		try
 		{
 			final Gson gson = new Gson();
-			URL url = new URL( params.inputfile );
-			corr_data = gson.fromJson( new InputStreamReader( url.openStream() ), CorrespondenceSpec[].class );
+			for ( String corrFile : actualCorrSpecFiles )
+			{
+				URL url = new URL( corrFile );
+				CorrespondenceSpec[] corrSpec = gson.fromJson( new InputStreamReader( url.openStream() ), CorrespondenceSpec[].class );
+				for ( int i = 0; i < corrSpec.length; i++ )
+					corr_data.add( corrSpec[ i ] );
+			}
 		}
 		catch ( final MalformedURLException e )
 		{
@@ -156,7 +167,7 @@ public class OptimizeMontageTransform
 			e.printStackTrace( System.err );
 			return;
 		}
-		
+
 		/* read all tilespecs */
 		final HashMap< String, TileSpec > tileSpecMap = new HashMap< String, TileSpec >();
 		final URL url;
@@ -184,29 +195,29 @@ public class OptimizeMontageTransform
 			e.printStackTrace( System.err );
 			return;
 		}
-		
+
 		for (TileSpec ts : tileSpecs)
 		{
 			String imageUrl = ts.getMipmapLevels().get( String.valueOf( mipmapLevel ) ).imageUrl;
 			tileSpecMap.put(imageUrl, ts);
 		}
-		
-		
-//		final boolean tilesAreInPlace = true;
-		
+
+
+		//		final boolean tilesAreInPlace = true;
+
 		// A map between a imageUrl and the Tile
 		final Map< String, Tile< ? > > tilesMap = new HashMap< String, Tile< ? > >();
-//		final List< Tile< ? > > tiles = new ArrayList< Tile< ? > >();
-//		final List< Tile< ? >[] > tilePairs = new ArrayList< Tile< ? >[] >();
-		
+		//		final List< Tile< ? > > tiles = new ArrayList< Tile< ? > >();
+		//		final List< Tile< ? >[] > tilePairs = new ArrayList< Tile< ? >[] >();
+
 		for (CorrespondenceSpec corr : corr_data)
 		{
 			final Tile< ? > tile1;
 			final Tile< ? > tile2;
-			
+
 			if ( Integer.parseInt( corr.mipmapLevel ) == mipmapLevel )
 			{
-			
+
 				if (tilesMap.containsKey(corr.url1))
 				{
 					tile1 = tilesMap.get(corr.url1);
@@ -217,7 +228,7 @@ public class OptimizeMontageTransform
 					tilesMap.put(corr.url1, tile1);
 					//tiles.add(tile1);
 				}
-				
+
 				if (tilesMap.containsKey(corr.url2))
 				{
 					tile2 = tilesMap.get(corr.url2);
@@ -233,14 +244,14 @@ public class OptimizeMontageTransform
 					tile1.connect( tile2, corr.correspondencePointPairs );
 				else
 					System.out.println( "Not connecting tiles " + corr.url1 + " and " + corr.url2 + " because only " + corr.correspondencePointPairs.size() + " matches were found" );
-				
+
 				/*
 				tile1.addConnectedTile(tile2);
 				tile2.addConnectedTile(tile1);
 
 				// Forward Point Matches
 				tile1.addMatches( corr.correspondencePointPairs );
-				
+
 				// Backward Point Matches
 				for ( PointMatch pm : corr.correspondencePointPairs )
 				{
@@ -248,7 +259,7 @@ public class OptimizeMontageTransform
 					System.out.println("p1 " + pm.getP1().getW()[0] + ", " + pm.getP1().getW()[1]);
 					System.out.println("p2 " + pm.getP2().getW()[0] + ", " + pm.getP2().getW()[1]);
 				}
-				*/
+				 */
 				for ( PointMatch pm : corr.correspondencePointPairs )
 				{
 					System.out.println("p1 " + pm.getP1().getW()[0] + ", " + pm.getP1().getW()[1]);
@@ -257,35 +268,35 @@ public class OptimizeMontageTransform
 
 			}
 		}
-		
-//		final List< Set< Tile< ? > > > graphs = AbstractAffineTile2D.identifyConnectedGraphs( tiles );
-//
-//		final List< AbstractAffineTile2D< ? > > interestingTiles;
-//		if ( largestGraphOnlyIn )
-//		{
-//			/* find largest graph. */
-//
-//			Set< Tile< ? > > largestGraph = null;
-//			for ( final Set< Tile< ? > > graph : graphs )
-//				if ( largestGraph == null || largestGraph.size() < graph.size() )
-//					largestGraph = graph;
-//
-//			interestingTiles = new ArrayList< AbstractAffineTile2D< ? > >();
-//			for ( final Tile< ? > t : largestGraph )
-//				interestingTiles.add( ( AbstractAffineTile2D< ? > )t );
-//
-//			if ( hideDisconnectedTilesIn )
-//				for ( final AbstractAffineTile2D< ? > t : tiles )
-//					if ( !interestingTiles.contains( t ) )
-//						t.getPatch().setVisible( false );
-//			if ( deleteDisconnectedTilesIn )
-//				for ( final AbstractAffineTile2D< ? > t : tiles )
-//					if ( !interestingTiles.contains( t ) )
-//						t.getPatch().remove( false );
-//		}
-//		else
-//			interestingTiles = tiles;
-		
+
+		//		final List< Set< Tile< ? > > > graphs = AbstractAffineTile2D.identifyConnectedGraphs( tiles );
+		//
+		//		final List< AbstractAffineTile2D< ? > > interestingTiles;
+		//		if ( largestGraphOnlyIn )
+		//		{
+		//			/* find largest graph. */
+		//
+		//			Set< Tile< ? > > largestGraph = null;
+		//			for ( final Set< Tile< ? > > graph : graphs )
+		//				if ( largestGraph == null || largestGraph.size() < graph.size() )
+		//					largestGraph = graph;
+		//
+		//			interestingTiles = new ArrayList< AbstractAffineTile2D< ? > >();
+		//			for ( final Tile< ? > t : largestGraph )
+		//				interestingTiles.add( ( AbstractAffineTile2D< ? > )t );
+		//
+		//			if ( hideDisconnectedTilesIn )
+		//				for ( final AbstractAffineTile2D< ? > t : tiles )
+		//					if ( !interestingTiles.contains( t ) )
+		//						t.getPatch().setVisible( false );
+		//			if ( deleteDisconnectedTilesIn )
+		//				for ( final AbstractAffineTile2D< ? > t : tiles )
+		//					if ( !interestingTiles.contains( t ) )
+		//						t.getPatch().remove( false );
+		//		}
+		//		else
+		//			interestingTiles = tiles;
+
 		final Collection< Tile< ? > > tiles = tilesMap.values();
 		final TileConfiguration tc = new TileConfiguration();
 		for ( final Tile< ? > t : tiles )
@@ -311,23 +322,23 @@ public class OptimizeMontageTransform
 			System.err.println( "Error optimizing:" );
 			e.printStackTrace( System.err );
 		}
-		
+
 		System.out.println( "Optimization complete. Generating tile transforms.");
-		
+
 		ArrayList< TileSpec > out_tiles = new ArrayList< TileSpec >();
-				
+
 		// Export new transforms
 		for ( int i = 0; i < tileSpecs.length; i++ ) {
 			String tileUrl = tileSpecs[ i ].getMipmapLevels().get( String.valueOf( mipmapLevel ) ).imageUrl;
 			Tile< ? > tileValue = tilesMap.get( tileUrl );
 			TileSpec ts = tileSpecs[ i ];
-		    
-		    @SuppressWarnings("rawtypes")
+
+			@SuppressWarnings("rawtypes")
 			Model genericModel = tileValue.getModel();
-		    
-		    Transform addedTransform = new Transform();
-		    addedTransform.className = genericModel.getClass().getCanonicalName();
-		    
+
+			Transform addedTransform = new Transform();
+			addedTransform.className = genericModel.getClass().getCanonicalName();
+
 			switch ( params.modelIndex )
 			{
 			case 0:
@@ -348,20 +359,20 @@ public class OptimizeMontageTransform
 			default:
 				addedTransform.dataString = genericModel.toString();
 			}		    
-		    
+
 			//Apply to the corresponding tilespec transforms
 			//ArrayList< Transform > outTransforms = new ArrayList< Transform >(Arrays.asList(ts.transforms));
 			// (override previous transformations)
 			ArrayList< Transform > outTransforms = new ArrayList< Transform >( );
 			outTransforms.add(addedTransform);
 			ts.transforms = outTransforms.toArray( new Transform[0] );
-		    
+
 			// Get the bounding box of this tile in the world coordinates
 			if ( ts.width != -1 && ts.height != -1 )
 			{
 				TransformMesh bboxTransform = new TransformMesh( ts.createTransformList(),
 						params.meshResolution, ts.width, ts.height);
-				
+
 				ts.bbox = new float[] {
 						bboxTransform.getBoundingBox().x,
 						bboxTransform.getBoundingBox().x + bboxTransform.getBoundingBox().width,
@@ -369,26 +380,26 @@ public class OptimizeMontageTransform
 						bboxTransform.getBoundingBox().y + bboxTransform.getBoundingBox().height,
 				};
 			}
-		    out_tiles.add(ts);
+			out_tiles.add(ts);
 		}
-		
+
 		System.out.println( "Exporting tiles.");
-		
+
 		try {
 			Writer writer = new FileWriter(params.targetPath);
-	        //Gson gson = new GsonBuilder().create();
-	        Gson gson = new GsonBuilder().setPrettyPrinting().create();
-	        gson.toJson(out_tiles, writer);
-	        writer.close();
-	    }
+			//Gson gson = new GsonBuilder().create();
+			Gson gson = new GsonBuilder().setPrettyPrinting().create();
+			gson.toJson(out_tiles, writer);
+			writer.close();
+		}
 		catch ( final IOException e )
 		{
 			System.err.println( "Error writing JSON file: " + params.targetPath );
 			e.printStackTrace( System.err );
 		}
-		
+
 		System.out.println( "Done." );
 	}
-	
+
 
 }

@@ -5,110 +5,217 @@ import sys
 import os
 import json
 from decimal import *
+from utils import create_dir
+
+# input_folder: the folder of a single wafer
+# output_folder: where to put the tilespecs
 
 
-input_folder = sys.argv[1]
-output_json_fname = sys.argv[-1]
+def read_bmp_dimensions(bmp_file):
+    """ Taken from: http://runnable.com/UqJdRnCIohYmAAGP/reading-binary-files-in-python-for-io """
+    import struct
+    dims = None
+    # When reading a binary file, always add a 'b' to the file open mode
+    with open(bmp_file, 'rb') as f:
+        # BMP files store their width and height statring at byte 18 (12h), so seek
+        # to that position
+        f.seek(18)
 
-if len(sys.argv) < 3:
-    output_json_fname = os.path.join(input_folder, 'tilespec.json')
-else:
-    output_json_fname = sys.argv[-1]
+        # The width and height are 4 bytes each, so read 8 bytes to get both of them
+        bytes = f.read(8)
 
-scan_index = 0
+        # Here, we decode the byte array from the last step. The width and height
+        # are each unsigned, little endian, 4 byte integers, so they have the format
+        # code '<II'. See http://docs.python.org/3/library/struct.html for more info
+        # Our test showed that we needed to use 2's complement (so using 'i' instead of 'I', and taking absolute value)
+        size = struct.unpack('<ii', bytes)
+        size = [abs(size[0]), abs(size[1])]
 
-if len(sys.argv) > 3:
-    scan_index = int(sys.argv[2])
+        dims = [size[1], size[0]]
+    return dims
 
-sub_folders = sorted(glob.glob(os.path.join(input_folder, '*')))
+def read_dimensions(img_file):
+    if img_file.lower().endswith(".bmp"):
+        return read_bmp_dimensions(img_file)
+    else:
+        import cv2
+        im = cv2.imread(image_file, cv2.IMREAD_GRAYSCALE)
+        if im is None:
+            print('Cannot read tile image: {}'.format(image_file))
+            sys.exit(1)
+        return im.shape
 
-coords = {}
 
-min_x = None
-min_y = None
+def filename_decimal_key(tile):
+    fname = tile["file_base_name"]
+    return Decimal(''.join([c for c in fname if c.isdigit()]))
 
-tile_depth = 1
+def parse_layer(base_dir, images, x, y):
+    '''Writes the tilespec for a single section'''
+    tiles = []
+    layer_size = [0, 0]
+    image_size = None
 
-for sub_folder in sub_folders:
-    if os.path.isdir(sub_folder):
-        metadata_file = os.path.join(sub_folder, 'metadata.txt')
-        pixel_coordinates_file = os.path.join(sub_folder, 'pixelCoordinates.txt')
+    for i, img in enumerate(images):
+        # If not using windows, change the folder separator
+        if os.name == "posix":
+            img = img.replace('\\', '/')
 
-        if not os.path.exists(metadata_file) or not os.path.exists(pixel_coordinates_file):
-            continue
+        image_file = os.path.join(base_dir, img)
+        tile = {}
+        if image_size is None:
+            image_size = read_dimensions(image_file)
+        tile["file_full_path"] = os.path.abspath(image_file)
+        tile["file_base_name"] = os.path.basename(tile["file_full_path"])
+        tile["width"] = image_size[1]
+        tile["height"] = image_size[0]
+        tile["tx"] = x[i]
+        tile["ty"] = y[i]
+        tiles.append(tile)
+        layer_size[0] = max(layer_size[0], image_size[0] + tile["ty"])
+        layer_size[1] = max(layer_size[1], image_size[1] + tile["tx"])
 
-        # Read metadata
-        pixel_size = 4.
+    # if len(tiles) > 0:
+    #     write_layer(out_data, layer, tiles)
+    # else:
+    #     print('Nothing to write from directory {}'.format(subdir))
+    if len(tiles) == 0:
+        print('Nothing to write from directory {}'.format(base_dir))
+    
+    tiles.sort(key=filename_decimal_key)    
+    layer_data = {}
+    layer_data["height"] = layer_size[0]
+    layer_data["width"] = layer_size[1]
+    layer_data["tiles"] = tiles
+    return layer_data
 
-        with open(metadata_file) as infile:
-            metadata_reader = csv.reader(infile, delimiter='\t')
-            for row in metadata_reader:
-                if row[0] == 'Pixelsize:':
-                    pixel_size = Decimal(row[-1].replace('nm',''))
-                if row[0] == 'Width:':
-                    tile_width = int(row[-1].replace('px',''))
-                if row[0] == 'Height:':
-                    tile_height = int(row[-1].replace('px',''))
 
-        with open(pixel_coordinates_file) as infile:
-            pix_coord_reader = csv.reader(infile, delimiter='\t')
-            for row in pix_coord_reader:
-                tile_fname = row[0]
-                tile_full_path = os.path.join(sub_folder, tile_fname)
-                if os.path.exists(tile_full_path):
-                    scan_number = int(Decimal(row[3]))
-                    raw_coords = [Decimal(row[1]), Decimal(row[2]), Decimal(row[3])]
-                    coords[tile_full_path] = raw_coords
+def parse_coordinates_file(input_file):
+    images_dict = {}
+    images = []
+    x = []
+    y = []
+    with open(input_file, 'r') as csvfile:
+        data_reader = csv.reader(csvfile, delimiter='\t')
+        for row in data_reader:
+            img_fname = row[0]
+            img_sec_mfov_beam = '_'.join(img_fname.split('\\')[-1].split('_')[:3])
+            # Make sure that no duplicates appear
+            if img_sec_mfov_beam not in images_dict.keys():
+                images.append(img_fname)
+                images_dict[img_sec_mfov_beam] = img_fname
+                cur_x = float(row[1])
+                cur_y = float(row[2])
+                x.append(cur_x)
+                y.append(cur_y)
+            else:
+                # Either the image is duplicated, or a newer version was taken,
+                # so make sure that the newer version is used
+                prev_img = images_dict[img_sec_mfov_beam]
+                prev_img_date = prev_img.split('\\')[-1].split('_')[-1]
+                curr_img_date = img_fname.split('\\')[-1].split('_')[-1]
+                if curr_img_date > prev_img_date:
+                    idx = images.index(prev_img)
+                    images[idx] = img_fname
+                    images_dict[img_sec_mfov_beam] = img_fname
 
-                    if min_x is None or raw_coords[0] < min_x:
-                        min_x = raw_coords[0]
-                    if min_y is None or raw_coords[1] < min_y:
-                        min_y = raw_coords[1]
+    return images, x, y
 
-        print 'Read hex data from {0}.'.format(sub_folder)
-
-export = []
+def offset_list(lst):
+    m = min(lst)
+    return [item - m for item in lst]
 
 def filename_decimal_key(path):
     fname = os.path.split(path)[-1]
     return Decimal(''.join([c for c in fname if c.isdigit()]))
 
-# Reset top left to 0,0
-print 'Offsetting by ({0}, {1}).'.format(min_x, min_y)
-tile_order = coords.keys()
-tile_order.sort(key=filename_decimal_key)
-for tile_full_path in tile_order:
-    raw_coords = coords[tile_full_path]
 
-    #Offset
-    raw_coords[0] -= min_x
-    raw_coords[1] -= min_y
 
-    tilespec = {
-        "mipmapLevels" : {
-            "0" : {
-                "imageUrl" : "file://{0}".format(tile_full_path.replace(os.path.sep, '/'))
-                #"maskUrl" : "file://",
-            }
-        },
-        "minIntensity" : 0.0,
-        "maxIntensity" : 255.0,
-        "transforms" : [{
-            "className" : "mpicbg.trakem2.transform.TranslationModel2D",
-            "dataString" : "{0} {1}".format(raw_coords[0], raw_coords[1])
-        }],
-        # BoundingBox in the format "from_x to_x from_y to_y" (left right top bottom)
-        "bbox" : [raw_coords[0], raw_coords[0] + tile_width,
-            raw_coords[1], raw_coords[1] + tile_height]
-    }
+def parse_wafer(wafer_folder, output_folder, wafer_num=1, start_layer=1):
+    sub_folders = sorted(glob.glob(os.path.join(wafer_folder, '*')))
 
-    export.append(tilespec)
+    coords = {}
 
-if len(export) > 0:
-    with open(output_json_fname, 'w') as outjson:
-        json.dump(export, outjson, sort_keys=True, indent=4)
-    'Imported multibeam data to {0}.'.format(output_json_fname)
-else:
-    print 'Nothing to import.'
+    min_x = None
+    min_y = None
+
+    tile_depth = 1
+    max_section = start_layer
+
+
+#    all_layers = []
+
+    for sub_folder in sub_folders:
+        if os.path.isdir(sub_folder):
+            print("Parsing subfolder: {}".format(sub_folder))
+            coords_file = os.path.join(sub_folder, "full_image_coordinates.txt")
+            if os.path.exists(coords_file):
+                images, x, y = parse_coordinates_file(coords_file)
+                # Reset top left to 0,0
+                x = offset_list(x)
+                y = offset_list(y)
+                cur_layer = parse_layer(sub_folder, images, x, y)
+                #max_layer_width = max(max_layer_width, cur_layer["width"])
+                #max_layer_height = max(max_layer_height, cur_layer["height"])
+                layer = int(sub_folder.split(os.path.sep)[-1])
+                cur_layer["layer_num"] = layer + start_layer - 1
+#                all_layers.append(cur_layer)
+
+
+
+                export = []
+
+                for tile in cur_layer["tiles"]:
+                    tilespec = {
+                        "mipmapLevels" : {
+                            "0" : {
+                                "imageUrl" : "file://{0}".format(tile["file_full_path"].replace(os.path.sep, '/'))
+                                #"maskUrl" : "file://",
+                            }
+                        },
+                        "minIntensity" : 0.0,
+                        "maxIntensity" : 255.0,
+                        "layer" : cur_layer["layer_num"],
+                        "transforms" : [{
+                            "className" : "mpicbg.trakem2.transform.TranslationModel2D",
+                            "dataString" : "{0} {1}".format(tile["tx"], tile["ty"])
+                        }],
+                        # BoundingBox in the format "from_x to_x from_y to_y" (left right top bottom)
+                        "bbox" : [ tile["tx"], tile["tx"] + tile["width"],
+                            tile["ty"], tile["ty"] + tile["height"] ]
+                    }
+
+                    export.append(tilespec)
+
+                output_json_fname = os.path.join(output_folder, "W{0:02d}_Sec{1:03d}.json".format(wafer_num, layer))
+                if len(export) > 0:
+                    with open(output_json_fname, 'w') as outjson:
+                        json.dump(export, outjson, sort_keys=True, indent=4)
+                    'Imported multibeam data to {0}.'.format(output_json_fname)
+                else:
+                    print 'Nothing to import.'
+            else:
+                print "Could not find full_image_coordinates.txt, skipping subfolder: {}".format(sub_folder)
+
+
+
+
+def main():
+    input_folder = sys.argv[1]
+    output_folder = sys.argv[-1]
+
+    if len(sys.argv) < 2:
+        output_folder = os.path.join(input_folder, 'tilespecs')
+    else:
+        output_folder = sys.argv[-1]
+
+    create_dir(output_folder)
+
+
+    parse_wafer(input_folder, output_folder)
+
+
+if __name__ == '__main__':
+    main()
 
 

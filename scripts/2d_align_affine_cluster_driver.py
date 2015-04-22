@@ -1,7 +1,7 @@
 #
 # Executes the alignment process jobs on the cluster (based on Rhoana's driver).
 # It takes a collection of tilespec files, each describing a montage of a single section,
-# and performs a 3d alignment of the entire json files.
+# and performs a 2d affine alignment of the entire json files.
 # The input is a directory with tilespec files in json format (each file for a single layer),
 # and a workspace directory where the intermediate and result files will be located.
 #
@@ -17,16 +17,17 @@ from collections import defaultdict
 import argparse
 import glob
 import json
-from utils import path2url, create_dir, read_layer_from_file, parse_range
+from utils import path2url, create_dir, read_layer_from_file, parse_range, load_tilespecs
 from job import Job
 
 
 class CreateSiftFeatures(Job):
-    def __init__(self, tiles_fname, output_file, jar_file, conf_fname=None, threads_num=1):
+    def __init__(self, tiles_fname, output_file, tile_index, jar_file, conf_fname=None, threads_num=1):
         Job.__init__(self)
         self.already_done = False
         self.tiles_fname = '"{0}"'.format(tiles_fname)
         self.output_file = '-o "{0}"'.format(output_file)
+        self.tile_index = '-i {0}'.format(tile_index)
         self.jar_file = '-j "{0}"'.format(jar_file)
         if conf_fname is None:
             self.conf_fname = ''
@@ -35,7 +36,7 @@ class CreateSiftFeatures(Job):
         self.dependencies = []
         self.threads = threads_num
         self.threads_str = "-t {0}".format(threads_num)
-        self.memory = 9000
+        self.memory = 6000
         self.time = 300
         self.is_java_job = True
         self.output = output_file
@@ -44,14 +45,17 @@ class CreateSiftFeatures(Job):
     def command(self):
         return ['python -u',
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'create_sift_features.py'),
-                self.output_file, self.jar_file, self.threads_str, self.conf_fname, self.tiles_fname]
+                self.output_file, self.tile_index, self.jar_file, self.threads_str, self.conf_fname, self.tiles_fname]
+
 
 class MatchSiftFeaturesAndFilter(Job):
-    def __init__(self, dependencies, tiles_fname, features_fname, corr_output_file, jar_file, wait_time=None, conf_fname=None, threads_num=1):
+    def __init__(self, dependencies, tiles_fname, features_fname1, features_fname2, corr_output_file, index_pair, jar_file, wait_time=None, conf_fname=None):
         Job.__init__(self)
         self.already_done = False
         self.tiles_fname = '"{0}"'.format(tiles_fname)
-        self.features_fname = '"{0}"'.format(features_fname)
+        self.features_fname1 = '"{0}"'.format(features_fname1)
+        self.features_fname1 = '"{0}"'.format(features_fname2)
+        self.index_pair = ':'.join(index_pair)
         self.output_file = '-o "{0}"'.format(corr_output_file)
         self.jar_file = '-j "{0}"'.format(jar_file)
         if conf_fname is None:
@@ -63,10 +67,8 @@ class MatchSiftFeaturesAndFilter(Job):
         else:
             self.wait_time = '-w {0}'.format(wait_time)
         self.dependencies = dependencies
-        self.threads = threads_num
-        self.threads_str = '-t {0}'.format(threads_num)
-        self.memory = 12000
-        self.time = 240
+        self.memory = 4000
+        self.time = 300
         self.is_java_job = True
         self.output = corr_output_file
         #self.already_done = os.path.exists(self.output_file)
@@ -74,14 +76,16 @@ class MatchSiftFeaturesAndFilter(Job):
     def command(self):
         return ['python -u',
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'match_sift_features_and_filter.py'),
-                self.output_file, self.jar_file, self.wait_time, self.threads_str, self.conf_fname, self.tiles_fname, self.features_fname]
+                self.output_file, self.jar_file, self.wait_time, self.threads_str, self.conf_fname,
+                self.tiles_fname, self.features_fname1, self.features_fname2, self.index_pair]
+
 
 class OptimizeMontageTransform(Job):
-    def __init__(self, dependencies, tiles_fname, corr_fname, fixed_tiles, opt_output_file, jar_file, conf_fname=None, threads_num=1):
+    def __init__(self, dependencies, tiles_fname, matches_list_file, fixed_tiles, opt_output_file, jar_file, conf_fname=None, threads_num=1):
         Job.__init__(self)
         self.already_done = False
         self.tiles_fname = '"{0}"'.format(tiles_fname)
-        self.corr_fname = '"{0}"'.format(corr_fname)
+        self.matches_list_file = '"{0}"'.format(matches_list_file)
         self.output_file = '-o "{0}"'.format(opt_output_file)
         self.jar_file = '-j "{0}"'.format(jar_file)
         if conf_fname is None:
@@ -104,70 +108,7 @@ class OptimizeMontageTransform(Job):
     def command(self):
         return ['python -u',
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'optimize_montage_transform.py'),
-                self.output_file, self.fixed_tiles, self.jar_file, self.conf_fname, self.threads_str, self.corr_fname, self.tiles_fname]
-
-
-
-class MatchByMaxPMCC(Job):
-    def __init__(self, dependencies, tiles_fname, fixed_tiles, pmcc_output_file, jar_file, conf_fname=None, threads_num=1):
-        Job.__init__(self)
-        self.already_done = False
-        self.tiles_fname = '"{0}"'.format(tiles_fname)
-        self.output_file = '-o "{0}"'.format(pmcc_output_file)
-        self.jar_file = '-j "{0}"'.format(jar_file)
-        if conf_fname is None:
-            self.conf_fname = ''
-        else:
-            self.conf_fname = '-c "{0}"'.format(conf_fname)
-        if fixed_tiles is None:
-            self.fixed_tiles = ''
-        else:
-            self.fixed_tiles = '-f {0}'.format(" ".join(str(f) for f in fixed_tiles))
-        self.threads = threads_num
-        self.threads_str = '-t {0}'.format(threads_num)
-        self.dependencies = dependencies
-        self.memory = 29000
-        self.time = 600
-        self.is_java_job = True
-        self.output = pmcc_output_file
-        #self.already_done = os.path.exists(self.output_file)
-
-    def command(self):
-        return ['python -u',
-                os.path.join(os.environ['ALIGNER'], 'scripts', 'match_by_max_pmcc.py'),
-                self.output_file, self.fixed_tiles, self.jar_file, self.conf_fname, self.threads_str, self.tiles_fname]
-
-
-class OptimizeMontageElastic(Job):
-    def __init__(self, dependencies, tiles_fname, corr_fname, fixed_tiles, opt_output_file, jar_file, conf_fname=None, threads_num=1):
-        Job.__init__(self)
-        self.already_done = False
-        self.tiles_fname = '"{0}"'.format(tiles_fname)
-        self.corr_fname = '"{0}"'.format(corr_fname)
-        self.output_file = '-o "{0}"'.format(opt_output_file)
-        self.jar_file = '-j "{0}"'.format(jar_file)
-        if conf_fname is None:
-            self.conf_fname = ''
-        else:
-            self.conf_fname = '-c "{0}"'.format(conf_fname)
-        if fixed_tiles is None:
-            self.fixed_tiles = ''
-        else:
-            self.fixed_tiles = '-f {0}'.format(" ".join(str(f) for f in fixed_tiles))
-        self.threads = threads_num
-        self.threads_str = '-t {0}'.format(threads_num)
-        self.dependencies = dependencies
-        self.memory = 10000
-        self.time = 500
-        self.is_java_job = True
-        self.output = opt_output_file
-        #self.already_done = os.path.exists(self.output_file)
-
-    def command(self):
-        return ['python -u',
-                os.path.join(os.environ['ALIGNER'], 'scripts', 'optimize_elastic_transform.py'),
-                self.output_file, self.fixed_tiles, self.jar_file, self.conf_fname, self.corr_fname, self.tiles_fname]
-
+                self.output_file, self.fixed_tiles, self.jar_file, self.conf_fname, self.threads_str, self.matches_list_file, self.tiles_fname]
 
 
 
@@ -219,10 +160,6 @@ if __name__ == '__main__':
     create_dir(sifts_dir)
     matched_sifts_dir = os.path.join(args.workspace_dir, "matched_sifts")
     create_dir(matched_sifts_dir)
-    opt_montage_dir = os.path.join(args.workspace_dir, "optimized_affine")
-    create_dir(opt_montage_dir)
-    matched_pmcc_dir = os.path.join(args.workspace_dir, "matched_pmcc")
-    create_dir(matched_pmcc_dir)
     create_dir(args.output_dir)
 
 
@@ -244,8 +181,22 @@ if __name__ == '__main__':
     for f in json_files.keys():
         tiles_fname_prefix = os.path.splitext(os.path.basename(f))[0]
 
+        cur_tilespec = load_tilespecs(f)
+
         # read the layer from the file
-        layer = read_layer_from_file(f)
+        layer = None
+        for tile in cur_tilespec:
+            if tile['layer'] is None:
+                print "Error reading layer in one of the tiles in: {0}".format(f)
+                sys.exit(1)
+            if layer is None:
+                layer = int(tile['layer'])
+            if layer != tile['layer']:
+                print "Error when reading tiles from {0} found inconsistent layers numbers: {1} and {2}".format(f, layer, tile['layer'])
+                sys.exit(1)
+        if layer is None:
+            print "Error reading layers file: {0}. No layers found.".format(f)
+            continue
 
         # Check if we need to skip the layer
         if layer in skipped_layers:
@@ -254,10 +205,18 @@ if __name__ == '__main__':
 
         slayer = str(layer)
 
+        layer_sifts_dir = os.path.join(sifts_dir, slayer)
+        layer_matched_sifts_dir = os.path.join(matched_sifts_dir, slayer)
+
         if not (slayer in layers_data.keys()):
             layers_data[slayer] = {}
             jobs[slayer] = {}
-            jobs[slayer]['sifts'] = []
+            jobs[slayer]['sifts'] = {}
+            jobs[slayer]['matched_sifts'] = []
+            layers_data[slayer]['ts'] = f
+            layers_data[slayer]['sifts'] = {}
+            layers_data[slayer]['prefix'] = tiles_fname_prefix
+            layers_data[slayer]['matched_sifts'] = []
 
 
         all_layers.append(layer)
@@ -266,83 +225,67 @@ if __name__ == '__main__':
         job_sift = None
         job_match = None
         job_opt_montage = None
-        job_pmcc = None
 
         # create the sift features of these tiles
-        sifts_json = os.path.join(sifts_dir, "{0}_sifts.json".format(tiles_fname_prefix))
-        if not os.path.exists(sifts_json):
-            print "Computing layer sifts: {0}".format(slayer)
-            job_sift = CreateSiftFeatures(f, sifts_json, args.jar_file, conf_fname=args.conf_file_name, threads_num=4)
-            jobs[slayer]['sifts'].append(job_sift)
+        for i, ts in enumerate(cur_tilespec):
+            imgurl = ts["mipmapLevels"]["0"]["imageUrl"]
+            tile_fname = os.path.basename(imgurl).split('.')[0]
+
+            # create the sift features of these tiles
+            sifts_json = os.path.join(layer_sifts_dir, "{0}_sifts_{1}.json".format(tiles_fname_prefix, tile_fname))
+            if not os.path.exists(sifts_json):
+                print "Computing tile  sifts: {0}".format(tile_fname)
+                job_sift = CreateSiftFeatures(f, sifts_json, i, args.jar_file, conf_fname=args.conf_file_name, threads_num=2)
+                jobs[slayer]['sifts'][imgurl] = job_sift
+            layers_data[slayer]['sifts'][imgurl] = sifts_json
+
+        # read every pair of overlapping tiles, and match their sift features
+        indices = []
+        for pair in itertools.combinations(xrange(len(cur_tilespec)), 2):
+            idx1 = pair[0]
+            idx2 = pair[1]
+            ts1 = cur_tilespec[idx1]
+            ts2 = cur_tilespec[idx2]
+            # if the two tiles intersect, match them
+            bbox1 = BoundingBox.fromList(ts1["bbox"])
+            bbox2 = BoundingBox.fromList(ts2["bbox"])
+            if bbox1.overlap(bbox2):
+                imageUrl1 = ts1["mipmapLevels"]["0"]["imageUrl"]
+                imageUrl2 = ts2["mipmapLevels"]["0"]["imageUrl"]
+                tile_fname1 = os.path.basename(imageUrl1).split('.')[0]
+                tile_fname2 = os.path.basename(imageUrl2).split('.')[0]
+                print "Matching sift of tiles: {0} and {1}".format(imageUrl1, imageUrl2)
+                index_pair = [idx1, idx2]
+                match_json = os.path.join(layer_matched_sifts_dir, "{0}_sift_matches_{1}_{2}.json".format(tiles_fname_prefix, tile_fname1, tile_fname2))
+                # match the features of overlapping tiles
+                if not os.path.exists(match_json):
+                    dependencies = [ ]
+                    if jobs[slayer]['sifts'][imageUrl1] != None:
+                        dependencies.append(jobs[slayer]['sifts'][imageUrl1])
+                    if jobs[slayer]['sifts'][imageUrl2] != None:
+                        dependencies.append(jobs[slayer]['sifts'][imageUrl2])
+                    job_match = MatchSiftFeaturesAndFilter(dependencies, layers_data[slayer]['ts'],
+                        layers_data[slayer]['sifts'][imageUrl1], layers_data[slayer]['sifts'][imageUrl2], match_json,
+                        index_pair, args.jar_file, wait_time=30, conf_fname=args.conf_file_name)
+                    jobs[slayer]['matched_sifts'].append(job_match)
+                layers_data[slayer]['matched_sifts'].append(match_json)
+
+        # Create a single file that lists all tilespecs and a single file that lists all pmcc matches (the os doesn't support a very long list)
+        matches_list_file = os.path.join(args.workspace_dir, "{}_matched_sifts_files.txt".format(tiles_fname_prefix))
+        write_list_to_file(matches_list_file, layers_data[slayer]['matched_sifts'])
 
 
-        layers_data[slayer]['ts'] = f
-        layers_data[slayer]['sifts'] = sifts_json
-        layers_data[slayer]['prefix'] = tiles_fname_prefix
-
-        # match the sift features
-        match_json = os.path.join(matched_sifts_dir, "{0}_sift_matches.json".format(tiles_fname_prefix))
-        if not os.path.exists(match_json):
-            print "Matching layer sifts: {0}".format(slayer)
-            dependencies = [ ]
-            if job_sift != None:
-                dependencies.append(job_sift)
-            job_match = MatchSiftFeaturesAndFilter(dependencies, layers_data[slayer]['ts'], \
-                layers_data[slayer]['sifts'], match_json, \
-                args.jar_file, wait_time=30, conf_fname=args.conf_file_name,
-                threads_num=8)
-        layers_data[slayer]['matched_sifts'] = match_json
-
-
-        # optimize the matches (affine)
-        opt_montage_json = os.path.join(opt_montage_dir, "{0}_opt_montage.json".format(tiles_fname_prefix))
+        # optimize (affine) the 2d layer matches (affine)
+        opt_montage_json = os.path.join(args.output_dir, "{0}_montaged.json".format(tiles_fname_prefix))
         if not os.path.exists(opt_montage_json):
             print "Optimizing (affine) layer matches: {0}".format(slayer)
             dependencies = [ ]
-            if job_sift != None:
-                dependencies.append(job_sift)
-            if job_match != None:
-                dependencies.append(job_match)
-            job_opt_montage = OptimizeMontageTransform(dependencies, layers_data[slayer]['ts'], \
-                layers_data[slayer]['matched_sifts'], [ fixed_tile ], opt_montage_json, \
+            dependencies.extend(jobs[slayer]['sifts'].values())
+            dependencies.extend(jobs[slayer]['matched_sifts'])
+            job_opt_montage = OptimizeMontageTransform(dependencies, layers_data[slayer]['ts'],
+                matches_list_file, [ fixed_tile ], opt_montage_json,
                 args.jar_file, conf_fname=args.conf_file_name)
         layers_data[slayer]['optimized_montage'] = opt_montage_json
-
-
-        # Match by max PMCC
-        pmcc_fname = os.path.join(matched_pmcc_dir, "{0}_match_pmcc.json".format(tiles_fname_prefix))
-        if not os.path.exists(pmcc_fname):
-            print "Matching layers by Max PMCC: {0}".format(slayer)
-            dependencies = [ ]
-            if job_sift != None:
-                dependencies.append(job_sift)
-            if job_match != None:
-                dependencies.append(job_match)
-            if job_opt_montage != None:
-                dependencies.append(job_opt_montage)
-            job_pmcc = MatchByMaxPMCC(dependencies, layers_data[slayer]['optimized_montage'], \
-                [ fixed_tile ], pmcc_fname, args.jar_file, conf_fname=args.conf_file_name, threads_num=16)
-        layers_data[slayer]['matched_pmcc'] = pmcc_fname
-
-
-        # Optimize (elastic) the 2d image
-        opt_elastic_json = os.path.join(args.output_dir, "{0}.json".format(tiles_fname_prefix))
-        if not os.path.exists(opt_elastic_json):
-            print "Optimizing (elastic) layer matches: {0}".format(slayer)
-            dependencies = [ ]
-            if job_sift != None:
-                dependencies.append(job_sift)
-            if job_match != None:
-                dependencies.append(job_match)
-            if job_opt_montage != None:
-                dependencies.append(job_opt_montage)
-            if job_pmcc != None:
-                dependencies.append(job_pmcc)
-            job_opt_elastic = OptimizeMontageElastic(dependencies, layers_data[slayer]['optimized_montage'], \
-                layers_data[slayer]['matched_pmcc'], [ fixed_tile ], opt_elastic_json, \
-                args.jar_file, conf_fname=args.conf_file_name)
-
-
 
 
 

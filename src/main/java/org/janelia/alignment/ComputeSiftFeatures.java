@@ -68,9 +68,6 @@ public class ComputeSiftFeatures
         @Parameter( names = "--index", description = "Tile index", required = false )
         private int index = 0;
 
-        @Parameter( names = "--all", description = "Compute for all tiles", required = false )
-        private boolean all_tiles = true;
-        
         
         @Parameter( names = "--initialSigma", description = "Initial Gaussian blur sigma", required = false )
         private float initialSigma = 1.6f;
@@ -90,8 +87,8 @@ public class ComputeSiftFeatures
         @Parameter( names = "--fdBins", description = "Feature descriptor bins", required = false )
         private int fdBins = 8;
         
-        @Parameter( names = "--targetPath", description = "Path to the target image if any", required = true )
-        public String targetPath = null;
+        @Parameter( names = "--targetPath", description = "Path to the target json file", required = true )
+        public String targetPath;
         
         @Parameter( names = "--threads", description = "Number of threads to be used", required = false )
         public int numThreads = Runtime.getRuntime().availableProcessors();
@@ -274,8 +271,8 @@ public class ComputeSiftFeatures
 		//       and decide whether or not to create the mipmaps if they are missing
 		int mipmapLevel = 0;
 
-		int start_index = params.all_tiles ? 0 : params.index;
-		int end_index = params.all_tiles ? tileSpecs.length : params.index + 1;
+		int start_index = params.index;
+		int end_index = params.index + 1;
 
 		
         final double scale;
@@ -422,7 +419,7 @@ public class ComputeSiftFeatures
                 			it.remove();
                 	}
                 	
-                    System.out.println( "Found " + fs.size() + " features in the layer after filtering non-boundary matches (" + params.distanceFromBoundariesPercent + ")" );
+                    System.out.println( "Found " + fs.size() + " features in the tile after filtering non-boundary matches (" + params.distanceFromBoundariesPercent + ")" );
                 }
                 
         		if ( fs.size() >= params.minFeaturesNum )

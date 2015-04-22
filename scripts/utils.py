@@ -47,6 +47,11 @@ def create_dir(path):
     if not os.path.exists(path):
         os.makedirs(path)
 
+def write_list_to_file(file_name, lst):
+    with open(file_name, 'w') as out_file:
+        for item in lst:
+            out_file.write("%s\n" % path2url(item))
+
 def read_layer_from_file(tiles_spec_fname):
     layer = None
     with open(tiles_spec_fname, 'r') as data_file:
@@ -85,4 +90,11 @@ def wait_after_file(filename, timeout_seconds):
             end_wait_time = mod_time + timeout_seconds
             if cur_time < end_wait_time:
                 time.sleep(end_wait_time - cur_time)
+
+def load_tilespecs(tile_file):
+    tile_file = tile_file.replace('file://', '')
+    with open(tile_file, 'r') as data_file:
+        tilespecs = json.load(data_file)
+
+    return tilespecs
 
