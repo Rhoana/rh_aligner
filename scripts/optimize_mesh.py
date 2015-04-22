@@ -20,7 +20,7 @@ FLOAT_TYPE = np.float64
 sys.setrecursionlimit(10000)  # for grad
 
 class MeshParser(object):
-    def __init__(self, mesh_file, multiplier=1000):
+    def __init__(self, mesh_file, multiplier=100):
         # load the mesh
         self.mesh = json.load(open(mesh_file))
         self.pts = np.array([(p["x"], p["y"]) for p in self.mesh["points"]], dtype=FLOAT_TYPE)

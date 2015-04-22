@@ -9,7 +9,7 @@ import itertools
 import utils
 
 def export_mesh(jar_file, image_width, image_height, out_fname, conf=None):
-    conf_args = utils.conf_args_from_file(conf, 'OptimizeLayersElastic')
+    conf_args = utils.conf_args_from_file(conf, 'OptimizeLayersElasticTheano')
 
     java_cmd = 'java -Xmx3g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.ExportMesh --imageWidth {1} --imageHeight {2} \
             --targetPath {3} {4}'.format(
