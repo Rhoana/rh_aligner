@@ -4,10 +4,7 @@ import numpy as np
 cimport numpy
 cimport openmp
 from cython.parallel import parallel, threadid, prange
-from libc.math cimport sin, cos, acos, exp, sqrt, fabs, M_PI
-cdef extern from "spam.h":
-     void allow_gil() nogil
-     void disallow_gil() nogil
+from libc.math cimport sqrt, fabs
 
 ctypedef numpy.float64_t FLOAT_TYPE
 ctypedef numpy.int32_t int32
@@ -21,18 +18,16 @@ cdef:
 from libc.stdio cimport printf
 
 
-allow_gil()
-
 ##################################################
 # HUBER LOSS FUNCTION
 ##################################################
 cdef  inline FLOAT_TYPE c_huber(FLOAT_TYPE value,
-                               FLOAT_TYPE target,
-                               FLOAT_TYPE sigma,
-                               FLOAT_TYPE d_value_dx,
-                               FLOAT_TYPE d_value_dy,
-                               FLOAT_TYPE *d_huber_dx,
-                               FLOAT_TYPE *d_huber_dy) nogil:
+                                FLOAT_TYPE target,
+                                FLOAT_TYPE sigma,
+                                FLOAT_TYPE d_value_dx,
+                                FLOAT_TYPE d_value_dy,
+                                FLOAT_TYPE *d_huber_dx,
+                                FLOAT_TYPE *d_huber_dy) nogil:
     cdef:
         FLOAT_TYPE diff, a, b, l
 
@@ -59,11 +54,11 @@ cpdef huber(value, target, sigma, dx, dy):
 ##################################################
 
 cdef  inline FLOAT_TYPE c_reglen(FLOAT_TYPE vx,
-                                FLOAT_TYPE vy,
-                                FLOAT_TYPE d_vx_dx,
-                                FLOAT_TYPE d_vy_dy,
-                                FLOAT_TYPE *d_reglen_dx,
-                                FLOAT_TYPE *d_reglen_dy) nogil:
+                                 FLOAT_TYPE vy,
+                                 FLOAT_TYPE d_vx_dx,
+                                 FLOAT_TYPE d_vy_dy,
+                                 FLOAT_TYPE *d_reglen_dx,
+                                 FLOAT_TYPE *d_reglen_dy) nogil:
     cdef:
         FLOAT_TYPE sq_len, sqrt_len
 
@@ -190,67 +185,81 @@ cpdef FLOAT_TYPE all_derivs(FLOAT_TYPE[:, :, ::1] meshes,
                             FLOAT_TYPE between_winsor,
                             FLOAT_TYPE within_winsor,
                             uint32[:, ::1] pairs_and_offsets,
+                            uint32 lo, uint32 hi,
                             int num_threads):
     cdef:
         int num_meshes, num_pairs, num_internal_neighbors, num_pts
         FLOAT_TYPE[:, :, :, ::1] d_cost_per_thread
         FLOAT_TYPE[:] costs
-        int m1, m2, i, j, k, tid
+        int m1, m2, i, j, k, tid, m1d_idx, m2d_idx
         uint32 boffset
 
     num_meshes = meshes.shape[0]
     num_pts = meshes.shape[1]
     num_pairs = pairs_and_offsets.shape[0]
     num_internal_neighbors = internal_neighbor_idx.shape[1]
-    _scratch = np.zeros((num_threads, meshes.shape[0], meshes.shape[1], 2), dtype=npFLOAT_TYPE)
-    d_cost_per_thread = _scratch
-    _costs = np.zeros(num_threads, dtype=npFLOAT_TYPE)
-    costs = _costs
+
+    # we allocate one extra block for derivatives outside [lo..hi)
+    np_d_cost_per_thread = np.zeros((num_threads, hi - lo + 1, meshes.shape[1], 2), dtype=npFLOAT_TYPE)
+    d_cost_per_thread = np_d_cost_per_thread
+
+    np_costs = np.zeros(num_threads, dtype=npFLOAT_TYPE)
+    costs = np_costs
 
     with nogil:
-        for i in prange(num_pairs, num_threads=num_threads):
-            disallow_gil()
+        for i in prange(num_pairs, num_threads=num_threads, schedule='dynamic'):
             tid = threadid()
+
             m1 = pairs_and_offsets[i, 0]
             m2 = pairs_and_offsets[i, 1]
+            # index into the d_cost_per_thread array
+            m1d_idx = (m1 - lo) if (m1 >= lo) else (hi - lo)
+            m2d_idx = (m2 - lo) if (m2 >= lo) else (hi - lo)
+
+            if (m1 < lo) and (m2 < lo):  # ignore already-processed pairs, but keep ones that straddle
+                continue
+            if (m1 >= hi) or (m2 >= hi):  # ignore to-be-processed meshes completely
+                continue
+
             boffset = pairs_and_offsets[i, 2]
+
             costs[tid] += crosslink_mesh_derivs(meshes[m1, ...],
                                                 meshes[m2, ...],
-                                                d_cost_per_thread[tid, m1, ...],
-                                                d_cost_per_thread[tid, m2, ...],
+                                                d_cost_per_thread[tid, m1d_idx, ...],
+                                                d_cost_per_thread[tid, m2d_idx, ...],
                                                 bary_indices[boffset:(boffset + num_pts), ...],
                                                 bary_weights[boffset:(boffset + num_pts), ...],
                                                 between_mesh_weights[i],
                                                 between_winsor)
             # swap and compute the other direction
             m1, m2 = m2, m1
+            m1d_idx, m2d_idx = m2d_idx, m1d_idx
             boffset = pairs_and_offsets[i, 3]
             costs[tid] += crosslink_mesh_derivs(meshes[m1, ...],
                                                 meshes[m2, ...],
-                                                d_cost_per_thread[tid, m1, ...],
-                                                d_cost_per_thread[tid, m2, ...],
+                                                d_cost_per_thread[tid, m1d_idx, ...],
+                                                d_cost_per_thread[tid, m2d_idx, ...],
                                                 bary_indices[boffset:(boffset + num_pts), ...],
                                                 bary_weights[boffset:(boffset + num_pts), ...],
                                                 between_mesh_weights[i],
                                                 between_winsor)
-
-            allow_gil()
-        for i in prange(num_meshes, num_threads=num_threads):
-            disallow_gil()
+        for i in prange(num_meshes, num_threads=num_threads, schedule='dynamic'):
             tid = threadid()
             # compute interior costs and derivs, and sum into output derivs
+            if (i < lo) or (i >= hi):  # ignore already-processed meshes
+                continue
             for j from 0 <= j < num_internal_neighbors:
                 costs[tid] += internal_mesh_derivs(meshes[i, ...],
-                                                   d_cost_per_thread[tid, i, ...],
+                                                   d_cost_per_thread[tid, i - lo, ...],
                                                    internal_neighbor_idx[:, j],
                                                    internal_rest_lengths[:, j],
                                                    within_mesh_weight,
                                                    within_winsor)
-            allow_gil()
 
-    _scratch.sum(axis=0, out=d_cost_d_meshes)
+    # ignore last block of derivatives (see above)
+    np_d_cost_per_thread[:, :-1, ...].sum(axis=0, out=d_cost_d_meshes)
 
-    return _costs.sum()
+    return np_costs.sum()
 
 def compare(x, y, eps, restlen, sigma):
     l, dl_dx, dl_dy = reglen(x, y)
