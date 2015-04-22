@@ -136,8 +136,6 @@ def load_matches(matches_files, mesh, url_to_layerid):
             tris_x = mesh.pts[surround_indices, 0]
             tris_y = mesh.pts[surround_indices, 1]
             w1, w2, w3 = barycentric(p2_locs, tris_x, tris_y)
-            m["url1"] = m["url1"].replace("/n/regal/pfister_lab/adisuis/Alyssa_P3_W02_to_W08", "/data/Adi/mesh_optimization/data")
-            m["url2"] = m["url2"].replace("/n/regal/pfister_lab/adisuis/Alyssa_P3_W02_to_W08", "/data/Adi/mesh_optimization/data")
 
             # TODO: figure out why this is needed
             reorder = np.argsort(p1_rc_indices)
