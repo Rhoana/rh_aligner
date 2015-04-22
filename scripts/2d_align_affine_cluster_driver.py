@@ -12,12 +12,12 @@ import os
 import subprocess
 import datetime
 import time
-from itertools import product
-from collections import defaultdict
+import itertools
 import argparse
 import glob
 import json
-from utils import path2url, create_dir, read_layer_from_file, parse_range, load_tilespecs
+from utils import path2url, create_dir, read_layer_from_file, parse_range, load_tilespecs, write_list_to_file
+from bounding_box import BoundingBox
 from job import Job
 
 
@@ -26,8 +26,8 @@ class CreateSiftFeatures(Job):
         Job.__init__(self)
         self.already_done = False
         self.tiles_fname = '"{0}"'.format(tiles_fname)
+        self.tile_index = '{0}'.format(tile_index)
         self.output_file = '-o "{0}"'.format(output_file)
-        self.tile_index = '-i {0}'.format(tile_index)
         self.jar_file = '-j "{0}"'.format(jar_file)
         if conf_fname is None:
             self.conf_fname = ''
@@ -45,7 +45,7 @@ class CreateSiftFeatures(Job):
     def command(self):
         return ['python -u',
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'create_sift_features.py'),
-                self.output_file, self.tile_index, self.jar_file, self.threads_str, self.conf_fname, self.tiles_fname]
+                self.output_file, self.jar_file, self.threads_str, self.conf_fname, self.tiles_fname, self.tile_index]
 
 
 class MatchSiftFeaturesAndFilter(Job):
@@ -54,8 +54,8 @@ class MatchSiftFeaturesAndFilter(Job):
         self.already_done = False
         self.tiles_fname = '"{0}"'.format(tiles_fname)
         self.features_fname1 = '"{0}"'.format(features_fname1)
-        self.features_fname1 = '"{0}"'.format(features_fname2)
-        self.index_pair = ':'.join(index_pair)
+        self.features_fname2 = '"{0}"'.format(features_fname2)
+        self.index_pair = ':'.join([str(i) for i in index_pair])
         self.output_file = '-o "{0}"'.format(corr_output_file)
         self.jar_file = '-j "{0}"'.format(jar_file)
         if conf_fname is None:
@@ -76,7 +76,7 @@ class MatchSiftFeaturesAndFilter(Job):
     def command(self):
         return ['python -u',
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'match_sift_features_and_filter.py'),
-                self.output_file, self.jar_file, self.wait_time, self.threads_str, self.conf_fname,
+                self.output_file, self.jar_file, self.wait_time, self.conf_fname,
                 self.tiles_fname, self.features_fname1, self.features_fname2, self.index_pair]
 
 
@@ -260,9 +260,9 @@ if __name__ == '__main__':
                 # match the features of overlapping tiles
                 if not os.path.exists(match_json):
                     dependencies = [ ]
-                    if jobs[slayer]['sifts'][imageUrl1] != None:
+                    if imageUrl1 in jobs[slayer]['sifts'].keys():
                         dependencies.append(jobs[slayer]['sifts'][imageUrl1])
-                    if jobs[slayer]['sifts'][imageUrl2] != None:
+                    if imageUrl2 in jobs[slayer]['sifts'].keys():
                         dependencies.append(jobs[slayer]['sifts'][imageUrl2])
                     job_match = MatchSiftFeaturesAndFilter(dependencies, layers_data[slayer]['ts'],
                         layers_data[slayer]['sifts'][imageUrl1], layers_data[slayer]['sifts'][imageUrl2], match_json,

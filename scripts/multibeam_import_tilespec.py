@@ -125,11 +125,6 @@ def offset_list(lst):
     m = min(lst)
     return [item - m for item in lst]
 
-def filename_decimal_key(path):
-    fname = os.path.split(path)[-1]
-    return Decimal(''.join([c for c in fname if c.isdigit()]))
-
-
 
 def parse_wafer(wafer_folder, output_folder, wafer_num=1, start_layer=1):
     sub_folders = sorted(glob.glob(os.path.join(wafer_folder, '*')))

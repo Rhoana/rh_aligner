@@ -37,7 +37,7 @@ def main():
         (in either case, we use a different file name).')
     parser.add_argument('tiles_fname', metavar='tiles_json', type=str, 
                         help='a tile_spec file that contains the images to create sift features for, in json format')
-    parser.add_argument('-i', '--index', type=int, 
+    parser.add_argument('index', metavar='index', type=int, 
                         help='the index of the tile in the tilespec that needs to be computed')
     parser.add_argument('-o', '--output_file', type=str, 
                         help='an output feature_spec file, that will include the sift features for all tiles (default: ./siftFeatures.json)',
