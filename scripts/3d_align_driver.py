@@ -21,7 +21,7 @@ from create_layer_sift_features import create_layer_sift_features
 from match_layers_sift_features import match_layers_sift_features
 from filter_ransac import filter_ransac
 from match_layers_by_max_pmcc import match_layers_by_max_pmcc
-from optimize_layers_elastic import optimize_layers_elastic
+from optimize_layers_elastic_theano import optimize_layers_elastic_theano
 from filter_local_smoothness import filter_local_smoothness
 from utils import path2url, write_list_to_file, create_dir, read_layer_from_file, parse_range, read_conf_args
 from bounding_box import BoundingBox
@@ -285,7 +285,7 @@ write_list_to_file(ts_list_file, all_ts_files)
 pmcc_list_file = os.path.join(args.workspace_dir, "all_pmcc_files.txt")
 write_list_to_file(pmcc_list_file, actual_pmcc_files)
 
-optimize_layers_elastic([ ts_list_file ], [ pmcc_list_file ], imageWidth, imageHeight, 
+optimize_layers_elastic_theano([ ts_list_file ], [ pmcc_list_file ], imageWidth, imageHeight, 
     fixed_layers, args.output_dir, args.max_layer_distance,
     args.jar_file, conf, args.skip_layers, manual_matches=args.manual_match)
 
