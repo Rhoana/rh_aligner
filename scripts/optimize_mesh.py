@@ -1,14 +1,15 @@
 import sys
-import ujson as json
+import json
 import glob
 import os.path
 import time
 import numpy as np
 from numpy.linalg import lstsq
 import cPickle as pickle
-from scipy.spatial import cKDTree as KDTree  # for searching surrounding points
 from collections import defaultdict
-from progressbar import ProgressBar, ETA, Bar, Counter
+import cPickle
+from scipy.spatial import Delaunay
+#from progressbar import ProgressBar, ETA, Bar, Counter
 
 import pyximport
 pyximport.install()
@@ -35,117 +36,52 @@ class MeshParser(object):
         for idx, pt in enumerate(self.pts):
             self._rowcolidx[int(pt[0] * multiplier), int(pt[1] * multiplier)] = idx
 
-        # Build the KDTree for neighbor searching
-        self.kdt = KDTree(self.pts, leafsize=3)
-
-        mesh_p_x = self.pts[:, 0]
-        mesh_p_y = self.pts[:, 1]
-        self.long_row_min_x = min(mesh_p_x)
-        self.long_row_min_y = min(mesh_p_y)
-        self.long_row_max_x = max(mesh_p_x)
-        self.long_row_max_y = max(mesh_p_y)
-        print("Mesh long-row boundary values: min_x: {}, miny: {}, max_x: {}, max_y: {}".format(
-            self.long_row_min_x, self.long_row_min_y, self.long_row_max_x, self.long_row_max_y))
-        self.short_row_min_x = min(mesh_p_x[mesh_p_x > self.long_row_min_x])
-        self.short_row_min_y = min(mesh_p_y[mesh_p_y > self.long_row_min_y])
-        self.short_row_max_x = max(mesh_p_x[mesh_p_x < self.long_row_max_x])
-        self.short_row_max_y = max(mesh_p_y[mesh_p_y < self.long_row_max_y])
-        print("Mesh short-row boundary values: min_x: {}, miny: {}, max_x: {}, max_y: {}".format(
-            self.short_row_min_x, self.short_row_min_y, self.short_row_max_x, self.short_row_max_y))
+        # for neighbor searching and internal mesh
+        self.triangulation = Delaunay(self.pts)
 
     def rowcolidx(self, xy):
         return self._rowcolidx[int(xy[0] * self.multiplier), int(xy[1] * self.multiplier)]
 
-    def query_internal(self, points, k):
-        """Returns the k nearest neighbors, while taking into account the mesh formation.
-        If a point is on the boudaries of the mesh, only the relevant neighbors will be returned,
-        and all others will have distance 0, and neighbor index == the query point"""
-        dists, surround_indices = self.kdt.query(points, k + 1)  # we're querying against ourselves, usually
+    def query_internal(self):
+        simplices = self.triangulation.simplices
+        # find unique edges
+        edge_indices = np.vstack((simplices[:, :2],
+                                  simplices[:, 1:],
+                                  simplices[:, [0, 2]]))
+        edge_indices = np.vstack({tuple(sorted(tuple(row))) for row in edge_indices})
+        # mesh.pts[edge_indices, :].shape =(#edges, #pts-per-edge, #values-per-pt)
+        edge_lengths = np.sqrt((np.diff(self.pts[edge_indices], axis=1) ** 2).sum(axis=2)).ravel()
+        triangles_as_pts = self.pts[simplices]
+        triangle_areas = 0.5 * np.cross(triangles_as_pts[:, 2, :] - triangles_as_pts[:, 0, :],
+                                        triangles_as_pts[:, 1, :] - triangles_as_pts[:, 0, :])
+        return edge_indices, edge_lengths, simplices, triangle_areas
 
-        # Find out if the point is on the "boundary"
-        for i, p in enumerate(points):
-            # on the left side of the mesh
-            if p[0] < self.short_row_min_x:
-                # remove any surrounding point that is to the right of short_row_min_x
-                point_surround_indices = surround_indices[i].astype(np.int32)
-                tris_x = self.pts[point_surround_indices, 0]
-                dists[i][tris_x > self.short_row_min_x] = 0.0
-                surround_indices[i][tris_x > self.short_row_min_x] = surround_indices[i][0]
-            # on the left side of the mesh
-            if p[0] > self.short_row_max_x:
-                # remove any surrounding point that is to the left of short_row_max_x
-                point_surround_indices = surround_indices[i].astype(np.int32)
-                tris_x = self.pts[point_surround_indices, 0]
-                dists[i][tris_x < self.short_row_max_x] = 0.0
-                surround_indices[i][tris_x < self.short_row_max_x] = surround_indices[i][0]
-            # on the upper side of the mesh
-            if p[1] < self.short_row_min_y:
-                # remove any surrounding point that is above short_row_min_y
-                point_surround_indices = surround_indices[i].astype(np.int32)
-                tris_y = self.pts[point_surround_indices, 1]
-                dists[i][tris_y > self.short_row_min_y] = 0.0
-                surround_indices[i][tris_y > self.short_row_min_y] = surround_indices[i][0]
-            # on the lower side of the mesh
-            if p[1] > self.short_row_max_y:
-                # remove any surrounding point that is under short_row_max_y
-                point_surround_indices = surround_indices[i].astype(np.int32)
-                tris_y = self.pts[point_surround_indices, 1]
-                dists[i][tris_y < self.short_row_max_y] = 0.0
-                surround_indices[i][tris_y < self.short_row_max_y] = surround_indices[i][0]
-
-        return dists[:, 1:], surround_indices[:, 1:]  # chop off first closest (= self)
-
-    def query_cross(self, points, k):
-        """Returns the k nearest neighbors"""
-        dists, surround_indices = self.kdt.query(points, k)
-
-        return dists, surround_indices
-
-
-def barycentric(pt, verts_x, verts_y):
-    '''computes the barycentric weights to reconstruct an array of points in an
-    array of triangles.
-
-    '''
-    x, y = pt.T
-    x_1, x_2, x_3 = verts_x.T
-    y_1, y_2, y_3 = verts_y.T
-
-    # from wikipedia
-    den = ((y_2 - y_3) * (x_1 - x_3) + (x_3 - x_2) * (y_1 - y_3))
-    l1 = ((y_2 - y_3) * (x - x_3) + (x_3 - x_2) * (y - y_3)) / den
-    l2 = ((y_3 - y_1) * (x - x_3) + (x_1 - x_3) * (y - y_3)) / den
-    l3 = 1 - l1 - l2
-    mask = (den == 0)
-    l1[mask] = l2[mask] = l3[mask] = 1.0 / 3
-    return l1.reshape((-1, 1)).astype(np.float32), l2.reshape((-1, 1)).astype(np.float32), l3.reshape((-1, 1)).astype(np.float32)
+    def query_cross_barycentrics(self, points):
+        """Returns the mesh indices that surround a point, and the barycentric weights of those points"""
+        simplex_indices = self.triangulation.find_simplex(points)
+        assert not np.any(simplex_indices == -1)
+        # http://codereview.stackexchange.com/questions/41024/faster-computation-of-barycentric-coordinates-for-many-points
+        X = self.triangulation.transform[simplex_indices, :2]
+        Y = points - self.triangulation.transform[simplex_indices, 2]
+        b = np.einsum('ijk,ik->ij', X, Y)
+        bcoords = np.c_[b, 1 - b.sum(axis=1)]
+        return simplex_indices, bcoords
 
 def load_matches(matches_files, mesh, url_to_layerid):
-    pbar = ProgressBar(widgets=['Loading matches: ', Counter(), ' / ', str(len(matches_files)), " ", Bar(), ETA()])
-
-    for midx, mf in enumerate(pbar(matches_files)):
+    for midx, mf in enumerate((matches_files)):
         for m in json.load(open(mf)):
             if not m['shouldConnect']:
                 continue
             # parse matches file, and get p1's mesh x and y points
             orig_p1s = np.array([(pair["p1"]["l"][0], pair["p1"]["l"][1]) for pair in m["correspondencePointPairs"]], dtype=FLOAT_TYPE)
-
             p1_rc_indices = [mesh.rowcolidx(p1) for p1 in orig_p1s]
-
             p2_locs = np.array([pair["p2"]["l"] for pair in m["correspondencePointPairs"]])
-            dists, surround_indices = mesh.query_cross(p2_locs, 3)
-            surround_indices = surround_indices.astype(np.uint32)
-            tris_x = mesh.pts[surround_indices, 0]
-            tris_y = mesh.pts[surround_indices, 1]
-            w1, w2, w3 = barycentric(p2_locs, tris_x, tris_y)
-
-            # TODO: figure out why this is needed
-            reorder = np.argsort(p1_rc_indices)
-            p1_rc_indices = np.array(p1_rc_indices).astype(np.uint32)[reorder]
-            surround_indices = surround_indices[reorder, :]
-            weights = np.hstack((w1, w2, w3)).astype(FLOAT_TYPE)[reorder, :]
-            assert p1_rc_indices.shape[0] == weights.shape[0]
-            yield url_to_layerid[m["url1"]], url_to_layerid[m["url2"]], p1_rc_indices, surround_indices, weights
+            p2_locs[p2_locs < 0] = 0.01
+            surround_simplices, surround_weights = mesh.query_cross_barycentrics(p2_locs)
+            yield (url_to_layerid[m["url1"]], url_to_layerid[m["url2"]],
+                   np.array(p1_rc_indices, dtype=np.uint32),
+                   np.array(surround_simplices, dtype=np.uint32),
+                   surround_weights)
 
 def linearize_grad(positions, gradients):
     '''perform a least-squares fit, then return the values from that fit'''
@@ -190,6 +126,7 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
     cross_slice_winsor = conf_dict.get("cross_slice_winsor", 1000)
     intra_slice_weight = conf_dict.get("intra_slice_weight", 1.0 / 6)
     intra_slice_winsor = conf_dict.get("intra_slice_winsor", 200)
+    intra_slice_weight = 1.0 / 6
 
     block_size = conf_dict.get("block_size", 35)
     block_step = conf_dict.get("block_step", 25)
@@ -202,12 +139,15 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
     mesh = MeshParser(mesh_file)
     num_pts = mesh.pts.shape[0]
 
+    # Build internal structural mesh
+    edge_indices, edge_lengths, face_indices, face_areas = mesh.query_internal()
+
     # Adjust winsor values according to layer scale
     cross_slice_winsor = cross_slice_winsor * mesh.layer_scale
     intra_slice_winsor = intra_slice_winsor * mesh.layer_scale
 
     # load the slice-to-slice matches
-    cross_links = dict(((v[0], v[1]), v[2:]) for v in load_matches(matches_files, mesh, url_to_layerid))
+    cross_links = sorted(load_matches(matches_files, mesh, url_to_layerid))
 
     # find all the slices represented
     present_slices = sorted(list(set(k[0] for k in cross_links) | set(k[1] for k in cross_links)))
@@ -217,48 +157,25 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
     all_mesh_pts = np.concatenate([mesh.pts[np.newaxis, ...]] * len(present_slices), axis=0)
     mesh_pt_offsets = dict(zip(present_slices, np.arange(len(present_slices))))
 
-    # Build internal structural mesh
-    dists, neighbor_indices = mesh.query_internal(mesh.pts, 6)
-    neighbor_indices = neighbor_indices.astype(np.uint32)
-    dists = dists.astype(FLOAT_TYPE)
-
-    # cross-mesh links
-
-    # we assume nearly every point has a match, so we store a set of 3
-    # barycentric neighbor indices & weights for each point in the mesh, and
-    # use neighbor[0] == -1 to indicate no match.
-    bary_indices = []
-    bary_weights = []
-    bary_offsets = {}
-    for (id1, id2), (m1_indices, m2_surround_indices, m2_weights) in sorted(cross_links.iteritems()):
-        cur_bary_indices = -np.ones((num_pts, 3), np.int32)
-        cur_bary_weights = np.zeros((num_pts, 3), FLOAT_TYPE)
-        for idx, bn_indices, bn_weights in zip(m1_indices, m2_surround_indices, m2_weights):
-            cur_bary_indices[idx, :] = bn_indices
-            cur_bary_weights[idx, :] = bn_weights
-        assert m1_indices.shape[0] == m2_surround_indices.shape[0] == m2_weights.shape[0]
-        bary_indices.append(cur_bary_indices)
-        bary_weights.append(cur_bary_weights)
-        bary_offsets[id1, id2] = (len(bary_indices) - 1) * num_pts
-
-    bary_indices = np.vstack(bary_indices)
-    bary_weights = np.vstack(bary_weights)
+    # concatenate the simplicial indices and weights for cross slice matches
+    src_indices = np.concatenate([indices for (_, _, indices, _, _) in cross_links])
+    tri_indices, tri_weights = zip(*[(sidx, sweight) for (_, _, _, sidx, sweight) in cross_links])
+    tri_offsets = np.cumsum([0] + [si.shape[0] for si in tri_indices]).astype(np.uint32)
+    tri_indices = np.concatenate(tri_indices)
+    print tri_indices.shape
+    tri_weights = np.vstack(tri_weights)
 
     # build the list of all pairs with their offsets
-    all_pairs = np.vstack(sorted([(mesh_pt_offsets[id1],
-                                   mesh_pt_offsets[id2],
-                                   bary_offsets[id1, id2],
-                                   bary_offsets[id2, id1])
-                                  for id1, id2 in bary_offsets.keys() if id1 < id2])).astype(np.uint32)
-    assert 2 * len(all_pairs) == len(cross_links)
+    all_pairs = np.vstack([(mesh_pt_offsets[id1], mesh_pt_offsets[id2])
+                           for id1, id2, _, _, _ in cross_links]).astype(np.uint32)
     between_mesh_weights = np.array([cross_slice_weight / float(abs(int(id1) - int(id2)))
-                                     for id1, id2, _, _ in all_pairs],
+                                     for id1, id2 in all_pairs],
                                     dtype=FLOAT_TYPE)
 
 
     oldtick = time.time()
 
-    pbar = ProgressBar(widgets=[Bar(), ETA()])
+    #pbar = ProgressBar(widgets=[Bar(), ETA()])
 
     for block_lo in (range(0, max(1, num_meshes - block_size + 1), block_step)):
         print
@@ -267,15 +184,18 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
         gradient = np.empty_like(all_mesh_pts[block_lo:block_hi, ...])
         cost = mesh_derivs.all_derivs(all_mesh_pts,
                                       gradient,
-                                      neighbor_indices,
-                                      dists,
-                                      bary_indices,
-                                      bary_weights,
+                                      mesh.triangulation.simplices.astype(np.uint32),
+                                      all_pairs,
                                       between_mesh_weights,
+                                      src_indices,
+                                      tri_indices,
+                                      tri_weights,
+                                      tri_offsets,
+                                      edge_indices.astype(np.uint32),
+                                      edge_lengths,
                                       intra_slice_weight,
                                       cross_slice_winsor,
                                       intra_slice_winsor,
-                                      all_pairs,
                                       block_lo, block_hi,
                                       num_threads)
 
@@ -335,8 +255,19 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
                 m_o = mean_offset(all_pairs, all_mesh_pts, bary_indices, bary_weights, block_lo, block_hi)
                 print iter, "SL:", block_lo, block_hi, num_meshes, "COST:", cost, "MO:", m_o, "SZ:", stepsize, "T:", time.time() - oldtick
                 oldtick = time.time()
-                if (iter >= min_iterations) and (m_o < .75):
+                if (iter >= min_iterations) and ((m_o < .75) or (stepsize < 1e-20)):
                     break
+
+                distortions = []
+                for single_slice_idx in range(block_lo, block_hi):
+                    dmax = []
+                    for whichn, ni in enumerate(neighbor_indices.T):
+                        deltas = np.sqrt(((all_mesh_pts[single_slice_idx, ...] - all_mesh_pts[single_slice_idx, ni, ...]) ** 2).sum(axis=1))
+                        deltas = abs(deltas - dists[:, whichn])
+                        dmax.append(int(deltas.max()))
+                    distortions.append(max(dmax))
+                print "DIS", distortions
+                worst = np.argmax(distortions)
 
             # relaxation of the mesh
             # initially, mesh is held rigid (all points transform together).
@@ -372,6 +303,7 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
             meshidx = mesh_pt_offsets[layerid]
             out_positions[url] = [(mesh.pts / mesh.layer_scale).tolist(),
                                   (all_mesh_pts[meshidx, :] / mesh.layer_scale).tolist()]
+            cPickle.dump([url, out_positions[url]], open("newpos{}.pickle".format(meshidx), "w"))
         else:
             out_positions[url] = [(mesh.pts / mesh.layer_scale).tolist(),
                                   (mesh.pts / mesh.layer_scale).tolist()]
