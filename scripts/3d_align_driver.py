@@ -208,7 +208,7 @@ fixed_layers = [ all_layers[len(all_layers)//2] ]
 # Match and optimize each two layers in the required distance
 all_pmcc_files = []
 all_local_smoothness_files = []
-for i in all_layers:
+for ei, i in enumerate(all_layers):
     # layers_to_process = min(i + args.max_layer_distance + 1, all_layers[-1] + 1) - i
     # to_range = range(1, layers_to_process)
     # # add manual matches
@@ -287,5 +287,5 @@ write_list_to_file(pmcc_list_file, actual_pmcc_files)
 
 optimize_layers_elastic_theano([ ts_list_file ], [ pmcc_list_file ], imageWidth, imageHeight, 
     fixed_layers, args.output_dir, args.max_layer_distance,
-    args.jar_file, conf, args.skip_layers, manual_matches=args.manual_match)
+    args.jar_file, conf, args.skip_layers)
 
