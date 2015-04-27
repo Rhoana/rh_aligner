@@ -33,7 +33,6 @@ def create_chunks(l, n):
 def convert_files(files_list, json_dir, hdf5_dir):
     for f in files_list:
         in_file = os.path.join(json_dir, f)
-        print "parsing", in_file
         out_file = os.path.join(hdf5_dir, "{}.hdf5".format(os.path.splitext(os.path.basename(f))[0]))
         if not os.path.exists(out_file):
             convert(in_file, out_file)
