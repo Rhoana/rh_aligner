@@ -81,38 +81,37 @@ cpdef FLOAT_TYPE crosslink_mesh_derivs(FLOAT_TYPE[:, ::1] mesh1,
                                        FLOAT_TYPE[:, ::1] mesh2,
                                        FLOAT_TYPE[:, ::1] d_cost_d_mesh1,
                                        FLOAT_TYPE[:, ::1] d_cost_d_mesh2,
-                                       uint32[:, ::1] triangles,
-                                       uint32[::1] src_idx,
-                                       uint32[::1] tri_indices,
-                                       FLOAT_TYPE[:, ::1] tri_weights,
+                                       uint32[::1] src_indices,
+                                       uint32[:, ::1] dest_indices,
+                                       FLOAT_TYPE[:, ::1] dest_weights,
                                        FLOAT_TYPE all_weight,
                                        FLOAT_TYPE sigma) nogil:
     cdef:
-        int i, ti0, ti1, ti2
         FLOAT_TYPE px, py, qx, qy
+        int i, didx0, didx1, didx2
         FLOAT_TYPE w0, w1, w2
         FLOAT_TYPE r, h
         FLOAT_TYPE dr_dx, dr_dy, dh_dx, dh_dy
         FLOAT_TYPE cost
 
     cost = 0
-    for i in range(mesh1.shape[0]):
-        ti0 = triangles[tri_indices[i], 0]
-        ti1 = triangles[tri_indices[i], 1]
-        ti2 = triangles[tri_indices[i], 2]
-        w0 = tri_weights[i, 0]
-        w1 = tri_weights[i, 1]
-        w2 = tri_weights[i, 2]
+    for i in range(src_indices.shape[0]):
+        didx0 = dest_indices[i, 0]
+        didx1 = dest_indices[i, 1]
+        didx2 = dest_indices[i, 2]
+        w0 = dest_weights[i, 0]
+        w1 = dest_weights[i, 1]
+        w2 = dest_weights[i, 2]
 
-        px = mesh1[i, 0]
-        py = mesh1[i, 1]
+        px = mesh1[src_indices[i], 0]
+        py = mesh1[src_indices[i], 1]
 
-        qx = (mesh2[ti0, 0] * w0 +
-              mesh2[ti1, 0] * w1 +
-              mesh2[ti2, 0] * w2)
-        qy = (mesh2[ti0, 1] * w0 +
-              mesh2[ti1, 1] * w1 +
-              mesh2[ti2, 1] * w2)
+        qx = (mesh2[didx0, 0] * w0 +
+              mesh2[didx1, 0] * w1 +
+              mesh2[didx2, 0] * w2)
+        qy = (mesh2[didx0, 1] * w0 +
+              mesh2[didx1, 1] * w1 +
+              mesh2[didx2, 1] * w2)
         r = c_reglen(px - qx, py - qy,
                      1, 1,
                      &(dr_dx), &(dr_dy))
@@ -124,15 +123,15 @@ cpdef FLOAT_TYPE crosslink_mesh_derivs(FLOAT_TYPE[:, ::1] mesh1,
         dh_dy *= all_weight
 
         # update derivs
-        d_cost_d_mesh1[i, 0] += dh_dx
-        d_cost_d_mesh1[i, 1] += dh_dy
+        d_cost_d_mesh1[src_indices[i], 0] += dh_dx
+        d_cost_d_mesh1[src_indices[i], 1] += dh_dy
         # opposite direction for other end of spring, and distributed according to weight
-        d_cost_d_mesh2[ti0, 0] -= w0 * dh_dx
-        d_cost_d_mesh2[ti1, 0] -= w1 * dh_dx
-        d_cost_d_mesh2[ti2, 0] -= w2 * dh_dx
-        d_cost_d_mesh2[ti0, 1] -= w0 * dh_dy
-        d_cost_d_mesh2[ti1, 1] -= w1 * dh_dy
-        d_cost_d_mesh2[ti2, 1] -= w2 * dh_dy
+        d_cost_d_mesh2[didx0, 0] -= w0 * dh_dx
+        d_cost_d_mesh2[didx1, 0] -= w1 * dh_dx
+        d_cost_d_mesh2[didx2, 0] -= w2 * dh_dx
+        d_cost_d_mesh2[didx0, 1] -= w0 * dh_dy
+        d_cost_d_mesh2[didx1, 1] -= w1 * dh_dy
+        d_cost_d_mesh2[didx2, 1] -= w2 * dh_dy
     return cost
 
 
@@ -187,13 +186,12 @@ cpdef FLOAT_TYPE internal_mesh_derivs(FLOAT_TYPE[:, ::1] mesh,
 
 cpdef FLOAT_TYPE all_derivs(FLOAT_TYPE[:, :, ::1] meshes,
                             numpy.ndarray[FLOAT_TYPE, ndim=3] d_cost_d_meshes,
-                            uint32[:, ::1] triangles,  # Nx3, same for all meshes
                             uint32[:, ::1] pairs,  # Nx2
                             FLOAT_TYPE[::1] between_mesh_weights,
                             uint32[::1] src_indices,
-                            uint32[::1] tri_indices,
-                            FLOAT_TYPE[:, ::1] tri_weights,
-                            uint32[::1] pair_offsets,
+                            uint32[:, ::1] dest_indices,
+                            FLOAT_TYPE[:, ::1] dest_weights,
+                            uint32[::1] match_offsets,
                             uint32[:, ::1] internal_edge_indices,   # same for all meshes
                             FLOAT_TYPE[::1] internal_rest_lengths,  # same for all meshes
                             FLOAT_TYPE within_mesh_weight,
@@ -235,17 +233,16 @@ cpdef FLOAT_TYPE all_derivs(FLOAT_TYPE[:, :, ::1] meshes,
             if (m1 >= hi) or (m2 >= hi):  # ignore to-be-processed meshes completely
                 continue
 
-            offset = pair_offsets[i]
-            num_matches = pair_offsets[i + 1] - offset
+            offset = match_offsets[i]
+            num_matches = match_offsets[i + 1] - offset
 
             costs[tid] += crosslink_mesh_derivs(meshes[m1, ...],
                                                 meshes[m2, ...],
                                                 d_cost_per_thread[tid, m1d_idx, ...],
                                                 d_cost_per_thread[tid, m2d_idx, ...],
-                                                triangles,
                                                 src_indices[offset:(offset + num_matches)],
-                                                tri_indices[offset:(offset + num_matches)],
-                                                tri_weights[offset:(offset + num_matches), ...],
+                                                dest_indices[offset:(offset + num_matches), ...],
+                                                dest_weights[offset:(offset + num_matches), ...],
                                                 between_mesh_weights[i],
                                                 between_winsor)
 

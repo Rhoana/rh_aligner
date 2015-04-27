@@ -65,7 +65,7 @@ class MeshParser(object):
         Y = points - self.triangulation.transform[simplex_indices, 2]
         b = np.einsum('ijk,ik->ij', X, Y)
         bcoords = np.c_[b, 1 - b.sum(axis=1)]
-        return simplex_indices, bcoords
+        return self.triangulation.simplices[simplex_indices], bcoords
 
 def load_matches(matches_files, mesh, url_to_layerid):
     for midx, mf in enumerate((matches_files)):
@@ -77,10 +77,10 @@ def load_matches(matches_files, mesh, url_to_layerid):
             p1_rc_indices = [mesh.rowcolidx(p1) for p1 in orig_p1s]
             p2_locs = np.array([pair["p2"]["l"] for pair in m["correspondencePointPairs"]])
             p2_locs[p2_locs < 0] = 0.01
-            surround_simplices, surround_weights = mesh.query_cross_barycentrics(p2_locs)
+            surround_points, surround_weights = mesh.query_cross_barycentrics(p2_locs)
             yield (url_to_layerid[m["url1"]], url_to_layerid[m["url2"]],
                    np.array(p1_rc_indices, dtype=np.uint32),
-                   np.array(surround_simplices, dtype=np.uint32),
+                   np.array(surround_points, dtype=np.uint32),
                    surround_weights)
 
 def linearize_grad(positions, gradients):
@@ -95,28 +95,30 @@ def blend(a, b, t):
     '''at t=0, return a, at t=1, return b'''
     return a + (b - a) * t
 
-def mean_offset(all_pairs, all_mesh_pts, bary_indices, bary_weights, lo, hi):
+
+def mean_offset(all_mesh_pts,
+                all_pairs,
+                src_indices,
+                pt_indices,
+                pt_weights,
+                pair_offsets,
+                lo, hi):
     num_pts = all_mesh_pts.shape[1]
     means = []
-    for id1, id2, baryoff1, baryoff2 in all_pairs:
+    for idx, (id1, id2) in enumerate(all_pairs):
         if id1 >= hi or id2 >= hi:
             continue
         if id1 < lo and id2 < lo:
             continue
         if abs(int(id1) - int(id2)) == 1:
-            mesh1 = all_mesh_pts[id1, ...]
-            mesh2 = all_mesh_pts[id2, ...]
-            bindices = bary_indices[baryoff1:(baryoff1 + num_pts), ...]
-            mesh_1_matches = mesh2[bindices, ...]
-            mesh_1_matches *= bary_weights[baryoff1:(baryoff1 + num_pts), ..., np.newaxis]
-            delta = (mesh1 - mesh_1_matches.sum(axis=1)) ** 2
-            means.append(np.sqrt(delta.sum(axis=1)[bindices[:, 0] != -1]).mean())
-
-            bindices = bary_indices[baryoff2:(baryoff2 + num_pts), ...]
-            mesh_2_matches = mesh1[bindices, ...]
-            mesh_2_matches *= bary_weights[baryoff2:(baryoff2 + num_pts), ..., np.newaxis]
-            delta = (mesh2 - mesh_2_matches.sum(axis=1)) ** 2
-            means.append(np.median(np.sqrt(delta.sum(axis=1)[bindices[:, 0] != -1])))
+            offset = pair_offsets[idx]
+            next_offset = pair_offsets[idx + 1]
+            src_pts = all_mesh_pts[id1, src_indices[offset:next_offset]]  # Nx2
+            dest_pts = all_mesh_pts[id2, pt_indices[offset:next_offset]]  # Nx3x2
+            dest_weights = pt_weights[offset:next_offset]  # Nx3
+            dest_pts = np.einsum('ij,ijk->ik', dest_weights, dest_pts)
+            lens = np.sqrt(((src_pts - dest_pts) ** 2).sum(axis=1))
+            means.append(np.median(lens))
     return np.mean(means)
 
 
@@ -129,7 +131,9 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
     intra_slice_weight = 1.0 / 6
 
     block_size = conf_dict.get("block_size", 35)
+    block_size = 2
     block_step = conf_dict.get("block_step", 25)
+    block_step = 1
     rigid_iterations = conf_dict.get("rigid_iterations", 50)
     min_iterations = conf_dict.get("min_iterations", 200)
     max_iterations = conf_dict.get("max_iterations", 2000)
@@ -158,12 +162,11 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
     mesh_pt_offsets = dict(zip(present_slices, np.arange(len(present_slices))))
 
     # concatenate the simplicial indices and weights for cross slice matches
-    src_indices = np.concatenate([indices for (_, _, indices, _, _) in cross_links])
-    tri_indices, tri_weights = zip(*[(sidx, sweight) for (_, _, _, sidx, sweight) in cross_links])
-    tri_offsets = np.cumsum([0] + [si.shape[0] for si in tri_indices]).astype(np.uint32)
-    tri_indices = np.concatenate(tri_indices)
-    print tri_indices.shape
-    tri_weights = np.vstack(tri_weights)
+    src_indices, dest_indices, dest_weights = zip(*[(sidx, pidx, pweight) for (_, _, sidx, pidx, pweight) in cross_links])
+    match_offsets = np.cumsum([0] + [pi.shape[0] for pi in src_indices]).astype(np.uint32)
+    src_indices = np.concatenate(src_indices).astype(np.uint32)
+    dest_indices = np.vstack(dest_indices)
+    dest_weights = np.vstack(dest_weights)
 
     # build the list of all pairs with their offsets
     all_pairs = np.vstack([(mesh_pt_offsets[id1], mesh_pt_offsets[id2])
@@ -172,10 +175,7 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
                                      for id1, id2 in all_pairs],
                                     dtype=FLOAT_TYPE)
 
-
-    oldtick = time.time()
-
-    #pbar = ProgressBar(widgets=[Bar(), ETA()])
+    # pbar = ProgressBar(widgets=[Bar(), ETA()])
 
     for block_lo in (range(0, max(1, num_meshes - block_size + 1), block_step)):
         print
@@ -184,13 +184,12 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
         gradient = np.empty_like(all_mesh_pts[block_lo:block_hi, ...])
         cost = mesh_derivs.all_derivs(all_mesh_pts,
                                       gradient,
-                                      mesh.triangulation.simplices.astype(np.uint32),
                                       all_pairs,
                                       between_mesh_weights,
                                       src_indices,
-                                      tri_indices,
-                                      tri_weights,
-                                      tri_offsets,
+                                      dest_indices,
+                                      dest_weights,
+                                      match_offsets,
                                       edge_indices.astype(np.uint32),
                                       edge_lengths,
                                       intra_slice_weight,
@@ -199,7 +198,13 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
                                       block_lo, block_hi,
                                       num_threads)
 
-        m_o = mean_offset(all_pairs, all_mesh_pts, bary_indices, bary_weights, block_lo, block_hi)
+        m_o = mean_offset(all_mesh_pts,
+                          all_pairs,
+                          src_indices,
+                          dest_indices,
+                          dest_weights,
+                          match_offsets,
+                          block_lo, block_hi)
         print "BEFORE", "C", cost, "MO", m_o
 
         # first, do some rigid alignment, slice at a time
@@ -210,15 +215,17 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
             for iter in range(rigid_iterations):
                 cost = mesh_derivs.all_derivs(all_mesh_pts,
                                               gradient,
-                                              neighbor_indices,
-                                              dists,
-                                              bary_indices,
-                                              bary_weights,
+                                              all_pairs,
                                               between_mesh_weights,
+                                              src_indices,
+                                              dest_indices,
+                                              dest_weights,
+                                              match_offsets,
+                                              edge_indices.astype(np.uint32),
+                                              edge_lengths,
                                               intra_slice_weight,
                                               cross_slice_winsor,
                                               intra_slice_winsor,
-                                              all_pairs,
                                               single_slice_idx, single_slice_idx + 1,
                                               1)
                 if cost < prev_cost:
@@ -230,6 +237,32 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
                     all_mesh_pts[single_slice_idx, ...] += step_size * lin_grad
                     step_size = 0.5 * step_size
                 prev_cost = cost
+
+        cost = mesh_derivs.all_derivs(all_mesh_pts,
+                                      gradient,
+                                      all_pairs,
+                                      between_mesh_weights,
+                                      src_indices,
+                                      dest_indices,
+                                      dest_weights,
+                                      match_offsets,
+                                      edge_indices.astype(np.uint32),
+                                      edge_lengths,
+                                      intra_slice_weight,
+                                      cross_slice_winsor,
+                                      intra_slice_winsor,
+                                      block_lo, block_hi,
+                                      num_threads)
+
+        m_o = mean_offset(all_mesh_pts,
+                          all_pairs,
+                          src_indices,
+                          dest_indices,
+                          dest_weights,
+                          match_offsets,
+                          block_lo, block_hi)
+        print "AFTER", "C", cost, "MO", m_o
+
 
         gradient_with_momentum = 0
         stepsize = 0.1
