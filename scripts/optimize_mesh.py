@@ -1,6 +1,7 @@
 import sys
 import json
 import glob
+import os
 import os.path
 import time
 import numpy as np
@@ -128,12 +129,9 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
     cross_slice_winsor = conf_dict.get("cross_slice_winsor", 1000)
     intra_slice_weight = conf_dict.get("intra_slice_weight", 1.0 / 6)
     intra_slice_winsor = conf_dict.get("intra_slice_winsor", 200)
-    intra_slice_weight = 1.0 / 6
 
     block_size = conf_dict.get("block_size", 35)
-    block_size = 2
     block_step = conf_dict.get("block_step", 25)
-    block_step = 1
     rigid_iterations = conf_dict.get("rigid_iterations", 50)
     min_iterations = conf_dict.get("min_iterations", 200)
     max_iterations = conf_dict.get("max_iterations", 2000)
@@ -206,6 +204,7 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
                           match_offsets,
                           block_lo, block_hi)
         print "BEFORE", "C", cost, "MO", m_o
+        oldtick = time.time()
 
         # first, do some rigid alignment, slice at a time
         for single_slice_idx in range(block_lo, block_hi):
@@ -261,8 +260,8 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
                           dest_weights,
                           match_offsets,
                           block_lo, block_hi)
-        print "AFTER", "C", cost, "MO", m_o
-
+        print "AFTER", "C", cost, "MO", m_o, "T:", time.time() - oldtick
+        oldtick = time.time()
 
         gradient_with_momentum = 0
         stepsize = 0.1
@@ -272,20 +271,29 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
         for iter in range(max_iterations):
             cost = mesh_derivs.all_derivs(all_mesh_pts,
                                           gradient,
-                                          neighbor_indices,
-                                          dists,
-                                          bary_indices,
-                                          bary_weights,
+                                          all_pairs,
                                           between_mesh_weights,
+                                          src_indices,
+                                          dest_indices,
+                                          dest_weights,
+                                          match_offsets,
+                                          edge_indices.astype(np.uint32),
+                                          edge_lengths,
                                           intra_slice_weight,
                                           cross_slice_winsor,
                                           intra_slice_winsor,
-                                          all_pairs,
                                           block_lo, block_hi,
-                                          4)
+                                          num_threads)
 
-            if iter % 100 == 0:
-                m_o = mean_offset(all_pairs, all_mesh_pts, bary_indices, bary_weights, block_lo, block_hi)
+            if iter > 0 and iter % 100 == 0:
+                m_o = mean_offset(all_mesh_pts,
+                                  all_pairs,
+                                  src_indices,
+                                  dest_indices,
+                                  dest_weights,
+                                  match_offsets,
+                                  block_lo, block_hi)
+
                 print iter, "SL:", block_lo, block_hi, num_meshes, "COST:", cost, "MO:", m_o, "SZ:", stepsize, "T:", time.time() - oldtick
                 oldtick = time.time()
                 if (iter >= min_iterations) and ((m_o < .75) or (stepsize < 1e-20)):
@@ -294,13 +302,10 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
                 distortions = []
                 for single_slice_idx in range(block_lo, block_hi):
                     dmax = []
-                    for whichn, ni in enumerate(neighbor_indices.T):
-                        deltas = np.sqrt(((all_mesh_pts[single_slice_idx, ...] - all_mesh_pts[single_slice_idx, ni, ...]) ** 2).sum(axis=1))
-                        deltas = abs(deltas - dists[:, whichn])
-                        dmax.append(int(deltas.max()))
-                    distortions.append(max(dmax))
+                    deltas = all_mesh_pts[single_slice_idx, edge_indices[:, 0]] - all_mesh_pts[single_slice_idx, edge_indices[:, 1]]
+                    deltas = np.sqrt((deltas ** 2).sum(axis=1))
+                    distortions.append(int(max(deltas)))
                 print "DIS", distortions
-                worst = np.argmax(distortions)
 
             # relaxation of the mesh
             # initially, mesh is held rigid (all points transform together).
@@ -336,7 +341,8 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
             meshidx = mesh_pt_offsets[layerid]
             out_positions[url] = [(mesh.pts / mesh.layer_scale).tolist(),
                                   (all_mesh_pts[meshidx, :] / mesh.layer_scale).tolist()]
-            cPickle.dump([url, out_positions[url]], open("newpos{}.pickle".format(meshidx), "w"))
+            if "DUMP_LOCATIONS" in os.environ:
+                cPickle.dump([url, out_positions[url]], open("newpos{}.pickle".format(meshidx), "w"))
         else:
             out_positions[url] = [(mesh.pts / mesh.layer_scale).tolist(),
                                   (mesh.pts / mesh.layer_scale).tolist()]
