@@ -53,10 +53,11 @@ def get_moving_ls_transform(url_optimized_mesh):
 
 
 
-def save_optimized_meshes(tile_files, optimized_meshes, out_dir):
-    for ts_url in optimized_meshes.keys():
+def save_optimized_meshes(all_tile_urls, optimized_meshes, out_dir):
+    for ts_url in all_tile_urls:
         ts_fname = ts_url.replace('file://', '')
-        out_fname = os.path.join(out_dir, os.path.basename(ts_fname))
+        ts_base = os.path.basename(ts_fname)
+        out_fname = os.path.join(out_dir, ts_base)
         # read tilespec
         data = None
         with open(ts_fname, 'r') as data_file:
@@ -64,7 +65,7 @@ def save_optimized_meshes(tile_files, optimized_meshes, out_dir):
 
         if len(data) > 0:
             #transform = get_moving_ls_transform(optimized_meshes[ts_url])
-            transform = get_restricted_moving_ls_transform(optimized_meshes[ts_url])
+            transform = get_restricted_moving_ls_transform(optimized_meshes[ts_base])
 
             # change the transfromation
             for tile in data:
@@ -95,7 +96,7 @@ def read_ts_layers(tile_files):
         tsfile = os.path.basename(url)
         tsfile_to_layerid[tsfile] = layerid
 
-    return tsfile_to_layerid
+    return tsfile_to_layerid, actual_tile_urls
     
 
 
@@ -105,7 +106,7 @@ def optimize_layers_elastic_theano(tile_files, corr_files, image_width, image_he
     mesh_json = './mesh.json'
     export_mesh.export_mesh(jar_file, image_width, image_height, mesh_json, conf)
 
-    tsfile_to_layerid = read_ts_layers(tile_files)
+    tsfile_to_layerid, all_tile_urls = read_ts_layers(tile_files)
 
     # TODO - make sure its not a json files list
     actual_corr_files = []
@@ -122,7 +123,7 @@ def optimize_layers_elastic_theano(tile_files, corr_files, image_width, image_he
     
     # Save the output
     utils.create_dir(out_dir)
-    save_optimized_meshes(tile_files, optimized_meshes, out_dir)
+    save_optimized_meshes(all_tile_urls, optimized_meshes, out_dir)
     
 
 

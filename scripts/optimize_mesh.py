@@ -1,15 +1,14 @@
 import sys
-import ujson as json
+import json
 import glob
+import os
 import os.path
 import time
 import numpy as np
-from numpy.linalg import lstsq
-import cPickle as pickle
-from scipy.spatial import cKDTree as KDTree  # for searching surrounding points
-from collections import defaultdict
+import cPickle
 from progressbar import ProgressBar, ETA, Bar, Counter
 import h5py
+from scipy.spatial import Delaunay
 
 import pyximport
 pyximport.install()
@@ -36,90 +35,36 @@ class MeshParser(object):
         for idx, pt in enumerate(self.pts):
             self._rowcolidx[int(pt[0] * multiplier), int(pt[1] * multiplier)] = idx
 
-        # Build the KDTree for neighbor searching
-        self.kdt = KDTree(self.pts, leafsize=3)
-
-        mesh_p_x = self.pts[:, 0]
-        mesh_p_y = self.pts[:, 1]
-        self.long_row_min_x = min(mesh_p_x)
-        self.long_row_min_y = min(mesh_p_y)
-        self.long_row_max_x = max(mesh_p_x)
-        self.long_row_max_y = max(mesh_p_y)
-        print("Mesh long-row boundary values: min_x: {}, miny: {}, max_x: {}, max_y: {}".format(
-            self.long_row_min_x, self.long_row_min_y, self.long_row_max_x, self.long_row_max_y))
-        self.short_row_min_x = min(mesh_p_x[mesh_p_x > self.long_row_min_x])
-        self.short_row_min_y = min(mesh_p_y[mesh_p_y > self.long_row_min_y])
-        self.short_row_max_x = max(mesh_p_x[mesh_p_x < self.long_row_max_x])
-        self.short_row_max_y = max(mesh_p_y[mesh_p_y < self.long_row_max_y])
-        print("Mesh short-row boundary values: min_x: {}, miny: {}, max_x: {}, max_y: {}".format(
-            self.short_row_min_x, self.short_row_min_y, self.short_row_max_x, self.short_row_max_y))
+        # for neighbor searching and internal mesh
+        self.triangulation = Delaunay(self.pts)
 
     def rowcolidx(self, xy):
         return self._rowcolidx[int(xy[0] * self.multiplier), int(xy[1] * self.multiplier)]
 
-    def query_internal(self, points, k):
-        """Returns the k nearest neighbors, while taking into account the mesh formation.
-        If a point is on the boudaries of the mesh, only the relevant neighbors will be returned,
-        and all others will have distance 0, and neighbor index == the query point"""
-        dists, surround_indices = self.kdt.query(points, k + 1)  # we're querying against ourselves, usually
+    def query_internal(self):
+        simplices = self.triangulation.simplices
+        # find unique edges
+        edge_indices = np.vstack((simplices[:, :2],
+                                  simplices[:, 1:],
+                                  simplices[:, [0, 2]]))
+        edge_indices = np.vstack({tuple(sorted(tuple(row))) for row in edge_indices})
+        # mesh.pts[edge_indices, :].shape =(#edges, #pts-per-edge, #values-per-pt)
+        edge_lengths = np.sqrt((np.diff(self.pts[edge_indices], axis=1) ** 2).sum(axis=2)).ravel()
+        triangles_as_pts = self.pts[simplices]
+        triangle_areas = 0.5 * np.cross(triangles_as_pts[:, 2, :] - triangles_as_pts[:, 0, :],
+                                        triangles_as_pts[:, 1, :] - triangles_as_pts[:, 0, :])
+        return edge_indices, edge_lengths, simplices, triangle_areas
 
-        # Find out if the point is on the "boundary"
-        for i, p in enumerate(points):
-            # on the left side of the mesh
-            if p[0] < self.short_row_min_x:
-                # remove any surrounding point that is to the right of short_row_min_x
-                point_surround_indices = surround_indices[i].astype(np.int32)
-                tris_x = self.pts[point_surround_indices, 0]
-                dists[i][tris_x > self.short_row_min_x] = 0.0
-                surround_indices[i][tris_x > self.short_row_min_x] = surround_indices[i][0]
-            # on the left side of the mesh
-            if p[0] > self.short_row_max_x:
-                # remove any surrounding point that is to the left of short_row_max_x
-                point_surround_indices = surround_indices[i].astype(np.int32)
-                tris_x = self.pts[point_surround_indices, 0]
-                dists[i][tris_x < self.short_row_max_x] = 0.0
-                surround_indices[i][tris_x < self.short_row_max_x] = surround_indices[i][0]
-            # on the upper side of the mesh
-            if p[1] < self.short_row_min_y:
-                # remove any surrounding point that is above short_row_min_y
-                point_surround_indices = surround_indices[i].astype(np.int32)
-                tris_y = self.pts[point_surround_indices, 1]
-                dists[i][tris_y > self.short_row_min_y] = 0.0
-                surround_indices[i][tris_y > self.short_row_min_y] = surround_indices[i][0]
-            # on the lower side of the mesh
-            if p[1] > self.short_row_max_y:
-                # remove any surrounding point that is under short_row_max_y
-                point_surround_indices = surround_indices[i].astype(np.int32)
-                tris_y = self.pts[point_surround_indices, 1]
-                dists[i][tris_y < self.short_row_max_y] = 0.0
-                surround_indices[i][tris_y < self.short_row_max_y] = surround_indices[i][0]
-
-        return dists[:, 1:], surround_indices[:, 1:]  # chop off first closest (= self)
-
-    def query_cross(self, points, k):
-        """Returns the k nearest neighbors"""
-        dists, surround_indices = self.kdt.query(points, k)
-
-        return dists, surround_indices
-
-
-def barycentric(pt, verts_x, verts_y):
-    '''computes the barycentric weights to reconstruct an array of points in an
-    array of triangles.
-
-    '''
-    x, y = pt.T
-    x_1, x_2, x_3 = verts_x.T
-    y_1, y_2, y_3 = verts_y.T
-
-    # from wikipedia
-    den = ((y_2 - y_3) * (x_1 - x_3) + (x_3 - x_2) * (y_1 - y_3))
-    l1 = ((y_2 - y_3) * (x - x_3) + (x_3 - x_2) * (y - y_3)) / den
-    l2 = ((y_3 - y_1) * (x - x_3) + (x_1 - x_3) * (y - y_3)) / den
-    l3 = 1 - l1 - l2
-    mask = (den == 0)
-    l1[mask] = l2[mask] = l3[mask] = 1.0 / 3
-    return l1.reshape((-1, 1)).astype(np.float32), l2.reshape((-1, 1)).astype(np.float32), l3.reshape((-1, 1)).astype(np.float32)
+    def query_cross_barycentrics(self, points):
+        """Returns the mesh indices that surround a point, and the barycentric weights of those points"""
+        simplex_indices = self.triangulation.find_simplex(points)
+        assert not np.any(simplex_indices == -1)
+        # http://codereview.stackexchange.com/questions/41024/faster-computation-of-barycentric-coordinates-for-many-points
+        X = self.triangulation.transform[simplex_indices, :2]
+        Y = points - self.triangulation.transform[simplex_indices, 2]
+        b = np.einsum('ijk,ik->ij', X, Y)
+        bcoords = np.c_[b, 1 - b.sum(axis=1)]
+        return self.triangulation.simplices[simplex_indices], bcoords
 
 def load_matches_hdf5(matches_files, mesh, tsfile_to_layerid):
     pbar = ProgressBar(widgets=['Loading matches: ', Counter(), ' / ', str(len(matches_files)), " ", Bar(), ETA()])
@@ -127,7 +72,7 @@ def load_matches_hdf5(matches_files, mesh, tsfile_to_layerid):
     for midx, mf in enumerate(pbar(matches_files)):
         with h5py.File(mf, 'r') as m:
             for idx in range(2):
-                #if not m['shouldConnect']:
+                # if not m['shouldConnect']:
                 #    continue
                 if not "matches_{}_p1".format(idx) in m.keys():
                     continue
@@ -142,21 +87,11 @@ def load_matches_hdf5(matches_files, mesh, tsfile_to_layerid):
                 p1_rc_indices = [mesh.rowcolidx(p1) for p1 in orig_p1s]
 
                 p2_locs = m["matches_{}_p2".format(idx)][...]
-                dists, surround_indices = mesh.query_cross(p2_locs, 3)
-                surround_indices = surround_indices.astype(np.uint32)
-                tris_x = mesh.pts[surround_indices, 0]
-                tris_y = mesh.pts[surround_indices, 1]
-                w1, w2, w3 = barycentric(p2_locs, tris_x, tris_y)
+                surround_points, surround_weights = mesh.query_cross_barycentrics(p2_locs)
 
-                # TODO: figure out why this is needed
-                reorder = np.argsort(p1_rc_indices)
-                p1_rc_indices = np.array(p1_rc_indices).astype(np.uint32)[reorder]
-                surround_indices = surround_indices[reorder, :]
-                weights = np.hstack((w1, w2, w3)).astype(FLOAT_TYPE)[reorder, :]
-                assert p1_rc_indices.shape[0] == weights.shape[0]
-                tsfile1 = tsfile_to_layerid[os.path.basename(str(m["matches{}_url1".format(idx)][...]))]
-                tsfile2 = tsfile_to_layerid[os.path.basename(str(m["matches{}_url2".format(idx)][...]))]
-                yield tsfile1, tsfile2, p1_rc_indices, surround_indices, weights
+                layer1 = tsfile_to_layerid[os.path.basename(m["matches{}_url1".format(idx)][...].encode('utf-8'))]
+                layer2 = tsfile_to_layerid[os.path.basename(m["matches{}_url2".format(idx)][...].encode('utf-8'))]
+                yield layer1, layer2, p1_rc_indices, surround, surround_weights
 
 
 def load_matches(matches_files, mesh, tsfile_to_layerid):
@@ -168,25 +103,14 @@ def load_matches(matches_files, mesh, tsfile_to_layerid):
                 continue
             # parse matches file, and get p1's mesh x and y points
             orig_p1s = np.array([(pair["p1"]["l"][0], pair["p1"]["l"][1]) for pair in m["correspondencePointPairs"]], dtype=FLOAT_TYPE)
-
             p1_rc_indices = [mesh.rowcolidx(p1) for p1 in orig_p1s]
-
             p2_locs = np.array([pair["p2"]["l"] for pair in m["correspondencePointPairs"]])
-            dists, surround_indices = mesh.query_cross(p2_locs, 3)
-            surround_indices = surround_indices.astype(np.uint32)
-            tris_x = mesh.pts[surround_indices, 0]
-            tris_y = mesh.pts[surround_indices, 1]
-            w1, w2, w3 = barycentric(p2_locs, tris_x, tris_y)
-
-            # TODO: figure out why this is needed
-            reorder = np.argsort(p1_rc_indices)
-            p1_rc_indices = np.array(p1_rc_indices).astype(np.uint32)[reorder]
-            surround_indices = surround_indices[reorder, :]
-            weights = np.hstack((w1, w2, w3)).astype(FLOAT_TYPE)[reorder, :]
-            assert p1_rc_indices.shape[0] == weights.shape[0]
-            tsfile1 = tsfile_to_layerid[os.path.basename(m["url1"])]
-            tsfile2 = tsfile_to_layerid[os.path.basename(m["url2"])]
-            yield tsfile1, tsfile2, p1_rc_indices, surround_indices, weights
+            surround_points, surround_weights = mesh.query_cross_barycentrics(p2_locs)
+            yield (tsfile_to_layerid[os.path.basename(m["url1"])],
+                   tsfile_to_layerid[os.path.basename(m["url2"])],
+                   np.array(p1_rc_indices, dtype=np.uint32),
+                   np.array(surround_points, dtype=np.uint32),
+                   surround_weights)
 
 def linearize_grad(positions, gradients):
     '''perform a least-squares fit, then return the values from that fit'''
@@ -200,28 +124,30 @@ def blend(a, b, t):
     '''at t=0, return a, at t=1, return b'''
     return a + (b - a) * t
 
-def mean_offset(all_pairs, all_mesh_pts, bary_indices, bary_weights, lo, hi):
+
+def mean_offset(all_mesh_pts,
+                all_pairs,
+                src_indices,
+                pt_indices,
+                pt_weights,
+                pair_offsets,
+                lo, hi):
     num_pts = all_mesh_pts.shape[1]
     means = []
-    for id1, id2, baryoff1, baryoff2 in all_pairs:
+    for idx, (id1, id2) in enumerate(all_pairs):
         if id1 >= hi or id2 >= hi:
             continue
         if id1 < lo and id2 < lo:
             continue
         if abs(int(id1) - int(id2)) == 1:
-            mesh1 = all_mesh_pts[id1, ...]
-            mesh2 = all_mesh_pts[id2, ...]
-            bindices = bary_indices[baryoff1:(baryoff1 + num_pts), ...]
-            mesh_1_matches = mesh2[bindices, ...]
-            mesh_1_matches *= bary_weights[baryoff1:(baryoff1 + num_pts), ..., np.newaxis]
-            delta = (mesh1 - mesh_1_matches.sum(axis=1)) ** 2
-            means.append(np.sqrt(delta.sum(axis=1)[bindices[:, 0] != -1]).mean())
-
-            bindices = bary_indices[baryoff2:(baryoff2 + num_pts), ...]
-            mesh_2_matches = mesh1[bindices, ...]
-            mesh_2_matches *= bary_weights[baryoff2:(baryoff2 + num_pts), ..., np.newaxis]
-            delta = (mesh2 - mesh_2_matches.sum(axis=1)) ** 2
-            means.append(np.median(np.sqrt(delta.sum(axis=1)[bindices[:, 0] != -1])))
+            offset = pair_offsets[idx]
+            next_offset = pair_offsets[idx + 1]
+            src_pts = all_mesh_pts[id1, src_indices[offset:next_offset]]  # Nx2
+            dest_pts = all_mesh_pts[id2, pt_indices[offset:next_offset]]  # Nx3x2
+            dest_weights = pt_weights[offset:next_offset]  # Nx3
+            dest_pts = np.einsum('ij,ijk->ik', dest_weights, dest_pts)
+            lens = np.sqrt(((src_pts - dest_pts) ** 2).sum(axis=1))
+            means.append(np.median(lens))
     return np.mean(means)
 
 
@@ -236,19 +162,25 @@ def optimize_meshes(mesh_file, matches_files, tsfile_to_layerid, conf_dict={}):
     block_step = conf_dict.get("block_step", 25)
     rigid_iterations = conf_dict.get("rigid_iterations", 50)
     min_iterations = conf_dict.get("min_iterations", 200)
-    max_iterations = conf_dict.get("max_iterations", 2000)
-    num_threads = conf_dict.get("optimization_threads", 4)
+    max_iterations = conf_dict.get("max_iterations", 500)
+    num_threads = conf_dict.get("optimization_threads", 8)
 
     # Load the mesh
     mesh = MeshParser(mesh_file)
     num_pts = mesh.pts.shape[0]
+
+    # Build internal structural mesh
+    edge_indices, edge_lengths, face_indices, face_areas = mesh.query_internal()
 
     # Adjust winsor values according to layer scale
     cross_slice_winsor = cross_slice_winsor * mesh.layer_scale
     intra_slice_winsor = intra_slice_winsor * mesh.layer_scale
 
     # load the slice-to-slice matches
-    cross_links = dict(((v[0], v[1]), v[2:]) for v in load_matches_hdf5(matches_files, mesh, tsfile_to_layerid))
+    if 'hdf5' in matches_files[0]:
+        cross_links = sorted(load_matches_hdf5(matches_files, mesh, tsfile_to_layerid))
+    else:
+        cross_links = sorted(load_matches(matches_files, mesh, tsfile_to_layerid))
 
     # find all the slices represented
     present_slices = sorted(list(set(k[0] for k in cross_links) | set(k[1] for k in cross_links)))
@@ -258,48 +190,21 @@ def optimize_meshes(mesh_file, matches_files, tsfile_to_layerid, conf_dict={}):
     all_mesh_pts = np.concatenate([mesh.pts[np.newaxis, ...]] * len(present_slices), axis=0)
     mesh_pt_offsets = dict(zip(present_slices, np.arange(len(present_slices))))
 
-    # Build internal structural mesh
-    dists, neighbor_indices = mesh.query_internal(mesh.pts, 6)
-    neighbor_indices = neighbor_indices.astype(np.uint32)
-    dists = dists.astype(FLOAT_TYPE)
-
-    # cross-mesh links
-
-    # we assume nearly every point has a match, so we store a set of 3
-    # barycentric neighbor indices & weights for each point in the mesh, and
-    # use neighbor[0] == -1 to indicate no match.
-    bary_indices = []
-    bary_weights = []
-    bary_offsets = {}
-    for (id1, id2), (m1_indices, m2_surround_indices, m2_weights) in sorted(cross_links.iteritems()):
-        cur_bary_indices = -np.ones((num_pts, 3), np.int32)
-        cur_bary_weights = np.zeros((num_pts, 3), FLOAT_TYPE)
-        for idx, bn_indices, bn_weights in zip(m1_indices, m2_surround_indices, m2_weights):
-            cur_bary_indices[idx, :] = bn_indices
-            cur_bary_weights[idx, :] = bn_weights
-        assert m1_indices.shape[0] == m2_surround_indices.shape[0] == m2_weights.shape[0]
-        bary_indices.append(cur_bary_indices)
-        bary_weights.append(cur_bary_weights)
-        bary_offsets[id1, id2] = (len(bary_indices) - 1) * num_pts
-
-    bary_indices = np.vstack(bary_indices)
-    bary_weights = np.vstack(bary_weights)
+    # concatenate the simplicial indices and weights for cross slice matches
+    src_indices, dest_indices, dest_weights = zip(*[(sidx, pidx, pweight) for (_, _, sidx, pidx, pweight) in cross_links])
+    match_offsets = np.cumsum([0] + [pi.shape[0] for pi in src_indices]).astype(np.uint32)
+    src_indices = np.concatenate(src_indices).astype(np.uint32)
+    dest_indices = np.vstack(dest_indices)
+    dest_weights = np.vstack(dest_weights)
 
     # build the list of all pairs with their offsets
-    all_pairs = np.vstack(sorted([(mesh_pt_offsets[id1],
-                                   mesh_pt_offsets[id2],
-                                   bary_offsets[id1, id2],
-                                   bary_offsets[id2, id1])
-                                  for id1, id2 in bary_offsets.keys() if id1 < id2])).astype(np.uint32)
-    assert 2 * len(all_pairs) == len(cross_links)
+    all_pairs = np.vstack([(mesh_pt_offsets[id1], mesh_pt_offsets[id2])
+                           for id1, id2, _, _, _ in cross_links]).astype(np.uint32)
     between_mesh_weights = np.array([cross_slice_weight / float(abs(int(id1) - int(id2)))
-                                     for id1, id2, _, _ in all_pairs],
+                                     for id1, id2 in all_pairs],
                                     dtype=FLOAT_TYPE)
 
-
-    oldtick = time.time()
-
-    pbar = ProgressBar(widgets=[Bar(), ETA()])
+    # pbar = ProgressBar(widgets=[Bar(), ETA()])
 
     for block_lo in (range(0, max(1, num_meshes - block_size + 1), block_step)):
         print
@@ -308,20 +213,31 @@ def optimize_meshes(mesh_file, matches_files, tsfile_to_layerid, conf_dict={}):
         gradient = np.empty_like(all_mesh_pts[block_lo:block_hi, ...])
         cost = mesh_derivs.all_derivs(all_mesh_pts,
                                       gradient,
-                                      neighbor_indices,
-                                      dists,
-                                      bary_indices,
-                                      bary_weights,
+                                      all_pairs,
                                       between_mesh_weights,
+                                      src_indices,
+                                      dest_indices,
+                                      dest_weights,
+                                      match_offsets,
+                                      edge_indices.astype(np.uint32),
+                                      edge_lengths,
+                                      face_indices.astype(np.uint32),
+                                      face_areas,
                                       intra_slice_weight,
                                       cross_slice_winsor,
                                       intra_slice_winsor,
-                                      all_pairs,
                                       block_lo, block_hi,
                                       num_threads)
 
-        m_o = mean_offset(all_pairs, all_mesh_pts, bary_indices, bary_weights, block_lo, block_hi)
+        m_o = mean_offset(all_mesh_pts,
+                          all_pairs,
+                          src_indices,
+                          dest_indices,
+                          dest_weights,
+                          match_offsets,
+                          block_lo, block_hi)
         print "BEFORE", "C", cost, "MO", m_o
+        oldtick = time.time()
 
         # first, do some rigid alignment, slice at a time
         for single_slice_idx in range(block_lo, block_hi):
@@ -331,17 +247,21 @@ def optimize_meshes(mesh_file, matches_files, tsfile_to_layerid, conf_dict={}):
             for iter in range(rigid_iterations):
                 cost = mesh_derivs.all_derivs(all_mesh_pts,
                                               gradient,
-                                              neighbor_indices,
-                                              dists,
-                                              bary_indices,
-                                              bary_weights,
+                                              all_pairs,
                                               between_mesh_weights,
+                                              src_indices,
+                                              dest_indices,
+                                              dest_weights,
+                                              match_offsets,
+                                              edge_indices.astype(np.uint32),
+                                              edge_lengths,
+                                              face_indices.astype(np.uint32),
+                                              face_areas,
                                               intra_slice_weight,
                                               cross_slice_winsor,
                                               intra_slice_winsor,
-                                              all_pairs,
                                               single_slice_idx, single_slice_idx + 1,
-                                              1)
+                                              4)
                 if cost < prev_cost:
                     lin_grad = linearize_grad(all_mesh_pts[single_slice_idx, ...],
                                               gradient[0, ...])
@@ -352,6 +272,34 @@ def optimize_meshes(mesh_file, matches_files, tsfile_to_layerid, conf_dict={}):
                     step_size = 0.5 * step_size
                 prev_cost = cost
 
+        cost = mesh_derivs.all_derivs(all_mesh_pts,
+                                      gradient,
+                                      all_pairs,
+                                      between_mesh_weights,
+                                      src_indices,
+                                      dest_indices,
+                                      dest_weights,
+                                      match_offsets,
+                                      edge_indices.astype(np.uint32),
+                                      edge_lengths,
+                                      face_indices.astype(np.uint32),
+                                      face_areas,
+                                      intra_slice_weight,
+                                      cross_slice_winsor,
+                                      intra_slice_winsor,
+                                      block_lo, block_hi,
+                                      num_threads)
+
+        m_o = mean_offset(all_mesh_pts,
+                          all_pairs,
+                          src_indices,
+                          dest_indices,
+                          dest_weights,
+                          match_offsets,
+                          block_lo, block_hi)
+        print "AFTER", "C", cost, "MO", m_o, "T:", time.time() - oldtick
+        oldtick = time.time()
+
         gradient_with_momentum = 0
         stepsize = 0.1
         prev_cost = np.inf
@@ -360,23 +308,35 @@ def optimize_meshes(mesh_file, matches_files, tsfile_to_layerid, conf_dict={}):
         for iter in range(max_iterations):
             cost = mesh_derivs.all_derivs(all_mesh_pts,
                                           gradient,
-                                          neighbor_indices,
-                                          dists,
-                                          bary_indices,
-                                          bary_weights,
+                                          all_pairs,
                                           between_mesh_weights,
+                                          src_indices,
+                                          dest_indices,
+                                          dest_weights,
+                                          match_offsets,
+                                          edge_indices.astype(np.uint32),
+                                          edge_lengths,
+                                          face_indices.astype(np.uint32),
+                                          face_areas,
                                           intra_slice_weight,
                                           cross_slice_winsor,
                                           intra_slice_winsor,
-                                          all_pairs,
                                           block_lo, block_hi,
-                                          4)
+                                          num_threads)
 
-            if iter % 100 == 0:
-                m_o = mean_offset(all_pairs, all_mesh_pts, bary_indices, bary_weights, block_lo, block_hi)
+            if iter > 0 and iter % 100 == 0:
+                m_o = mean_offset(all_mesh_pts,
+                                  all_pairs,
+                                  src_indices,
+                                  dest_indices,
+                                  dest_weights,
+                                  match_offsets,
+                                  block_lo, block_hi)
+
                 print iter, "SL:", block_lo, block_hi, num_meshes, "COST:", cost, "MO:", m_o, "SZ:", stepsize, "T:", time.time() - oldtick
                 oldtick = time.time()
-                if (iter >= min_iterations) and (m_o < .75):
+                # TODO: parameter for m_o cutoff
+                if (iter >= min_iterations) and ((m_o < .5) or (stepsize < 1e-20)):
                     break
 
             # relaxation of the mesh
@@ -391,7 +351,7 @@ def optimize_meshes(mesh_file, matches_files, tsfile_to_layerid, conf_dict={}):
                     gradient[gidx, ...] = blend(linearized, gradient[gidx, ...], iter / float(relaxation_end))
 
             # step size adjustment
-            if cost <= prev_cost:
+            if cost < prev_cost and not np.isinf(cost):
                 stepsize *= 1.1
                 if stepsize > 1.0:
                     stepsize = 1.0
@@ -404,6 +364,7 @@ def optimize_meshes(mesh_file, matches_files, tsfile_to_layerid, conf_dict={}):
                 stepsize *= 0.5
                 gradient_with_momentum = 0.0
                 prev_cost = np.inf
+            assert not np.any(~ np.isfinite(all_mesh_pts))
 
     # Prepare per-layer output
     out_positions = {}
@@ -412,10 +373,12 @@ def optimize_meshes(mesh_file, matches_files, tsfile_to_layerid, conf_dict={}):
         if layerid in present_slices:
             meshidx = mesh_pt_offsets[layerid]
             out_positions[tsfile] = [(mesh.pts / mesh.layer_scale).tolist(),
-                                  (all_mesh_pts[meshidx, :] / mesh.layer_scale).tolist()]
+                                     (all_mesh_pts[meshidx, :] / mesh.layer_scale).tolist()]
+            if "DUMP_LOCATIONS" in os.environ:
+                cPickle.dump([tsfile, out_positions[tsfile]], open("newpos{}.pickle".format(meshidx), "w"))
         else:
             out_positions[tsfile] = [(mesh.pts / mesh.layer_scale).tolist(),
-                                  (mesh.pts / mesh.layer_scale).tolist()]
+                                     (mesh.pts / mesh.layer_scale).tolist()]
 
     return out_positions
 
