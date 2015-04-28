@@ -132,10 +132,10 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
 
     block_size = conf_dict.get("block_size", 35)
     block_step = conf_dict.get("block_step", 25)
-    rigid_iterations = conf_dict.get("rigid_iterations", 50)
+    rigid_iterations = conf_dict.get("rigid_iterations", 200)
     min_iterations = conf_dict.get("min_iterations", 200)
     max_iterations = conf_dict.get("max_iterations", 2000)
-    num_threads = conf_dict.get("optimization_threads", 4)
+    num_threads = conf_dict.get("optimization_threads", 8)
 
     # Load the mesh
     mesh = MeshParser(mesh_file)
@@ -190,6 +190,8 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
                                       match_offsets,
                                       edge_indices.astype(np.uint32),
                                       edge_lengths,
+                                      face_indices.astype(np.uint32),
+                                      face_areas,
                                       intra_slice_weight,
                                       cross_slice_winsor,
                                       intra_slice_winsor,
@@ -222,6 +224,8 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
                                               match_offsets,
                                               edge_indices.astype(np.uint32),
                                               edge_lengths,
+                                              face_indices.astype(np.uint32),
+                                              face_areas,
                                               intra_slice_weight,
                                               cross_slice_winsor,
                                               intra_slice_winsor,
@@ -247,6 +251,8 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
                                       match_offsets,
                                       edge_indices.astype(np.uint32),
                                       edge_lengths,
+                                      face_indices.astype(np.uint32),
+                                      face_areas,
                                       intra_slice_weight,
                                       cross_slice_winsor,
                                       intra_slice_winsor,
@@ -279,6 +285,8 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
                                           match_offsets,
                                           edge_indices.astype(np.uint32),
                                           edge_lengths,
+                                          face_indices.astype(np.uint32),
+                                          face_areas,
                                           intra_slice_weight,
                                           cross_slice_winsor,
                                           intra_slice_winsor,
@@ -319,7 +327,7 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
                     gradient[gidx, ...] = blend(linearized, gradient[gidx, ...], iter / float(relaxation_end))
 
             # step size adjustment
-            if cost <= prev_cost:
+            if cost < prev_cost and not np.isinf(cost):
                 stepsize *= 1.1
                 if stepsize > 1.0:
                     stepsize = 1.0
@@ -332,6 +340,7 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
                 stepsize *= 0.5
                 gradient_with_momentum = 0.0
                 prev_cost = np.inf
+            assert not np.any(~ np.isfinite(all_mesh_pts))
 
     # Prepare per-layer output
     out_positions = {}

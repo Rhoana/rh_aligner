@@ -1,4 +1,4 @@
-#cython: boundscheck=True, wraparound=False, cdivision=True
+#cython: boundscheck=False, wraparound=False, cdivision=True
 from __future__ import division
 import numpy as np
 cimport numpy
@@ -11,6 +11,9 @@ ctypedef numpy.int32_t int32
 ctypedef numpy.uint32_t uint32
 
 npFLOAT_TYPE = np.float64
+
+cdef extern from "math.h":
+    float INFINITY
 
 cdef:
     FLOAT_TYPE small_value = 0.0001
@@ -181,6 +184,62 @@ cpdef FLOAT_TYPE internal_mesh_derivs(FLOAT_TYPE[:, ::1] mesh,
     return cost
 
 ##################################################
+# MESH AREA DERIVS
+##################################################
+cpdef FLOAT_TYPE area_mesh_derivs(FLOAT_TYPE[:, ::1] mesh,
+                                  FLOAT_TYPE[:, ::1] d_cost_d_mesh,
+                                  uint32[:, ::1] triangle_indices,
+                                  FLOAT_TYPE[:] rest_areas,
+                                  FLOAT_TYPE all_weight) nogil:
+    cdef:
+        int i
+        int idx0, idx1, idx2
+        FLOAT_TYPE v01x, v01y, v02x, v02y, area, r_area
+        FLOAT_TYPE cost, c, dc_da
+
+    cost = 0
+    for i in range(triangle_indices.shape[0]):
+        idx0 = triangle_indices[i, 0]
+        idx1 = triangle_indices[i, 1]
+        idx2 = triangle_indices[i, 2]
+
+        v01x = mesh[idx1, 0] - mesh[idx0, 0]
+        v01y = mesh[idx1, 1] - mesh[idx0, 1]
+        v02x = mesh[idx2, 0] - mesh[idx0, 0]
+        v02y = mesh[idx2, 1] - mesh[idx0, 1]
+
+        area = 0.5 * (v02x * v01y - v01x * v02y)
+        r_area = rest_areas[i]
+        if (area * r_area <= 0):
+            c = INFINITY
+            dc_da = 0
+        else:
+            # cost is ((A - A_rest) / A) ^ 2 * A_rest  (last term is for area normalization)
+            #
+            #      / A  -  A     \ 2
+            #      |        rest |     |       |
+            #      | ----------- |   * | A     |
+            #      \      A      /     |  rest |
+            c = all_weight * (((area - r_area) / area) ** 2)
+            dc_da = 2 * all_weight * r_area * (area - r_area) / (area ** 3)
+
+        cost += c
+
+        # update derivs
+        d_cost_d_mesh[idx1, 0] += dc_da * 0.5 * (-v02y)
+        d_cost_d_mesh[idx1, 1] += dc_da * 0.5 * (v02x)
+        d_cost_d_mesh[idx2, 0] += dc_da * 0.5 * (v01y)
+        d_cost_d_mesh[idx2, 1] += dc_da * 0.5 * (-v01x)
+
+        # sum of negative of above
+        d_cost_d_mesh[idx0, 0] += dc_da * 0.5 * (v02y - v01y)
+        d_cost_d_mesh[idx0, 1] += dc_da * 0.5 * (v01x - v02x)
+
+    return cost
+
+
+
+##################################################
 # ALL DERIVS IN PARALLEL
 ##################################################
 
@@ -192,13 +251,15 @@ cpdef FLOAT_TYPE all_derivs(FLOAT_TYPE[:, :, ::1] meshes,
                             uint32[:, ::1] dest_indices,
                             FLOAT_TYPE[:, ::1] dest_weights,
                             uint32[::1] match_offsets,
-                            uint32[:, ::1] internal_edge_indices,   # same for all meshes
-                            FLOAT_TYPE[::1] internal_rest_lengths,  # same for all meshes
+                            uint32[:, ::1] edge_indices,   # same for all meshes
+                            FLOAT_TYPE[::1] rest_lengths,  # same for all meshes
+                            uint32[:, ::1] triangle_indices,   # same for all meshes
+                            FLOAT_TYPE[::1] triangle_rest_areas,  # same for all meshes
                             FLOAT_TYPE within_mesh_weight,
                             FLOAT_TYPE between_winsor,
                             FLOAT_TYPE within_winsor,
                             uint32 lo, uint32 hi,
-                            int num_threads):
+                            int num_threads) except -1:
     cdef:
         int num_meshes, num_pairs, num_pts
         FLOAT_TYPE[:, :, :, ::1] d_cost_per_thread
@@ -254,13 +315,22 @@ cpdef FLOAT_TYPE all_derivs(FLOAT_TYPE[:, :, ::1] meshes,
                 continue
             costs[tid] += internal_mesh_derivs(meshes[i, ...],
                                                d_cost_per_thread[tid, i - lo, ...],
-                                               internal_edge_indices,
-                                               internal_rest_lengths,
+                                               edge_indices,
+                                               rest_lengths,
                                                within_mesh_weight,
                                                within_winsor)
+            costs[tid] += area_mesh_derivs(meshes[i, ...],
+                                           d_cost_per_thread[tid, i - lo, ...],
+                                           triangle_indices,
+                                           triangle_rest_areas,
+                                           within_mesh_weight)
+
+
 
     # ignore last block of derivatives (see above)
     np_d_cost_per_thread[:, :-1, ...].sum(axis=0, out=d_cost_d_meshes)
+
+    assert not np.any(np.isnan(d_cost_d_meshes)), "NaN deriv"
 
     return np_costs.sum()
 
