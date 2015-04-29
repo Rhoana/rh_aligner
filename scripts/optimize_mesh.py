@@ -57,8 +57,11 @@ class MeshParser(object):
 
     def query_cross_barycentrics(self, points):
         """Returns the mesh indices that surround a point, and the barycentric weights of those points"""
-        simplex_indices = self.triangulation.find_simplex(points)
+        p = points.copy()
+        p[p < 0] = 0.01
+        simplex_indices = self.triangulation.find_simplex(p)
         assert not np.any(simplex_indices == -1)
+        
         # http://codereview.stackexchange.com/questions/41024/faster-computation-of-barycentric-coordinates-for-many-points
         X = self.triangulation.transform[simplex_indices, :2]
         Y = points - self.triangulation.transform[simplex_indices, 2]
@@ -89,10 +92,13 @@ def load_matches_hdf5(matches_files, mesh, tsfile_to_layerid):
                 p2_locs = m["matches_{}_p2".format(idx)][...]
                 surround_points, surround_weights = mesh.query_cross_barycentrics(p2_locs)
 
-                layer1 = tsfile_to_layerid[os.path.basename(m["matches{}_url1".format(idx)][...].encode('utf-8'))]
-                layer2 = tsfile_to_layerid[os.path.basename(m["matches{}_url2".format(idx)][...].encode('utf-8'))]
-                yield layer1, layer2, p1_rc_indices, surround, surround_weights
+                layer1 = tsfile_to_layerid[os.path.basename(str(m["matches{}_url1".format(idx)][...]))]
+                layer2 = tsfile_to_layerid[os.path.basename(str(m["matches{}_url2".format(idx)][...]))]
 
+                yield (layer1, layer2,
+                       np.array(p1_rc_indices, dtype=np.uint32),
+                       np.array(surround_points, dtype=np.uint32),
+                       surround_weights)
 
 def load_matches(matches_files, mesh, tsfile_to_layerid):
     pbar = ProgressBar(widgets=['Loading matches: ', Counter(), ' / ', str(len(matches_files)), " ", Bar(), ETA()])
@@ -134,20 +140,24 @@ def mean_offset(all_mesh_pts,
                 lo, hi):
     num_pts = all_mesh_pts.shape[1]
     means = []
+    all_offsets = np.zeros((hi - lo, hi - lo))
     for idx, (id1, id2) in enumerate(all_pairs):
         if id1 >= hi or id2 >= hi:
             continue
         if id1 < lo and id2 < lo:
             continue
+        offset = pair_offsets[idx]
+        next_offset = pair_offsets[idx + 1]
+        src_pts = all_mesh_pts[id1, src_indices[offset:next_offset]]  # Nx2
+        dest_pts = all_mesh_pts[id2, pt_indices[offset:next_offset]]  # Nx3x2
+        dest_weights = pt_weights[offset:next_offset]  # Nx3
+        dest_pts = np.einsum('ij,ijk->ik', dest_weights, dest_pts)
+        lens = np.sqrt(((src_pts - dest_pts) ** 2).sum(axis=1))
+        all_offsets[id1 - lo, id2 - lo] = np.median(lens)
         if abs(int(id1) - int(id2)) == 1:
-            offset = pair_offsets[idx]
-            next_offset = pair_offsets[idx + 1]
-            src_pts = all_mesh_pts[id1, src_indices[offset:next_offset]]  # Nx2
-            dest_pts = all_mesh_pts[id2, pt_indices[offset:next_offset]]  # Nx3x2
-            dest_weights = pt_weights[offset:next_offset]  # Nx3
-            dest_pts = np.einsum('ij,ijk->ik', dest_weights, dest_pts)
-            lens = np.sqrt(((src_pts - dest_pts) ** 2).sum(axis=1))
             means.append(np.median(lens))
+    for r in all_offsets:
+        print " ".join("{0:.2f}".format(v) if v > 0.01 else "    " for v in r)
     return np.mean(means)
 
 
@@ -155,15 +165,20 @@ def optimize_meshes(mesh_file, matches_files, tsfile_to_layerid, conf_dict={}):
     # set default values
     cross_slice_weight = conf_dict.get("cross_slice_weight", 1.0)
     cross_slice_winsor = conf_dict.get("cross_slice_winsor", 1000)
-    intra_slice_weight = conf_dict.get("intra_slice_weight", 1.0 / 6)
+    intra_slice_weight = conf_dict.get("intra_slice_weight", 1.0)
     intra_slice_winsor = conf_dict.get("intra_slice_winsor", 200)
+    print "OLD WEIGHT", intra_slice_weight
+    intra_slice_weight = 3.0
+    
 
     block_size = conf_dict.get("block_size", 35)
     block_step = conf_dict.get("block_step", 25)
     rigid_iterations = conf_dict.get("rigid_iterations", 50)
     min_iterations = conf_dict.get("min_iterations", 200)
     max_iterations = conf_dict.get("max_iterations", 500)
+    mean_offset_threshold = conf_dict.get("mean_offset_threshold", 5)
     num_threads = conf_dict.get("optimization_threads", 8)
+    
 
     # Load the mesh
     mesh = MeshParser(mesh_file)
@@ -261,7 +276,7 @@ def optimize_meshes(mesh_file, matches_files, tsfile_to_layerid, conf_dict={}):
                                               cross_slice_winsor,
                                               intra_slice_winsor,
                                               single_slice_idx, single_slice_idx + 1,
-                                              4)
+                                              num_threads)
                 if cost < prev_cost:
                     lin_grad = linearize_grad(all_mesh_pts[single_slice_idx, ...],
                                               gradient[0, ...])
@@ -304,6 +319,7 @@ def optimize_meshes(mesh_file, matches_files, tsfile_to_layerid, conf_dict={}):
         stepsize = 0.1
         prev_cost = np.inf
         gradient = np.empty_like(all_mesh_pts[block_lo:block_hi, ...])
+        old_pts = all_mesh_pts[block_lo:block_hi, ...].copy()
 
         for iter in range(max_iterations):
             cost = mesh_derivs.all_derivs(all_mesh_pts,
@@ -336,7 +352,9 @@ def optimize_meshes(mesh_file, matches_files, tsfile_to_layerid, conf_dict={}):
                 print iter, "SL:", block_lo, block_hi, num_meshes, "COST:", cost, "MO:", m_o, "SZ:", stepsize, "T:", time.time() - oldtick
                 oldtick = time.time()
                 # TODO: parameter for m_o cutoff
-                if (iter >= min_iterations) and ((m_o < .5) or (stepsize < 1e-20)):
+                if (cost < prev_cost) and \
+                   (iter >= min_iterations) and \
+                   ((m_o < mean_offset_threshold * mesh.layer_scale) or (stepsize < 1e-20)):
                     break
 
             # relaxation of the mesh
@@ -357,10 +375,11 @@ def optimize_meshes(mesh_file, matches_files, tsfile_to_layerid, conf_dict={}):
                     stepsize = 1.0
                 # update with new gradients
                 gradient_with_momentum = (gradient + 0.5 * gradient_with_momentum)
+                old_pts = all_mesh_pts[block_lo:block_hi, ...].copy()
                 all_mesh_pts[block_lo:block_hi, ...] -= stepsize * gradient_with_momentum
                 prev_cost = cost
             else:  # we took a bad step: undo it, scale down stepsize, and start over
-                all_mesh_pts[block_lo:block_hi, ...] += stepsize * gradient_with_momentum
+                all_mesh_pts[block_lo:block_hi, ...] = old_pts[...]
                 stepsize *= 0.5
                 gradient_with_momentum = 0.0
                 prev_cost = np.inf
