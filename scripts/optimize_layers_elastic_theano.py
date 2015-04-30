@@ -80,7 +80,7 @@ def save_optimized_meshes(tile_files, optimized_meshes, out_dir):
             print('Nothing to write for tilespec {}'.format(ts_fname))
         
 def read_ts_layers(tile_files):
-    url_to_layerid = {}
+    tsfile_to_layerid = {}
 
     print "Reading tilespec files"
 
@@ -92,9 +92,10 @@ def read_ts_layers(tile_files):
     for url in actual_tile_urls:
         file_name = url.replace('file://', '')
         layerid = utils.read_layer_from_file(file_name)
-        url_to_layerid[url] = layerid
+        tsfile = os.path.basename(url)
+        tsfile_to_layerid[tsfile] = layerid
 
-    return url_to_layerid
+    return tsfile_to_layerid
     
 
 
@@ -104,7 +105,7 @@ def optimize_layers_elastic_theano(tile_files, corr_files, image_width, image_he
     mesh_json = './mesh.json'
     export_mesh.export_mesh(jar_file, image_width, image_height, mesh_json, conf)
 
-    url_to_layerid = read_ts_layers(tile_files)
+    tsfile_to_layerid = read_ts_layers(tile_files)
 
     # TODO - make sure its not a json files list
     actual_corr_files = []
@@ -117,7 +118,7 @@ def optimize_layers_elastic_theano(tile_files, corr_files, image_width, image_he
             conf_dict = json.load(f)["OptimizeLayersElasticTheano"]
 
     # Create a per-layer optimized mesh
-    optimized_meshes = optimize_meshes(mesh_json, actual_corr_files, url_to_layerid, conf_dict)
+    optimized_meshes = optimize_meshes(mesh_json, actual_corr_files, tsfile_to_layerid, conf_dict)
     
     # Save the output
     utils.create_dir(out_dir)

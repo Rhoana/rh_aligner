@@ -9,6 +9,7 @@ import cPickle as pickle
 from scipy.spatial import cKDTree as KDTree  # for searching surrounding points
 from collections import defaultdict
 from progressbar import ProgressBar, ETA, Bar, Counter
+import h5py
 
 import pyximport
 pyximport.install()
@@ -20,7 +21,7 @@ FLOAT_TYPE = np.float64
 sys.setrecursionlimit(10000)  # for grad
 
 class MeshParser(object):
-    def __init__(self, mesh_file, multiplier=100):
+    def __init__(self, mesh_file, multiplier=10):
         # load the mesh
         self.mesh = json.load(open(mesh_file))
         self.pts = np.array([(p["x"], p["y"]) for p in self.mesh["points"]], dtype=FLOAT_TYPE)
@@ -120,7 +121,45 @@ def barycentric(pt, verts_x, verts_y):
     l1[mask] = l2[mask] = l3[mask] = 1.0 / 3
     return l1.reshape((-1, 1)).astype(np.float32), l2.reshape((-1, 1)).astype(np.float32), l3.reshape((-1, 1)).astype(np.float32)
 
-def load_matches(matches_files, mesh, url_to_layerid):
+def load_matches_hdf5(matches_files, mesh, tsfile_to_layerid):
+    pbar = ProgressBar(widgets=['Loading matches: ', Counter(), ' / ', str(len(matches_files)), " ", Bar(), ETA()])
+
+    for midx, mf in enumerate(pbar(matches_files)):
+        with h5py.File(mf, 'r') as m:
+            for idx in range(2):
+                #if not m['shouldConnect']:
+                #    continue
+                if not "matches_{}_p1".format(idx) in m.keys():
+                    continue
+
+                # parse matches file, and get p1's mesh x and y points
+                orig_p1s = m["matches_{}_p1".format(idx)][...]
+
+                # Instead of shouldConnect
+                if len(orig_p1s) < 3:
+                    continue
+
+                p1_rc_indices = [mesh.rowcolidx(p1) for p1 in orig_p1s]
+
+                p2_locs = m["matches_{}_p2".format(idx)][...]
+                dists, surround_indices = mesh.query_cross(p2_locs, 3)
+                surround_indices = surround_indices.astype(np.uint32)
+                tris_x = mesh.pts[surround_indices, 0]
+                tris_y = mesh.pts[surround_indices, 1]
+                w1, w2, w3 = barycentric(p2_locs, tris_x, tris_y)
+
+                # TODO: figure out why this is needed
+                reorder = np.argsort(p1_rc_indices)
+                p1_rc_indices = np.array(p1_rc_indices).astype(np.uint32)[reorder]
+                surround_indices = surround_indices[reorder, :]
+                weights = np.hstack((w1, w2, w3)).astype(FLOAT_TYPE)[reorder, :]
+                assert p1_rc_indices.shape[0] == weights.shape[0]
+                tsfile1 = tsfile_to_layerid[os.path.basename(str(m["matches{}_url1".format(idx)][...]))]
+                tsfile2 = tsfile_to_layerid[os.path.basename(str(m["matches{}_url2".format(idx)][...]))]
+                yield tsfile1, tsfile2, p1_rc_indices, surround_indices, weights
+
+
+def load_matches(matches_files, mesh, tsfile_to_layerid):
     pbar = ProgressBar(widgets=['Loading matches: ', Counter(), ' / ', str(len(matches_files)), " ", Bar(), ETA()])
 
     for midx, mf in enumerate(pbar(matches_files)):
@@ -145,7 +184,9 @@ def load_matches(matches_files, mesh, url_to_layerid):
             surround_indices = surround_indices[reorder, :]
             weights = np.hstack((w1, w2, w3)).astype(FLOAT_TYPE)[reorder, :]
             assert p1_rc_indices.shape[0] == weights.shape[0]
-            yield url_to_layerid[m["url1"]], url_to_layerid[m["url2"]], p1_rc_indices, surround_indices, weights
+            tsfile1 = tsfile_to_layerid[os.path.basename(m["url1"])]
+            tsfile2 = tsfile_to_layerid[os.path.basename(m["url2"])]
+            yield tsfile1, tsfile2, p1_rc_indices, surround_indices, weights
 
 def linearize_grad(positions, gradients):
     '''perform a least-squares fit, then return the values from that fit'''
@@ -184,7 +225,7 @@ def mean_offset(all_pairs, all_mesh_pts, bary_indices, bary_weights, lo, hi):
     return np.mean(means)
 
 
-def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
+def optimize_meshes(mesh_file, matches_files, tsfile_to_layerid, conf_dict={}):
     # set default values
     cross_slice_weight = conf_dict.get("cross_slice_weight", 1.0)
     cross_slice_winsor = conf_dict.get("cross_slice_winsor", 1000)
@@ -207,7 +248,7 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
     intra_slice_winsor = intra_slice_winsor * mesh.layer_scale
 
     # load the slice-to-slice matches
-    cross_links = dict(((v[0], v[1]), v[2:]) for v in load_matches(matches_files, mesh, url_to_layerid))
+    cross_links = dict(((v[0], v[1]), v[2:]) for v in load_matches_hdf5(matches_files, mesh, tsfile_to_layerid))
 
     # find all the slices represented
     present_slices = sorted(list(set(k[0] for k in cross_links) | set(k[1] for k in cross_links)))
@@ -367,13 +408,13 @@ def optimize_meshes(mesh_file, matches_files, url_to_layerid, conf_dict={}):
     # Prepare per-layer output
     out_positions = {}
 
-    for url, layerid in url_to_layerid.iteritems():
+    for tsfile, layerid in tsfile_to_layerid.iteritems():
         if layerid in present_slices:
             meshidx = mesh_pt_offsets[layerid]
-            out_positions[url] = [(mesh.pts / mesh.layer_scale).tolist(),
+            out_positions[tsfile] = [(mesh.pts / mesh.layer_scale).tolist(),
                                   (all_mesh_pts[meshidx, :] / mesh.layer_scale).tolist()]
         else:
-            out_positions[url] = [(mesh.pts / mesh.layer_scale).tolist(),
+            out_positions[tsfile] = [(mesh.pts / mesh.layer_scale).tolist(),
                                   (mesh.pts / mesh.layer_scale).tolist()]
 
     return out_positions
@@ -383,8 +424,8 @@ if __name__ == '__main__':
     mesh_file = sys.argv[1]
     matches_files = glob.glob(os.path.join(sys.argv[2], '*W02_sec0[012]*W02_sec0[012]*.json'))
     print("Found {} match files".format(len(matches_files)))
-    url_to_layerid = None
-    new_positions = optimize_meshes(mesh_file, matches_files, url_to_layerid)
+    tsfile_to_layerid = None
+    new_positions = optimize_meshes(mesh_file, matches_files, tsfile_to_layerid)
 
     out_file = sys.argv[3]
     json.dump(new_positions, open(out_file, "w"), indent=1)
