@@ -31,13 +31,24 @@ def compute_restricted_moving_ls_radius(url_optimized_mesh):
     return cached_radius
 
 
-def get_restricted_moving_ls_transform(url_optimized_mesh):
+def get_restricted_moving_ls_transform(url_optimized_mesh, bbox):
+    # Find the tile bbox with a halo of radius around it
     radius = compute_restricted_moving_ls_radius(url_optimized_mesh)
-    all_matches_str = " ".join(["{0} {1} {2} {3} 1.0".format(m[0][0], m[0][1], m[1][0], m[1][1]) for m in zip(url_optimized_mesh[0], url_optimized_mesh[1])])
-# change the transfromation
+    bbox_with_halo = list(bbox)
+    bbox_with_halo[0] -= radius
+    bbox_with_halo[2] -= radius
+    bbox_with_halo[1] += radius
+    bbox_with_halo[3] += radius
+
+    # filter the matches according to the new bounding box
+    matches_str = " ".join(["{0} {1} {2} {3} 1.0".format(m[0][0], m[0][1], m[1][0], m[1][1])
+                             for m in zip(url_optimized_mesh[0], url_optimized_mesh[1])
+                                 if (bbox_with_halo[0] <= m[0][0] <= bbox_with_halo[1]) and (bbox_with_halo[2] <= m[0][1] <= bbox_with_halo[3])])
+
+    # create the tile transformation
     transform = {
             "className" : "mpicbg.trakem2.transform.RestrictedMovingLeastSquaresTransform2",
-            "dataString" : "affine 2 2.0 {0} {1}".format(radius, all_matches_str)
+            "dataString" : "affine 2 2.0 {0} {1}".format(radius, matches_str)
         }
     return transform
 
@@ -65,13 +76,14 @@ def save_optimized_meshes(all_tile_urls, optimized_meshes, out_dir):
 
         if len(data) > 0:
             #transform = get_moving_ls_transform(optimized_meshes[ts_url])
-            transform = get_restricted_moving_ls_transform(optimized_meshes[ts_base])
 
             # change the transfromation
             for tile in data:
+                # Used for restricting the restricted_moving_ls_transform to a specific bbox
+                tile_transform = get_restricted_moving_ls_transform(optimized_meshes[ts_base], tile["bbox"])
                 if "transforms" not in tile.keys():
                     tile["transforms"] = []
-                tile["transforms"].append(transform)
+                tile["transforms"].append(tile_transform)
 
             # save the output tile spec
             with open(out_fname, 'w') as outjson:
