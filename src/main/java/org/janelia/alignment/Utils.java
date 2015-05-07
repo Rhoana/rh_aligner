@@ -36,8 +36,10 @@ import javax.imageio.ImageWriteParam;
 import javax.imageio.ImageWriter;
 import javax.imageio.stream.FileImageOutputStream;
 
+import com.google.gson.Gson;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonSyntaxException;
 
 import mpicbg.trakem2.transform.TranslationModel2D;
 import mpicbg.trakem2.transform.RigidModel2D;
@@ -595,5 +597,36 @@ ns
 		}
 		
 		return res;
+	}
+	
+	public static final TileSpec[] parseTileSpecFile( String tileSpecFileUrl )
+	{
+		/* open tilespec */
+		final URL url;
+		final TileSpec[] tileSpecs;
+		try
+		{
+			final Gson gson = new Gson();
+			url = new URL( tileSpecFileUrl );
+			tileSpecs = gson.fromJson( new InputStreamReader( url.openStream() ), TileSpec[].class );
+		}
+		catch ( final MalformedURLException e )
+		{
+			System.err.println( "URL malformed." );
+			e.printStackTrace( System.err );
+			throw new RuntimeException( e );
+		}
+		catch ( final JsonSyntaxException e )
+		{
+			System.err.println( "JSON syntax malformed." );
+			e.printStackTrace( System.err );
+			throw new RuntimeException( e );
+		}
+		catch ( final Exception e )
+		{
+			e.printStackTrace( System.err );
+			throw new RuntimeException( e );
+		}
+		return tileSpecs;
 	}
 }
