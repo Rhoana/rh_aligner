@@ -33,6 +33,16 @@ def conf_args_from_file(conf_fname, tool):
                     res = res + "--{0} {1} ".format(tool_key, conf[tool][tool_key])
     return res
 
+def conf_from_file(conf_fname, tool):
+    ''' Read the tool configuration from conf file name (json format), and return the parameters in a dictionary format '''
+    res = None
+    if not conf_fname is None:
+        with open(conf_fname, 'r') as conf_file:
+            conf = json.load(conf_file)
+            if tool in conf:
+                return conf[tool]
+    return res
+
 def execute_shell_command(cmd):
     print "Executing: {0}".format(cmd)
     res = call(cmd, shell=True) # w/o shell=True it seems that the env-vars are not set

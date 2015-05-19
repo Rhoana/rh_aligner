@@ -15,9 +15,9 @@ import itertools
 from bounding_box import BoundingBox
 
 from filter_tiles import filter_tiles
-from create_sift_features import create_sift_features
+from create_sift_features_cv2 import create_sift_features
 #from match_sift_features import match_sift_features
-from match_sift_features_and_filter import match_single_sift_features_and_filter
+from match_sift_features_and_filter_cv2 import match_single_sift_features_and_filter
 from json_concat import json_concat
 from optimize_montage_transform import optimize_montage_transform
 from utils import write_list_to_file
@@ -78,9 +78,9 @@ for i, ts in enumerate(tilespecs):
     tile_fname = os.path.basename(imgurl).split('.')[0]
 
     # create the sift features of these tiles
-    sifts_json = os.path.join(args.workspace_dir, "{0}_sifts_{1}.json".format(tiles_fname_prefix, tile_fname))
+    sifts_json = os.path.join(args.workspace_dir, "{0}_sifts_{1}.hdf5".format(tiles_fname_prefix, tile_fname))
     if not os.path.exists(sifts_json):
-        create_sift_features(args.tiles_fname, sifts_json, i, args.jar_file, args.conf_file_name, threads_num=args.threads_num)
+        create_sift_features(args.tiles_fname, sifts_json, i, args.conf_file_name)
     all_sifts[imgurl] = sifts_json
 
 
@@ -112,7 +112,7 @@ for pair in itertools.combinations(xrange(len(tilespecs)), 2):
         match_json = os.path.join(args.workspace_dir, "{0}_sift_matches_{1}_{2}.json".format(tiles_fname_prefix, tile_fname1, tile_fname2))
         # match the features of overlapping tiles
         if not os.path.exists(match_json):
-            match_single_sift_features_and_filter(args.tiles_fname, all_sifts[imageUrl1], all_sifts[imageUrl2], args.jar_file, match_json, index_pair, conf_fname=args.conf_file_name)
+            match_single_sift_features_and_filter(args.tiles_fname, all_sifts[imageUrl1], all_sifts[imageUrl2], match_json, index_pair, conf_fname=args.conf_file_name)
         all_matched_sifts.append(match_json)
 
 # Create a single file that lists all tilespecs and a single file that lists all pmcc matches (the os doesn't support a very long list)
