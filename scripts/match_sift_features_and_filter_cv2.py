@@ -9,6 +9,9 @@ import utils
 import cv2
 import h5py
 import numpy as np
+import copy
+from models import Transforms
+import ransac
 
 # common functions
 
@@ -35,45 +38,26 @@ def match_features(descs1, descs2, rod):
     return good
 
 
-def ransac(matches, target_model_type, iterations, epsilon, min_inlier_ratio, min_num_inlier):
-    model = Model.create_model(target_model_type)
-    for i in xrange(iterations):
-        # choose a minimal number of matches randomly
-        min_matches = np.random.choice(matches, size=target_model_type["min_matches"], replace=False)
-        # Try to fit them to the model
-        if model.fit(min_matches):
-            
 
 
-def filter_matches(matches, target_model_type, iterations, epsilon, min_inlier_ratio, min_num_inlier):
-    """Perform a RANSAC filtering given all the matches"""
-    target_model, ransac_matches = ransac(matches, target_model_type, iterations, epsilon, min_inlier_ratio, min_num_inlier)
-    filtered_inliers = filter_model(ransac_matches, target_model, inliers, max_trust, min_num_inliers)
-    return filtered_inliers
 
 def get_tilespec_transformation(tilespec):
     transforms = tilespec["transforms"]
-    res = np.eye(3, dtype=np.float32)
-    for t in transforms:
-        if "TranslationModel2D" in t["className"]:
-            dx, dy = [float(f) for f in t["dataString"].split()]
-            res = res + np.array([[0, 0, dx], [0, 0, dy], [0, 0, 0]])
-        else:
-            print "Error: unknown transformation model: {}".format(t["className"])
-            sys.exit(1)
-    print res
-    return res
+    # TODO - right now it only assumes a single transform
+    t = Transforms.from_tilespec(transforms[0])
+    return t
 
-def transform(trans, point):
-    point = np.array(point)
-    point = np.append(point, [1])
-    trans_point = np.dot(trans, point)
-    return trans_point.tolist()
 
 def match_single_sift_features_and_filter(tiles_file, features_file1, features_file2, out_fname, index_pair, conf_fname=None):
 
     params = utils.conf_from_file(conf_fname, 'MatchSiftFeaturesAndFilter')
-    rod = params["rod"]
+    rod = params.get("rod", 0.92)
+    iterations = params.get("iterations", 1000)
+    max_epsilon = params.get("maxEpsilon", 100.0)
+    min_inlier_ratio = params.get("min_inlier_ratio", 0.01)
+    min_num_inlier = params.get("min_num_inlier", 7)
+    model_index = params.get("model_index", 1)
+    max_trust = params.get("max_trust", 3)
 
     print "Matching sift features of tilespecs file: {}, indices: {}".format(tiles_file, index_pair)
     # load tilespecs files
@@ -86,17 +70,45 @@ def match_single_sift_features_and_filter(tiles_file, features_file1, features_f
     _, pts1, _, _, descs1 = load_features_hdf5(features_file1)
     _, pts2, _, _, descs2 = load_features_hdf5(features_file2)
 
-    # Match the features
-    print "Matching sift features"
-    matches = match_features(descs1, descs2, rod)
-
-    # filter the matched features
-
+    print "Loaded {} features from file: {}".format(pts1.shape[0], features_file1)
+    print "Loaded {} features from file: {}".format(pts2.shape[0], features_file2)
 
     # Get the tilespec transformation
     print "Getting transformation"
     ts1_transform = get_tilespec_transformation(ts1)
     ts2_transform = get_tilespec_transformation(ts2)
+
+    # filter the features, so that only features that are in the overlapping tile will be matches
+    bbox1 = BoundingBox.fromList(ts1["bbox"])
+    print "bbox1", bbox1.toStr()
+    bbox2 = BoundingBox.fromList(ts2["bbox"])
+    print "bbox2", bbox2.toStr()
+    overlap_bbox = bbox1.intersect(bbox2).expand(offset=50)
+    print "overlap_bbox", overlap_bbox.toStr()
+    features_mask1 = overlap_bbox.contains(ts1_transform.apply(pts1))
+    features_mask2 = overlap_bbox.contains(ts2_transform.apply(pts2))
+
+    pts1 = pts1[features_mask1]
+    pts2 = pts2[features_mask2]
+    descs1 = descs1[features_mask1]
+    descs2 = descs2[features_mask2]
+    print "Found {} features in the overlap from file: {}".format(pts1.shape[0], features_file1)
+    print "Found {} features in the overlap from file: {}".format(pts2.shape[0], features_file2)
+
+
+    # Match the features
+    print "Matching sift features"
+    matches = match_features(descs1, descs2, rod)
+
+    print "Found {} possible matches between {} and {}".format(len(matches), features_file1, features_file2)
+
+    # filter the matched features
+    match_points = np.array([
+        np.array([pts1[[m[0].queryIdx for m in matches]]][0]),
+        np.array([pts2[[m[0].trainIdx for m in matches]]][0]) ])
+
+    model, filtered_matches = ransac.filter_matches(match_points, model_index, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, max_trust)
+
 
     # save the output (matches)
     p1s = [pts1[[m[0].queryIdx for m in matches]]][0]
@@ -107,8 +119,8 @@ def match_single_sift_features_and_filter(tiles_file, features_file1, features_f
         "url1" : ts1["mipmapLevels"]["0"]["imageUrl"],
         "url2" : ts2["mipmapLevels"]["0"]["imageUrl"],
         "correspondencePointPairs" : [
-            { "p1" : { "w": np.array(transform(ts1_transform, p1)[:2]).tolist(), "l": np.array([p1[0], p1[1]]).tolist() }, 
-              "p2" : { "w": np.array(transform(ts2_transform, p2)[:2]).tolist(), "l": np.array([p2[0], p2[1]]).tolist() } } for p1, p2 in zip(p1s, p2s)
+            { "p1" : { "w": np.array(ts1_transform.apply(p1)[:2]).tolist(), "l": np.array([p1[0], p1[1]]).tolist() }, 
+              "p2" : { "w": np.array(ts2_transform.apply(p2)[:2]).tolist(), "l": np.array([p2[0], p2[1]]).tolist() } } for p1, p2 in zip(p1s, p2s)
         ]
     }]
 

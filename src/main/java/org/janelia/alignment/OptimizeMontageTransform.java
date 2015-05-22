@@ -144,10 +144,24 @@ public class OptimizeMontageTransform
 			final Gson gson = new Gson();
 			for ( String corrFile : actualCorrSpecFiles )
 			{
+				System.out.println("Reading file: " + corrFile);
 				URL url = new URL( corrFile );
 				CorrespondenceSpec[] corrSpec = gson.fromJson( new InputStreamReader( url.openStream() ), CorrespondenceSpec[].class );
 				for ( int i = 0; i < corrSpec.length; i++ )
+				{
+					// Fix correspondence point pairs that have no weight (because we might get it from non-java code)
+					for ( int j = 0; j < corrSpec[ i ].correspondencePointPairs.size(); j++ )
+					{
+						PointMatch pm = corrSpec[ i ].correspondencePointPairs.get( j );
+						if ( pm.getWeights() == null )
+						{
+							PointMatch fixedPoint = new PointMatch( pm.getP1(), pm.getP2() );
+							corrSpec[ i ].correspondencePointPairs.set( j, fixedPoint );
+						}	
+					}
+
 					corr_data.add( corrSpec[ i ] );
+				}
 			}
 		}
 		catch ( final MalformedURLException e )
