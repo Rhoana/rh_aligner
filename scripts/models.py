@@ -14,19 +14,19 @@ class AbstractModel(object):
         and then computing the corresponding distance to the matched point in y.
         If the distance is less than epsilon, the match is considered good.
         """
-        X2 = copy.deepcopy(X)
-        for i, p in enumerate(X2):
-            X2[i] = self.apply(p)
+        X2 = np.vstack([self.apply(p) for p in X])
         dists = np.sqrt(np.sum((y - X2) ** 2, axis=1))
         #print "dists", dists
-        good_dists = dists[dists < epsilon]
-        accepted_ratio = float(good_dists.shape[0]) / X2.shape[0]
+        good_dists_num = np.sum(dists < epsilon)
+        # good_dists = dists[dists < epsilon]
+        # accepted_ratio = float(good_dists.shape[0]) / X2.shape[0]
+        accepted_ratio = float(good_dists_num) / X2.shape[0]
 
         # The transformation does not adhere to the wanted values, give it a very low score
-        if good_dists.shape[0] < min_num_inlier or accepted_ratio < min_inlier_ratio:
+        if good_dists_num < min_num_inlier or accepted_ratio < min_inlier_ratio:
             return -1, None, -1
 
-        return accepted_ratio, dists < epsilon, np.mean(good_dists)
+        return accepted_ratio, dists < epsilon, 0
 
     def apply(self, p):
         raise RuntimeError, "Not implemented, but probably should be"
@@ -161,9 +161,11 @@ class RigidModel(AbstractAffineModel):
         # delta2 = y - qc + np.array([dx, dy])
         delta2 = y - qc + delta_c
 
-        for xy1, xy2 in zip(delta1, delta2):
-            sind += xy1[0] * xy2[1] - xy1[1] * xy2[0]
-            cosd += xy1[0] * xy2[0] + xy1[1] * xy2[1]
+        # for xy1, xy2 in zip(delta1, delta2):
+        #     sind += xy1[0] * xy2[1] - xy1[1] * xy2[0]
+        #     cosd += xy1[0] * xy2[0] + xy1[1] * xy2[1]
+        sind = np.sum(delta1[:,0] * delta2[:,1] - delta1[:,1] * delta2[:,0])
+        cosd = np.sum(delta1[:,0] * delta2[:,0] + delta1[:,1] * delta2[:,1])
         norm = np.sqrt(cosd * cosd + sind * sind)
         if norm < 0.0001:
             print "normalization may be invalid, skipping fitting"
