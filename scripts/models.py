@@ -115,14 +115,20 @@ class RigidModel(AbstractAffineModel):
         self.sin_val = np.sin(r)
         self.delta = np.array(delta)
 
-    # def apply(self, p):
-    #     """
-    #     Returns a new 2D point(s) after applying the transformation on the given point(s) p
-    #     """
-    #     # TODO - Check if p is a single 2D point or a list/array of 2D points
-    #     return np.array([
-    #         self.cos_val * p[0] - self.sin_val * p[1],
-    #         self.sin_val * p[0] + self.cos_val * p[1]]) + self.delta
+    def apply(self, p):
+        """
+        Returns a new 2D point(s) after applying the transformation on the given point(s) p
+        """
+        if len(p.shape) == 1: # a single 2D point
+            return np.array([
+                self.cos_val * p[0] - self.sin_val * p[1],
+                self.sin_val * p[0] + self.cos_val * p[1]]) + self.delta
+        elif len(p.shape) == 2: # A list of 2D points
+            return np.vstack([
+                    np.array([self.cos_val * p_i[0] - self.sin_val * p_i[1],
+                              self.sin_val * p_i[0] + self.cos_val * p_i[1]]) + self.delta
+                for p_i in p])
+        raise RuntimeError, "Invalid points input"
 
     def to_str(self):
         return "R={}, T={}".format(np.arccos(self.cos_val), self.delta)
@@ -136,9 +142,9 @@ class RigidModel(AbstractAffineModel):
 
     def get_matrix(self):
         return np.vstack([
-            np.array([self.cos_val, -self.sin_val, self.delta[0]]),
-            np.array([self.sin_val, self.cos_val, self.delta[1]]),
-            np.array([0, 0, 1])
+            [self.cos_val, -self.sin_val, self.delta[0]],
+            [self.sin_val, self.cos_val, self.delta[1]],
+            [0, 0, 1]
             ])
 
     def fit(self, X, y):
@@ -192,6 +198,20 @@ class SimilarityModel(AbstractAffineModel):
         self.ssin_val = np.sin(s)
         self.delta = np.array(delta)
 
+    def apply(self, p):
+        """
+        Returns a new 2D point(s) after applying the transformation on the given point(s) p
+        """
+        if len(p.shape) == 1: # a single 2D point
+            return np.array([
+                self.scos_val * p[0] - self.ssin_val * p[1],
+                self.ssin_val * p[0] + self.scos_val * p[1]]) + self.delta
+        elif len(p.shape) == 2: # A list of 2D points
+            return np.vstack([
+                    np.array([self.scos_val * p_i[0] - self.ssin_val * p_i[1],
+                              self.ssin_val * p_i[0] + self.scos_val * p_i[1]]) + self.delta
+                for p_i in p])
+        raise RuntimeError, "Invalid points input"
 
     def to_str(self):
         return "S={}, T={}".format(np.arccos(self.scos_val), self.delta)
@@ -260,6 +280,18 @@ class AffineModel(AbstractAffineModel):
     def set(self, m):
         """m is a 3x3 matrix"""
         self.m = m
+
+    def apply(self, p):
+        """
+        Returns a new 2D point(s) after applying the transformation on the given point(s) p
+        """
+        if len(p.shape) == 1: # a single 2D point
+            return np.dot(m, np.append(p, [1]))[:2]
+        elif len(p.shape) == 2: # A list of 2D points
+            return np.vstack([
+                    np.dot(m, np.append(p_i, [1]))[:2]
+                for p_i in p])
+        raise RuntimeError, "Invalid points input"
 
     # def apply(self, p):
     #     # Check if p is a single 2D point or a list/array of 2D points
