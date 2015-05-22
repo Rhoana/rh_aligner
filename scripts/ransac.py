@@ -31,7 +31,7 @@ def ransac(matches, target_model_type, iterations, epsilon, min_inlier_ratio, mi
     return best_inlier_mask, best_model, best_model_mean_dists
 
 
-def filter_ransac(candidates, model, max_trust, min_num_inliers):
+def filter_after_ransac(candidates, model, max_trust, min_num_inliers):
     """
     Estimate the AbstractModel and filter potential outliers by robust iterative regression.
     This method performs well on data sets with low amount of outliers (or after RANSAC).
@@ -39,36 +39,43 @@ def filter_ransac(candidates, model, max_trust, min_num_inliers):
     # copy the model
     new_model = copy.deepcopy(model)
 
-    num_inliers = candidates.shape[1] + 1 # for the initial while iteration, this should be increased by 1
-    to_image_inliers = copy.copy(candidates[1])
+    # iteratively find a new model, by fitting the candidates, and removing those that are far than max_trust*median-distance
+    # until the set of remaining candidates does not change its size
+
+    # for the initial iteration, we set a value that is higher the given candidates size
+    prev_iteration_num_inliers = candidates.shape[1] + 1
+
+    # keep a copy of the candidates that will be changed due to fitting and error 
     inliers = copy.copy(candidates[0])
-    # print "to_image_inliers", to_image_inliers
-    # print "from_image_inliers", inliers
-    while num_inliers > inliers.shape[0]:
-        temp = copy.copy(inliers)
-        # fit the model
-        if new_model.fit(temp, to_image_inliers) == False:
+
+    # keep track of the candidates using a mask
+    candidates_mask = np.ones((candidates.shape[1]), dtype=np.bool)
+
+    while prev_iteration_num_inliers > np.sum(candidates_mask):
+        prev_iteration_num_inliers = np.sum(candidates_mask)
+        # Get the inliers and their corresponding matches
+        inliers = candidates[0][candidates_mask]
+        to_image_candidates = candidates[1][candidates_mask]
+
+        # try to fit the model
+        if new_model.fit(inliers, to_image_candidates) == False:
             break
 
-        # get the median error
-        dists = np.zeros((temp.shape[0]), dtype=np.float64)
-        for i, match in enumerate(zip(temp, to_image_inliers)):
-            new_point = new_model.apply(match[0])
-            # add the l2 distance
-            dists[i] = np.sqrt(np.sum((new_point - match[1]) ** 2))
+        # get the meidan error (after transforming the points)
+        pts_after_transform = new_model.apply(inliers)
+        dists = np.sqrt(np.sum((pts_after_transform - to_image_candidates) ** 2, axis=1))
         median = np.median(dists)
         # print "dists mean", np.mean(dists)
         # print "median", median
         # print dists <= (median * max_trust)
         inliers_mask = dists <= (median * max_trust)
-        inliers = temp[inliers_mask]
-        to_image_inliers = to_image_inliers[inliers_mask]
-        num_inliers = inliers.shape[0]
+        candidates_mask[candidates_mask == True] = inliers_mask
 
-    if num_inliers < min_num_inliers:
+
+    if np.sum(candidates_mask) < min_num_inliers:
         return None, None
 
-    return new_model, inliers_mask
+    return new_model, candidates_mask
 
 
 def filter_matches(matches, target_model_type, iterations, epsilon, min_inlier_ratio, min_num_inlier, max_trust):
@@ -84,7 +91,7 @@ def filter_matches(matches, target_model_type, iterations, epsilon, min_inlier_r
     # Apply further filtering
     if inliers is not None:
         print "Found {} good matches out of {} matches after RANSAC".format(inliers.shape[1], matches.shape[1])
-        new_model, filtered_inliers_mask = filter_ransac(inliers, model, max_trust, min_num_inlier)
+        new_model, filtered_inliers_mask = filter_after_ransac(inliers, model, max_trust, min_num_inlier)
         filtered_matches = np.array([inliers[0][filtered_inliers_mask], inliers[1][filtered_inliers_mask]])
 
     if new_model is None:
@@ -92,7 +99,7 @@ def filter_matches(matches, target_model_type, iterations, epsilon, min_inlier_r
     else:
         # _, filtered_matches_mask, mean_val = new_model.score(matches[0], matches[1], epsilon, min_inlier_ratio, min_num_inlier)
         # filtered_matches = np.array([matches[0][filtered_matches], matches[1][filtered_matches]])
-        print "Model found: {}, applies to {} out of {} matches.".format(new_model.to_str(), filtered_matches.shape[1], matches.shape[1])
+        print "Model found after robust regression: {}, applies to {} out of {} matches.".format(new_model.to_str(), filtered_matches.shape[1], matches.shape[1])
 
     return new_model, filtered_matches
 

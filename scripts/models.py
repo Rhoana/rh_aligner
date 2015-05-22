@@ -14,10 +14,12 @@ class AbstractModel(object):
         and then computing the corresponding distance to the matched point in y.
         If the distance is less than epsilon, the match is considered good.
         """
-        X2 = np.vstack([self.apply(p) for p in X])
+        X2 = self.apply(X)
+        # dists_sqr = np.sum((y - X2) ** 2, axis=1)
         dists = np.sqrt(np.sum((y - X2) ** 2, axis=1))
         #print "dists", dists
-        good_dists_num = np.sum(dists < epsilon)
+        good_dists_mask = dists < epsilon
+        good_dists_num = np.sum(good_dists_mask)
         # good_dists = dists[dists < epsilon]
         # accepted_ratio = float(good_dists.shape[0]) / X2.shape[0]
         accepted_ratio = float(good_dists_num) / X2.shape[0]
@@ -26,7 +28,7 @@ class AbstractModel(object):
         if good_dists_num < min_num_inlier or accepted_ratio < min_inlier_ratio:
             return -1, None, -1
 
-        return accepted_ratio, dists < epsilon, 0
+        return accepted_ratio, good_dists_mask, 0
 
     def apply(self, p):
         raise RuntimeError, "Not implemented, but probably should be"
