@@ -51,6 +51,8 @@ def get_tilespec_transformation(tilespec):
 def match_single_sift_features_and_filter(tiles_file, features_file1, features_file2, out_fname, index_pair, conf_fname=None):
 
     params = utils.conf_from_file(conf_fname, 'MatchSiftFeaturesAndFilter')
+    if params is None:
+        params = {}
     rod = params.get("rod", 0.92)
     iterations = params.get("iterations", 1000)
     max_epsilon = params.get("maxEpsilon", 100.0)
