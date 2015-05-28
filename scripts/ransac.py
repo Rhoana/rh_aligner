@@ -18,6 +18,7 @@ def ransac(matches, target_model_type, iterations, epsilon, min_inlier_ratio, mi
         min_matches_idxs = np.random.choice(xrange(len(matches[0])), size=proposed_model.MIN_MATCHES_NUM, replace=False)
         # Try to fit them to the model
         proposed_model.fit(matches[0][min_matches_idxs], matches[1][min_matches_idxs])
+        # print "proposed_model", proposed_model.to_str()
         # Verify the new model 
         proposed_model_score, inlier_mask, proposed_model_mean = proposed_model.score(matches[0], matches[1], epsilon, min_inlier_ratio, min_num_inlier)
         # print "proposed_model_score", proposed_model_score
@@ -27,7 +28,10 @@ def ransac(matches, target_model_type, iterations, epsilon, min_inlier_ratio, mi
             best_inlier_mask = inlier_mask
             best_model_mean_dists = proposed_model_mean
 
-    print "best_model_score", best_model_score, "best_model:", best_model.to_str(), "best_model_mean_dists:", best_model_mean_dists
+    if best_model is None:
+        print "Cannot find a good model during ransac. best_model_score {}".format(best_model_score)
+    else:
+        print "RANSAC result: best_model_score", best_model_score, "best_model:", best_model.to_str(), "best_model_mean_dists:", best_model_mean_dists
     return best_inlier_mask, best_model, best_model_mean_dists
 
 
@@ -86,10 +90,10 @@ def filter_matches(matches, target_model_type, iterations, epsilon, min_inlier_r
     # Apply RANSAC
     print "Filtering {} matches".format(matches.shape[1])
     inliers_mask, model, _ = ransac(matches, target_model_type, iterations, epsilon, min_inlier_ratio, min_num_inlier)
-    inliers = np.array([matches[0][inliers_mask], matches[1][inliers_mask]])
 
     # Apply further filtering
-    if inliers is not None:
+    if inliers_mask is not None:
+        inliers = np.array([matches[0][inliers_mask], matches[1][inliers_mask]])
         print "Found {} good matches out of {} matches after RANSAC".format(inliers.shape[1], matches.shape[1])
         new_model, filtered_inliers_mask = filter_after_ransac(inliers, model, max_trust, min_num_inlier)
         filtered_matches = np.array([inliers[0][filtered_inliers_mask], inliers[1][filtered_inliers_mask]])

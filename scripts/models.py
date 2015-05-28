@@ -17,7 +17,7 @@ class AbstractModel(object):
         X2 = self.apply(X)
         # dists_sqr = np.sum((y - X2) ** 2, axis=1)
         dists = np.sqrt(np.sum((y - X2) ** 2, axis=1))
-        #print "dists", dists
+        # print "dists", dists
         good_dists_mask = dists < epsilon
         good_dists_num = np.sum(good_dists_mask)
         # good_dists = dists[dists < epsilon]
@@ -65,7 +65,7 @@ class AbstractAffineModel(AbstractModel):
 
 
 class TranslationModel(AbstractAffineModel):
-    MIN_MATCHES_NUM = 1
+    MIN_MATCHES_NUM = 2
     class_name = "mpicbg.trakem2.transform.TranslationModel2D"
 
     def __init__(self, delta=np.array([0, 0])):
@@ -314,10 +314,10 @@ class AffineModel(AbstractAffineModel):
         Returns a new 2D point(s) after applying the transformation on the given point(s) p
         """
         if len(p.shape) == 1: # a single 2D point
-            return np.dot(m, np.append(p, [1]))[:2]
+            return np.dot(self.m, np.append(p, [1]))[:2]
         elif len(p.shape) == 2: # A list of 2D points
             return np.vstack([
-                    np.dot(m, np.append(p_i, [1]))[:2]
+                    np.dot(self.m, np.append(p_i, [1]))[:2]
                 for p_i in p])
         raise RuntimeError, "Invalid points input"
 
@@ -356,50 +356,90 @@ class AffineModel(AbstractAffineModel):
         A non-weighted fitting of a collection of 2D points in X to a collection of 2D points in y.
         X and y are assumed to be arrays of 2D points of the same shape.
         """
-        fp = X
-        tp = y
-        assert(fp.shape[0] >= 3)
+        assert(X.shape[0] >= 2) # the minimal number of of matches for a 2d rigid transformation
 
-        """ taken from: http://www.janeriksolem.net/2009/06/affine-transformations-and-warping.html
-        find H, affine transformation, such that 
-        tp is affine transf of fp"""
+        pc = np.mean(X, axis=0)
+        qc = np.mean(y, axis=0)
 
-        if fp.shape != tp.shape:
-            raise RuntimeError, 'number of points do not match'
 
-        #condition points
-        #-from points-
-        m = np.mean(fp[:2], axis=1)
-        maxstd = max(np.std(fp[:2], axis=1))
-        C1 = diag([1 / maxstd, 1 / maxstd, 1]) 
-        C1[0][2] = -m[0] / maxstd
-        C1[1][2] = -m[1] / maxstd
-        fp_cond = np.dot(C1, fp)
+        delta1 = X - pc
+        delta2 = y - qc
 
-        #-to points-
-        m = np.mean(tp[:2], axis=1)
-        C2 = C1.copy() #must use same scaling for both point sets
-        C2[0][2] = -m[0] / maxstd
-        C2[1][2] = -m[1] / maxstd
-        tp_cond = np.dot(C2, tp)
+        a00 = np.sum(delta1[:,0] * delta1[:,0])
+        a01 = np.sum(delta1[:,0] * delta1[:,1])
+        a11 = np.sum(delta1[:,1] * delta1[:,1])
+        b00 = np.sum(delta1[:,0] * delta2[:,0])
+        b01 = np.sum(delta1[:,0] * delta2[:,1])
+        b10 = np.sum(delta1[:,1] * delta2[:,0])
+        b11 = np.sum(delta1[:,1] * delta2[:,1])
 
-        #conditioned points have mean zero, so translation is zero
-        A = np.concatenate((fp_cond[:2], tp_cond[:2]), axis=0)
-        U,S,V = linalg.svd(A.T)
+        det = a00 * a11 - a01 * a01
 
-        #create B and C matrices as Hartley-Zisserman (2:nd ed) p 130.
-        tmp = V[:2].T
-        B = tmp[:2]
-        C = tmp[2:4]
+        if det == 0:
+            print "determinant is 0, skipping fitting"
+            return False
 
-        tmp2 = np.concatenate((np.dot(C, linalg.pinv(B)), np.zeros((2, 1))), axis=1) 
-        H = np.vstack((tmp2, [0, 0, 1]))
-
-        #decondition
-        H = np.dot(linalg.inv(C2), np.dot(H, C1))
-
-        self.m = H / H[2][2]
+        m00 = (a11 * b00 - a01 * b10) / det
+        m01 = (a00 * b10 - a01 * b00) / det
+        m10 = (a11 * b01 - a01 * b11) / det
+        m11 = (a00 * b11 - a01 * b01) / det
+        self.m = np.array([
+                [m00, m01, qc[0] - m00 * pc[0] - m01 * pc[1]],
+                [m10, m11, qc[1] - m10 * pc[0] - m11 * pc[1]],
+                [0.0, 0.0, 1.0]
+            ])
         return True
+
+
+    # def fit(self, X, y):
+    #     """
+    #     A non-weighted fitting of a collection of 2D points in X to a collection of 2D points in y.
+    #     X and y are assumed to be arrays of 2D points of the same shape.
+    #     """
+    #     fp = X
+    #     tp = y
+    #     assert(fp.shape[0] >= 3)
+
+    #     """ taken from: http://www.janeriksolem.net/2009/06/affine-transformations-and-warping.html
+    #     find H, affine transformation, such that 
+    #     tp is affine transf of fp"""
+
+    #     if fp.shape != tp.shape:
+    #         raise RuntimeError, 'number of points do not match'
+
+    #     #condition points
+    #     #-from points-
+    #     m = np.mean(fp[:2], axis=1)
+    #     maxstd = max(np.std(fp[:2], axis=1))
+    #     C1 = np.diag([1 / maxstd, 1 / maxstd, 1]) 
+    #     C1[0][2] = -m[0] / maxstd
+    #     C1[1][2] = -m[1] / maxstd
+    #     fp_cond = np.dot(C1, fp)
+
+    #     #-to points-
+    #     m = np.mean(tp[:2], axis=1)
+    #     C2 = C1.copy() #must use same scaling for both point sets
+    #     C2[0][2] = -m[0] / maxstd
+    #     C2[1][2] = -m[1] / maxstd
+    #     tp_cond = np.dot(C2, tp)
+
+    #     #conditioned points have mean zero, so translation is zero
+    #     A = np.concatenate((fp_cond[:2], tp_cond[:2]), axis=0)
+    #     U,S,V = np.linalg.svd(A.T)
+
+    #     #create B and C matrices as Hartley-Zisserman (2:nd ed) p 130.
+    #     tmp = V[:2].T
+    #     B = tmp[:2]
+    #     C = tmp[2:4]
+
+    #     tmp2 = np.concatenate((np.dot(C, np.linalg.pinv(B)), np.zeros((2, 1))), axis=1) 
+    #     H = np.vstack((tmp2, [0, 0, 1]))
+
+    #     #decondition
+    #     H = np.dot(np.linalg.inv(C2), np.dot(H, C1))
+
+    #     self.m = H / H[2][2]
+    #     return True
 
 
 
