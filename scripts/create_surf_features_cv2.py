@@ -14,7 +14,7 @@ import h5py
 import glymur
 
 
-def create_sift_features(tiles_fname, out_fname, index, conf_fname=None):
+def create_surf_features(tiles_fname, out_fname, index, conf_fname=None):
 
     # load tilespecs files
     tilespecs = utils.load_tilespecs(tiles_fname)
@@ -28,7 +28,7 @@ def create_sift_features(tiles_fname, out_fname, index, conf_fname=None):
     else:
         img_gray = cv2.imread(image_path, cv2.CV_LOAD_IMAGE_GRAYSCALE)
 
-    print "Computing sift features for image: {}".format(image_path)
+    print "Computing surf features for image: {}".format(image_path)
 
     # compute features for the given index
     # detector = cv2.FeatureDetector_create("SIFT")
@@ -37,14 +37,14 @@ def create_sift_features(tiles_fname, out_fname, index, conf_fname=None):
     # kp = detector.detect(img_gray)
     # #print("Computing descriptions...")
     # pts, descs = extractor.compute(img_gray, kp)
-    sift = cv2.SIFT()
-    pts, descs = sift.detectAndCompute(img_gray, None)
+    surf = cv2.SURF()
+    pts, descs = surf.detectAndCompute(img_gray, None)
     descs = np.array(descs, dtype=np.uint8)
 
     print "Found {} features".format(len(descs))
     # Save the features
 
-    print "Saving sift features at: {}".format(out_fname)
+    print "Saving surf features at: {}".format(out_fname)
     with h5py.File(out_fname, 'w') as hf:
         hf.create_dataset("imageUrl",
                             data=np.array(image_path.encode("utf-8"), dtype='S'))
@@ -77,15 +77,15 @@ def create_sift_features(tiles_fname, out_fname, index, conf_fname=None):
 def main():
     # Command line parser
     parser = argparse.ArgumentParser(description='Iterates over a directory that contains json files, \
-        and creates the sift features of each file. \
+        and creates the surf features of each file. \
         The output is either in the same directory or in a different, user-provided, directory \
         (in either case, we use a different file name).')
     parser.add_argument('tiles_fname', metavar='tiles_json', type=str, 
-                        help='a tile_spec file that contains the images to create sift features for, in json format')
+                        help='a tile_spec file that contains the images to create surf features for, in json format')
     parser.add_argument('index', metavar='index', type=int, 
                         help='the index of the tile in the tilespec that needs to be computed')
     parser.add_argument('-o', '--output_file', type=str, 
-                        help='an output feature_spec file, that will include the sift features for all tiles (default: ./siftFeatures.json)',
+                        help='an output feature_spec file, that will include the surf features for all tiles (default: ./siftFeatures.json)',
                         default='./siftFeatures.json')
     parser.add_argument('-c', '--conf_file_name', type=str, 
                         help='the configuration file with the parameters for each step of the alignment process in json format (uses default parameters, if not supplied)',
@@ -95,7 +95,7 @@ def main():
     args = parser.parse_args()
 
     try:
-        create_sift_features(args.tiles_fname, args.output_file, args.index, conf_fname=args.conf_file_name)
+        create_surf_features(args.tiles_fname, args.output_file, args.index, conf_fname=args.conf_file_name)
     except:
         sys.exit("Error while executing: {0}".format(sys.argv))
 
