@@ -126,7 +126,6 @@ def match_single_sift_features_and_filter(tiles_file, features_file1, features_f
         ]
     }]
 
-    print out_data[0]['correspondencePointPairs'][0]
 
     print "Saving matches into {}".format(out_fname)
     with open(out_fname, 'w') as out:
