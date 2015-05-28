@@ -56,10 +56,10 @@ def match_single_sift_features_and_filter(tiles_file, features_file1, features_f
     rod = params.get("rod", 0.92)
     iterations = params.get("iterations", 1000)
     max_epsilon = params.get("maxEpsilon", 100.0)
-    min_inlier_ratio = params.get("min_inlier_ratio", 0.01)
-    min_num_inlier = params.get("min_num_inlier", 7)
-    model_index = params.get("model_index", 1)
-    max_trust = params.get("max_trust", 3)
+    min_inlier_ratio = params.get("minInlierRatio", 0.01)
+    min_num_inlier = params.get("minNumInliers", 7)
+    model_index = params.get("modelIndex", 1)
+    max_trust = params.get("maxTrust", 3)
 
     print "Matching sift features of tilespecs file: {}, indices: {}".format(tiles_file, index_pair)
     # load tilespecs files
