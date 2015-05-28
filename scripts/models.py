@@ -37,7 +37,7 @@ class AbstractModel(object):
     def fit(self, X, y):
         raise RuntimeError, "Not implemented, but probably should be"
 
-    def set_from_str(self, s):
+    def set_from_modelspec(self, s):
         raise RuntimeError, "Not implemented, but probably should be"
 
 
@@ -66,6 +66,7 @@ class AbstractAffineModel(AbstractModel):
 
 class TranslationModel(AbstractAffineModel):
     MIN_MATCHES_NUM = 1
+    class_name = "mpicbg.trakem2.transform.TranslationModel2D"
 
     def __init__(self, delta=np.array([0, 0])):
         self.delta = delta
@@ -84,7 +85,13 @@ class TranslationModel(AbstractAffineModel):
     def to_str(self):
         return "T={}".format(self.delta)
 
-    def set_from_str(self, s):
+    def to_modelspec(self):
+        return {
+                "className" : self.class_name,
+                "dataString" : "{}".format(' '.join([str(float(x)) for x in self.delta]))
+            }
+
+    def set_from_modelspec(self, s):
         self.delta = np.array([float(d) for d in s.split()])
 
     def get_matrix(self):
@@ -108,6 +115,7 @@ class TranslationModel(AbstractAffineModel):
 
 class RigidModel(AbstractAffineModel):
     MIN_MATCHES_NUM = 2
+    class_name = "mpicbg.trakem2.transform.RigidModel2D"
 
     def __init__(self, r=0.0, delta=np.array([0, 0])):
         self.set(r, delta)
@@ -135,7 +143,13 @@ class RigidModel(AbstractAffineModel):
     def to_str(self):
         return "R={}, T={}".format(np.arccos(self.cos_val), self.delta)
 
-    def set_from_str(self, s):
+    def to_modelspec(self):
+        return {
+                "className" : self.class_name,
+                "dataString" : "{} {}".format(np.arccos(self.cos_val), ' '.join([str(float(x)) for x in self.delta]))
+            }
+
+    def set_from_modelspec(self, s):
         splitted = s.split()
         r = float(splitted[0])
         self.cos_val = np.cos(r)
@@ -191,6 +205,7 @@ class RigidModel(AbstractAffineModel):
 
 class SimilarityModel(AbstractAffineModel):
     MIN_MATCHES_NUM = 2
+    class_name = "mpicbg.trakem2.transform.SimilarityModel2D"
 
     def __init__(self, s=0.0, delta=np.array([0, 0])):
         self.set(s, delta)
@@ -218,7 +233,13 @@ class SimilarityModel(AbstractAffineModel):
     def to_str(self):
         return "S={}, T={}".format(np.arccos(self.scos_val), self.delta)
 
-    def set_from_str(self, s):
+    def to_modelspec(self):
+        return {
+                "className" : self.class_name,
+                "dataString" : "{} {} {}".format(self.scos_val, self.ssin_val, ' '.join([str(float(x)) for x in self.delta]))
+            }
+
+    def set_from_modelspec(self, s):
         splitted = s.split()
         r = float(splitted[0])
         self.scos_val = np.cos(r)
@@ -274,6 +295,7 @@ class SimilarityModel(AbstractAffineModel):
 
 class AffineModel(AbstractAffineModel):
     MIN_MATCHES_NUM = 3
+    class_name = "mpicbg.trakem2.transform.AffineModel2D"
 
     def __init__(self, m=np.eye(3)):
         """m is a 3x3 matrix"""
@@ -281,6 +303,10 @@ class AffineModel(AbstractAffineModel):
 
     def set(self, m):
         """m is a 3x3 matrix"""
+        # make sure that this a 3x3 matrix
+        m = np.array(m)
+        if m.shape != (3, 3):
+            raise RuntimeError, "Error when parsing the given affine matrix, should be of size 3x3"
         self.m = m
 
     def apply(self, p):
@@ -306,11 +332,20 @@ class AffineModel(AbstractAffineModel):
     def to_str(self):
         return "M={}".format(self.m)
 
-    def set_from_str(self, s):
+    def to_modelspec(self):
+        return {
+                "className" : self.class_name,
+                # keeping it in the Fiji model format
+                "dataString" : "{}".format(' '.join([str(float(x)) for x in self.m[:2].T.flatten()]))
+            }
+
+    def set_from_modelspec(self, s):
         splitted = s.split()
+        # The input is 6 numbers that correspond to m00 m10 m01 m11 m02 m12
         self.m = np.vstack(
-            np.array([float(d) for d in splitted[:3]]),
-            np.array([float(d) for d in splitted[3:]])
+            np.array([float(d) for d in splitted[0::2]]),
+            np.array([float(d) for d in splitted[1::2]]),
+            np.array([0.0, 0.0, 1.0])
             )
 
     def get_matrix(self):
@@ -334,22 +369,22 @@ class AffineModel(AbstractAffineModel):
 
         #condition points
         #-from points-
-        m = mean(fp[:2], axis=1)
-        maxstd = max(std(fp[:2], axis=1))
+        m = np.mean(fp[:2], axis=1)
+        maxstd = max(np.std(fp[:2], axis=1))
         C1 = diag([1 / maxstd, 1 / maxstd, 1]) 
         C1[0][2] = -m[0] / maxstd
         C1[1][2] = -m[1] / maxstd
-        fp_cond = dot(C1, fp)
+        fp_cond = np.dot(C1, fp)
 
         #-to points-
-        m = mean(tp[:2], axis=1)
+        m = np.mean(tp[:2], axis=1)
         C2 = C1.copy() #must use same scaling for both point sets
         C2[0][2] = -m[0] / maxstd
         C2[1][2] = -m[1] / maxstd
-        tp_cond = dot(C2, tp)
+        tp_cond = np.dot(C2, tp)
 
         #conditioned points have mean zero, so translation is zero
-        A = concatenate((fp_cond[:2], tp_cond[:2]), axis=0)
+        A = np.concatenate((fp_cond[:2], tp_cond[:2]), axis=0)
         U,S,V = linalg.svd(A.T)
 
         #create B and C matrices as Hartley-Zisserman (2:nd ed) p 130.
@@ -357,11 +392,11 @@ class AffineModel(AbstractAffineModel):
         B = tmp[:2]
         C = tmp[2:4]
 
-        tmp2 = concatenate((dot(C, linalg.pinv(B)), zeros((2, 1))), axis=1) 
-        H = vstack((tmp2, [0, 0, 1]))
+        tmp2 = np.concatenate((np.dot(C, linalg.pinv(B)), np.zeros((2, 1))), axis=1) 
+        H = np.vstack((tmp2, [0, 0, 1]))
 
         #decondition
-        H = dot(linalg.inv(C2), dot(H, C1))
+        H = np.dot(linalg.inv(C2), np.dot(H, C1))
 
         self.m = H / H[2][2]
         return True
@@ -372,10 +407,10 @@ class AffineModel(AbstractAffineModel):
 class Transforms(object):
     transformations = [ TranslationModel(), RigidModel(), SimilarityModel(), AffineModel() ]
     transforms_classnames = {
-        "mpicbg.trakem2.transform.TranslationModel2D": TranslationModel(),
-        "mpicbg.trakem2.transform.RigidModel2D": RigidModel(),
-        "mpicbg.trakem2.transform.SimilarityModel2D": SimilarityModel(),
-        "mpicbg.trakem2.transform.AffineModel2D": AffineModel(),
+        TranslationModel.class_name : TranslationModel(),
+        RigidModel.class_name : RigidModel(),
+        SimilarityModel.class_name : SimilarityModel(),
+        AffineModel.class_name : AffineModel(),
         }
 
     @classmethod
@@ -385,7 +420,7 @@ class Transforms(object):
     @classmethod
     def from_tilespec(cls, ts_transform):
         transform = copy.deepcopy(cls.transforms_classnames[ts_transform["className"]])
-        transform.set_from_str(ts_transform["dataString"])
+        transform.set_from_modelspec(ts_transform["dataString"])
         return transform
 
 
