@@ -16,6 +16,7 @@ from bounding_box import BoundingBox
 
 from filter_tiles import filter_tiles
 from create_sift_features_cv2 import create_sift_features
+from create_surf_features_cv2 import create_surf_features
 #from match_sift_features import match_sift_features
 from match_sift_features_and_filter_cv2 import match_single_sift_features_and_filter
 from json_concat import json_concat
@@ -68,20 +69,20 @@ if not os.path.exists(args.workspace_dir):
 tiles_fname_prefix = os.path.splitext(os.path.basename(args.tiles_fname))[0]
 
 
-# read tile spec and find the sift features for each tile
+# read tile spec and find the features for each tile
 tilespecs = load_tilespecs(args.tiles_fname)
-all_sifts = {}
-all_matched_sifts = []
+all_features = {}
+all_matched_features = []
 
 for i, ts in enumerate(tilespecs):
     imgurl = ts["mipmapLevels"]["0"]["imageUrl"]
     tile_fname = os.path.basename(imgurl).split('.')[0]
 
-    # create the sift features of these tiles
-    sifts_json = os.path.join(args.workspace_dir, "{0}_sifts_{1}.hdf5".format(tiles_fname_prefix, tile_fname))
-    if not os.path.exists(sifts_json):
-        create_sift_features(args.tiles_fname, sifts_json, i, args.conf_file_name)
-    all_sifts[imgurl] = sifts_json
+    # create the features of these tiles
+    features_json = os.path.join(args.workspace_dir, "{0}_sifts_{1}.hdf5".format(tiles_fname_prefix, tile_fname))
+    if not os.path.exists(features_json):
+        create_sift_features(args.tiles_fname, features_json, i, args.conf_file_name)
+    all_features[imgurl] = features_json
 
 
 # read every pair of overlapping tiles, and match their sift features
@@ -107,17 +108,17 @@ for pair in itertools.combinations(xrange(len(tilespecs)), 2):
         imageUrl2 = ts2["mipmapLevels"]["0"]["imageUrl"]
         tile_fname1 = os.path.basename(imageUrl1).split('.')[0]
         tile_fname2 = os.path.basename(imageUrl2).split('.')[0]
-        print "Matching sift of tiles: {0} and {1}".format(imageUrl1, imageUrl2)
+        print "Matching features of tiles: {0} and {1}".format(imageUrl1, imageUrl2)
         index_pair = [idx1, idx2]
         match_json = os.path.join(args.workspace_dir, "{0}_sift_matches_{1}_{2}.json".format(tiles_fname_prefix, tile_fname1, tile_fname2))
         # match the features of overlapping tiles
         if not os.path.exists(match_json):
-            match_single_sift_features_and_filter(args.tiles_fname, all_sifts[imageUrl1], all_sifts[imageUrl2], match_json, index_pair, conf_fname=args.conf_file_name)
-        all_matched_sifts.append(match_json)
+            match_single_sift_features_and_filter(args.tiles_fname, all_features[imageUrl1], all_features[imageUrl2], match_json, index_pair, conf_fname=args.conf_file_name)
+        all_matched_features.append(match_json)
 
 # Create a single file that lists all tilespecs and a single file that lists all pmcc matches (the os doesn't support a very long list)
 matches_list_file = os.path.join(args.workspace_dir, "all_matched_sifts_files.txt")
-write_list_to_file(matches_list_file, all_matched_sifts)
+write_list_to_file(matches_list_file, all_matched_features)
 
 # optimize the 2d layer montage
 optmon_fname = os.path.join(args.workspace_dir, "{0}_optimized_montage.json".format(tiles_fname_prefix))
