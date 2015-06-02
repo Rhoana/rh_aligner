@@ -18,7 +18,7 @@ from scipy.spatial import KDTree
 import cv2
 import time
 import glob
-#os.chdir("C:/Users/Raahil/Documents/Research2015_eclipse/Testing")
+# os.chdir("C:/Users/Raahil/Documents/Research2015_eclipse/Testing")
 os.chdir("/data/SCS_2015-4-27_C1w7_alignment")
 
 
@@ -190,6 +190,8 @@ def analyze2slicesmfovs(slice1, mfov1, slice2, mfov2):
     min_num_inlier = 7
     max_trust = 3
     model, filtered_matches = ransac.filter_matches(match_points, model_index, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, max_trust)
+    if filtered_matches is None:
+        filtered_matches = np.zeros((0, 0))
     return (model, filtered_matches.shape[1], float(filtered_matches.shape[1]) / match_points.shape[1], match_points.shape[1], len(allpoints1), len(allpoints2))
 
 
@@ -269,6 +271,7 @@ def main():
     slice1 = int(slice1)
     slice2 = int(slice2)
     nummfovs = int(nummfovs)
+    
     retval = analyze2slices(slice1, slice2, nummfovs)
     
     jsonfile = {}

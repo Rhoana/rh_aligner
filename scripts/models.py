@@ -190,7 +190,7 @@ class RigidModel(AbstractAffineModel):
         cosd = np.sum(delta1[:,0] * delta2[:,0] + delta1[:,1] * delta2[:,1])
         norm = np.sqrt(cosd * cosd + sind * sind)
         if norm < 0.0001:
-            print "normalization may be invalid, skipping fitting"
+            # print "normalization may be invalid, skipping fitting"
             return False
         cosd /= norm
         sind /= norm
@@ -279,7 +279,7 @@ class SimilarityModel(AbstractAffineModel):
             scosd += xy1[0] * xy2[0] + xy1[1] * xy2[1]
             norm += xy1[0] ** 2 + xy1[1] ** 2
         if norm < 0.0001:
-            print "normalization may be invalid, skipping fitting"
+            # print "normalization may be invalid, skipping fitting"
             return False
         scosd /= norm
         ssind /= norm
@@ -376,7 +376,7 @@ class AffineModel(AbstractAffineModel):
         det = a00 * a11 - a01 * a01
 
         if det == 0:
-            print "determinant is 0, skipping fitting"
+            # print "determinant is 0, skipping fitting"
             return False
 
         m00 = (a11 * b00 - a01 * b10) / det
