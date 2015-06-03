@@ -57,25 +57,22 @@ def analyzeimg(slicenumber, mfovnumber, num, data):
     mfovstring = ("%06d" % mfovnumber)
     imgname = "2d_work_dir/W01_Sec" + slicestring + "/W01_Sec" + slicestring + "_sifts_" + slicestring + "_" + mfovstring + "_" + numstring + "*"
     f = h5py.File(glob.glob(imgname)[0], 'r')
-
     resps = f['pts']['responses'][:]
     descs = f['descs'][:]
     octas = f['pts']['octaves'][:]
-
     jsonindex = (mfovnumber - 1) * 61 + num
     xtransform = float(data[jsonindex - 1]["transforms"][0]["dataString"].encode("ascii").split(" ")[0])
     ytransform = float(data[jsonindex - 1]["transforms"][0]["dataString"].encode("ascii").split(" ")[1])
 
     xlocs = []
     ylocs = []
-    if len(resps) != 0:
+    if not resps:
         xlocs = f['pts']['locations'][:, 0] + xtransform
         ylocs = f['pts']['locations'][:, 1] + ytransform
 
     allpoints = []
     allresps = []
     alldescs = []
-
     for pointindex in range(0, len(xlocs)):
         currentocta = int(octas[pointindex]) & 255
         if currentocta > 128:
@@ -84,16 +81,11 @@ def analyzeimg(slicenumber, mfovnumber, num, data):
             allpoints.append(np.array([xlocs[pointindex], ylocs[pointindex]]))
             allresps.append(resps[pointindex])
             alldescs.append(descs[pointindex])
-
     points = np.array(allpoints).reshape((len(allpoints), 2))
     return (points, allresps, alldescs)
 
 
-def getcenter(slicenumber, mfovnumber):
-    slicestring = ("%03d" % slicenumber)
-    with open("tilespecs/W01_Sec" + slicestring + ".json") as data_file:
-        data = json.load(data_file)
-
+def getcenter(slicenumber, mfovnumber, data):
     xlocsum, ylocsum, nump = 0, 0, 0
     for num in range(1, 62):
         jsonindex = (mfovnumber - 1) * 61 + num
@@ -108,7 +100,6 @@ def reorienttris(trilist, pointlist):
         v0 = np.array(pointlist[trilist[num][0]])
         v1 = np.array(pointlist[trilist[num][1]])
         v2 = np.array(pointlist[trilist[num][2]])
-
         if np.cross((v1 - v0), (v2 - v0)) < 0:
             trilist[num][0], trilist[num][1] = trilist[num][1], trilist[num][0]
     return
@@ -130,12 +121,10 @@ def analyzemfov(slicenumber, mfovnumber, maximgs, data):
 def generatematches_cv2(allpoints1, allpoints2, alldescs1, alldescs2):
     matcher = cv2.BFMatcher()
     matches = matcher.knnMatch(np.array(alldescs1), np.array(alldescs2), k=2)
-
     goodmatches = []
     for m, n in matches:
         if m.distance / n.distance < 0.92:
             goodmatches.append([m])
-
     match_points = np.array([
         np.array([allpoints1[[m[0].queryIdx for m in goodmatches]]][0]),
         np.array([allpoints2[[m[0].trainIdx for m in goodmatches]]][0])])
@@ -145,7 +134,6 @@ def generatematches_cv2(allpoints1, allpoints2, alldescs1, alldescs2):
 def generatematches_brute(allpoints1, allpoints2, alldescs1, alldescs2):
     bestpoints1 = []
     bestpoints2 = []
-
     for pointrange in range(0, len(allpoints1)):
         selectedpoint = allpoints1[pointrange]
         selectedpointd = alldescs1[pointrange]
@@ -153,7 +141,6 @@ def generatematches_brute(allpoints1, allpoints2, alldescs1, alldescs2):
         secondbestdistsofar = sys.float_info.max
         bestcomparedpoint = allpoints2[0]
         distances = []
-
         for num in range(0, len(allpoints2)):
             comparedpointd = alldescs2[num]
             bestdist = distance.euclidean(selectedpointd.astype(np.int), comparedpointd.astype(np.int))
@@ -171,14 +158,8 @@ def generatematches_brute(allpoints1, allpoints2, alldescs1, alldescs2):
     return match_points
 
 
-def analyze2slicesmfovs(slice1, mfov1, slice2, mfov2):
+def analyze2slicesmfovs(slice1, mfov1, slice2, mfov2, data1, data2):
     print str(slice1) + "-" + str(mfov1) + " vs. " + str(slice2) + "-" + str(mfov2)
-    slicestring1 = ("%03d" % slice1)
-    slicestring2 = ("%03d" % slice2)
-    with open("tilespecs/W01_Sec" + slicestring1 + ".json") as data_file1:
-        data1 = json.load(data_file1)
-    with open("tilespecs/W01_Sec" + slicestring2 + ".json") as data_file2:
-        data2 = json.load(data_file2)
     (allpoints1, allresps1, alldescs1) = analyzemfov(slice1, mfov1, 61, data1)
     (allpoints2, allresps2, alldescs2) = analyzemfov(slice2, mfov2, 61, data2)
     match_points = generatematches_cv2(allpoints1, allpoints2, alldescs1, alldescs2)
@@ -194,8 +175,8 @@ def analyze2slicesmfovs(slice1, mfov1, slice2, mfov2):
     return (model, filtered_matches.shape[1], float(filtered_matches.shape[1]) / match_points.shape[1], match_points.shape[1], len(allpoints1), len(allpoints2))
 
 
-def analyze2slices(slice1, slice2, nummfovs):
-    toret = []    
+def analyze2slices(slice1, slice2, data1, data2, nummfovs):
+    toret = []
     modelarr = np.zeros((nummfovs, nummfovs), dtype=models.RigidModel)
     numfilterarr = np.zeros((nummfovs, nummfovs))
     filterratearr = np.zeros((nummfovs, nummfovs))
@@ -204,7 +185,7 @@ def analyze2slices(slice1, slice2, nummfovs):
     while besttransform is None:
         mfov1 = random.randint(1, nummfovs)
         mfov2 = random.randint(1, nummfovs)
-        (model, num_filtered, filter_rate, num_rod, num_m1, num_m2) = analyze2slicesmfovs(slice1, mfov1, slice2, mfov2)
+        (model, num_filtered, filter_rate, num_rod, num_m1, num_m2) = analyze2slicesmfovs(slice1, mfov1, slice2, mfov2, data1, data2)
         modelarr[mfov1 - 1, mfov2 - 1] = model
         numfilterarr[mfov1 - 1, mfov2 - 1] = num_filtered
         filterratearr[mfov1 - 1, mfov2 - 1] = filter_rate
@@ -214,14 +195,14 @@ def analyze2slices(slice1, slice2, nummfovs):
     print "Preliminary Transform Found"
 
     for i in range(0, nummfovs):
-        mycenter = getcenter(slice1, i + 1)
+        mycenter = getcenter(slice1, i + 1, data1)
         mycentertrans = np.dot(besttransform, np.append(mycenter, [1]))[0:2]
         distances = np.zeros(nummfovs)
         for j in range(0, nummfovs):
-            distances[j] = np.linalg.norm(mycentertrans - getcenter(slice2, j + 1))
+            distances[j] = np.linalg.norm(mycentertrans - getcenter(slice2, j + 1, data2))
         checkindices = distances.argsort()[0:7]
         for j in range(0, len(checkindices)):
-            (model, num_filtered, filter_rate, num_rod, num_m1, num_m2) = analyze2slicesmfovs(slice1, i + 1, slice2, checkindices[j] + 1)
+            (model, num_filtered, filter_rate, num_rod, num_m1, num_m2) = analyze2slicesmfovs(slice1, i + 1, slice2, checkindices[j] + 1, data1, data2)
             modelarr[i, checkindices[j]] = model
             numfilterarr[i, checkindices[j]] = num_filtered
             filterratearr[i, checkindices[j]] = filter_rate
@@ -233,8 +214,8 @@ def analyze2slices(slice1, slice2, nummfovs):
                 dictentry['features_in_mfov1'] = num_m1
                 dictentry['features_in_mfov2'] = num_m2
                 dictentry['transformation'] = {
-                    "className" : model.class_name,
-                    "matrix" : besttransform.tolist()
+                    "className": model.class_name,
+                    "matrix": besttransform.tolist()
                 }
                 dictentry['matches_rod'] = num_rod
                 dictentry['matches_model'] = num_filtered
@@ -246,18 +227,25 @@ def analyze2slices(slice1, slice2, nummfovs):
 
 def main():
     script, slice1, slice2, nummfovs = sys.argv
+    starttime = time.clock()
     slice1 = int(slice1)
     slice2 = int(slice2)
     nummfovs = int(nummfovs)
-    
-    retval = analyze2slices(slice1, slice2, nummfovs)
-    
+    slicestring1 = ("%03d" % slice1)
+    slicestring2 = ("%03d" % slice2)
+    with open("tilespecs/W01_Sec" + slicestring1 + ".json") as data_file1:
+        data1 = json.load(data_file1)
+    with open("tilespecs/W01_Sec" + slicestring2 + ".json") as data_file2:
+        data2 = json.load(data_file2)
+    retval = analyze2slices(slice1, slice2, data1, data2, nummfovs)
+
     jsonfile = {}
     jsonfile['tilespec1'] = "file://" + os.getcwd() + "/tilespecs/W01_Sec" + ("%03d" % slice1) + ".json"
     jsonfile['tilespec2'] = "file://" + os.getcwd() + "/tilespecs/W01_Sec" + ("%03d" % slice2) + ".json"
     jsonfile['matches'] = retval
+    jsonfile['runtime'] = time.clock() - starttime
     os.chdir("/home/raahilsha")
     json.dump(jsonfile, open('outputs.json', 'w'), indent=4)
-    
+
 if __name__ == '__main__':
     main()
