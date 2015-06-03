@@ -51,12 +51,10 @@ def thirdlargest(nums):
     return thirdlarge
 
 
-def analyzeimg(slicenumber, mfovnumber, num):
+def analyzeimg(slicenumber, mfovnumber, num, data):
     slicestring = ("%03d" % slicenumber)
     numstring = ("%03d" % num)
     mfovstring = ("%06d" % mfovnumber)
-    with open("tilespecs/W01_Sec" + slicestring + ".json") as data_file:
-        data = json.load(data_file)
     imgname = "2d_work_dir/W01_Sec" + slicestring + "/W01_Sec" + slicestring + "_sifts_" + slicestring + "_" + mfovstring + "_" + numstring + "*"
     f = h5py.File(glob.glob(imgname)[0], 'r')
 
@@ -85,7 +83,6 @@ def analyzeimg(slicenumber, mfovnumber, num):
             alldescs.append(descs[pointindex])
 
     points = np.array(allpoints).reshape((len(allpoints), 2))
-
     return (points, allresps, alldescs)
 
 
@@ -114,17 +111,15 @@ def reorienttris(trilist, pointlist):
     return
 
 
-def analyzemfov(slicenumber, mfovnumber, maximgs):
+def analyzemfov(slicenumber, mfovnumber, maximgs, data):
     allpoints = np.array([]).reshape((0, 2))
     allresps = []
     alldescs = []
-
     for i in range(1, maximgs + 1):
-        (tempoints, tempresps, tempdescs) = analyzeimg(slicenumber, mfovnumber, i)
+        (tempoints, tempresps, tempdescs) = analyzeimg(slicenumber, mfovnumber, i, data)
         allpoints = np.append(allpoints, tempoints, axis=0)
         allresps += tempresps
         alldescs += tempdescs
-
     allpoints = np.array(allpoints)
     return (allpoints, allresps, alldescs)
 
@@ -180,8 +175,14 @@ def generatematches_brute(allpoints1, allpoints2, alldescs1, alldescs2):
 
 def analyze2slicesmfovs(slice1, mfov1, slice2, mfov2):
     print str(slice1) + "-" + str(mfov1) + " vs. " + str(slice2) + "-" + str(mfov2)
-    (allpoints1, allresps1, alldescs1) = analyzemfov(slice1, mfov1, 61)
-    (allpoints2, allresps2, alldescs2) = analyzemfov(slice2, mfov2, 61)
+    slicestring1 = ("%03d" % slice1)
+    slicestring2 = ("%03d" % slice2)
+    with open("tilespecs/W01_Sec" + slicestring1 + ".json") as data_file1:
+        data1 = json.load(data_file1)
+    with open("tilespecs/W01_Sec" + slicestring2 + ".json") as data_file2:
+        data2 = json.load(data_file2)
+    (allpoints1, allresps1, alldescs1) = analyzemfov(slice1, mfov1, 61, data1)
+    (allpoints2, allresps2, alldescs2) = analyzemfov(slice2, mfov2, 61, data2)
     match_points = generatematches_cv2(allpoints1, allpoints2, alldescs1, alldescs2)
     model_index = 1
     iterations = 2000
@@ -237,7 +238,7 @@ def analyze2slices(slice1, slice2, nummfovs):
         distances = np.zeros(nummfovs)
         for j in range(0, nummfovs):
             distances[j] = np.linalg.norm(mycentertrans - getcenter(slice2, j + 1))
-        checkindices = distances.argsort()
+        checkindices = distances.argsort()[0:7]
         for j in range(0, len(checkindices)):
             (model, num_filtered, filter_rate, num_rod, num_m1, num_m2) = analyze2slicesmfovs(slice1, i + 1, slice2, checkindices[j] + 1)
             modelarr[i, checkindices[j]] = model
