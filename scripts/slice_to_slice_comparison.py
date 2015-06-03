@@ -66,8 +66,11 @@ def analyzeimg(slicenumber, mfovnumber, num, data):
     xtransform = float(data[jsonindex - 1]["transforms"][0]["dataString"].encode("ascii").split(" ")[0])
     ytransform = float(data[jsonindex - 1]["transforms"][0]["dataString"].encode("ascii").split(" ")[1])
 
-    xlocs = f['pts']['locations'][:, 0] + xtransform
-    ylocs = f['pts']['locations'][:, 1] + ytransform
+    xlocs = []
+    ylocs = []
+    if len(resps) != 0:
+        xlocs = f['pts']['locations'][:, 0] + xtransform
+        ylocs = f['pts']['locations'][:, 1] + ytransform
 
     allpoints = []
     allresps = []
@@ -146,7 +149,6 @@ def generatematches_brute(allpoints1, allpoints2, alldescs1, alldescs2):
     for pointrange in range(0, len(allpoints1)):
         selectedpoint = allpoints1[pointrange]
         selectedpointd = alldescs1[pointrange]
-
         bestdistsofar = sys.float_info.max - 1
         secondbestdistsofar = sys.float_info.max
         bestcomparedpoint = allpoints2[0]
@@ -154,9 +156,7 @@ def generatematches_brute(allpoints1, allpoints2, alldescs1, alldescs2):
 
         for num in range(0, len(allpoints2)):
             comparedpointd = alldescs2[num]
-
             bestdist = distance.euclidean(selectedpointd.astype(np.int), comparedpointd.astype(np.int))
-
             distances.append(bestdist)
             if bestdist < bestdistsofar:
                 secondbestdistsofar = bestdistsofar
@@ -164,11 +164,9 @@ def generatematches_brute(allpoints1, allpoints2, alldescs1, alldescs2):
                 bestcomparedpoint = allpoints2[num]
             elif bestdist < secondbestdistsofar:
                 secondbestdistsofar = bestdist
-
         if bestdistsofar / secondbestdistsofar < .92:
             bestpoints1.append(selectedpoint)
             bestpoints2.append(bestcomparedpoint)
-
     match_points = np.array([bestpoints1, bestpoints2])
     return match_points
 
@@ -198,7 +196,6 @@ def analyze2slicesmfovs(slice1, mfov1, slice2, mfov2):
 
 def analyze2slices(slice1, slice2, nummfovs):
     toret = []    
-    
     modelarr = np.zeros((nummfovs, nummfovs), dtype=models.RigidModel)
     numfilterarr = np.zeros((nummfovs, nummfovs))
     filterratearr = np.zeros((nummfovs, nummfovs))
@@ -213,23 +210,7 @@ def analyze2slices(slice1, slice2, nummfovs):
         filterratearr[mfov1 - 1, mfov2 - 1] = filter_rate
         if num_filtered > 50 and filter_rate > 0.25:
             besttransform = model.get_matrix()
-            '''
-            dictentry = {}
-            dictentry['mfov1'] = mfov1
-            dictentry['mfov2'] = mfov2
-            dictentry['features_in_mfov1'] = num_m1
-            dictentry['features_in_mfov2'] = num_m2
-            dictentry['transformation'] = {
-                "className" : model.class_name,
-                "matrix" : besttransform.tolist()
-            }
-            dictentry['matches_rod'] = num_rod
-            dictentry['matches_model'] = num_filtered
-            dictentry['filter_rate'] = filter_rate
-            toret.append(dictentry)
-            '''
             break
-
     print "Preliminary Transform Found"
 
     for i in range(0, nummfovs):
@@ -260,12 +241,8 @@ def analyze2slices(slice1, slice2, nummfovs):
                 dictentry['filter_rate'] = filter_rate
                 toret.append(dictentry)
                 break
-    
     return toret
 
-# toreturn.append((str(slice1) + "-" + str(mfov1), str(slice2) + "-" + str(mfov2), besttransform.tolist()))
-# toreturn.append((str(slice1) + "-" + str(i + 1), str(slice2) + "-" + str(checkindices[j] + 1), besttransform.tolist()))
-                
 
 def main():
     script, slice1, slice2, nummfovs = sys.argv
