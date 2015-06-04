@@ -146,4 +146,5 @@ with open("tilespecs/W01_Sec" + slicestring2 + ".json") as data_file2:
 with open("Slice" + str(slice1) + "vs" + str(slice2) + ".json") as data_matches:
     mfovmatches = json.load(data_matches)
     
-# jsonindex = (mfovnumber - 1) * 61 + imgnumber - 1
+allimgsin1 = getimgcentersfromjson(data1)
+allimgsin2 = getimgcentersfromjson(data2)

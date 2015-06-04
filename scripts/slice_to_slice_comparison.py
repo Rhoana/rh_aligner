@@ -210,7 +210,7 @@ def analyze2slices(slice1, slice2, data1, data2, nummfovs):
                 besttransform = model.get_matrix()
                 dictentry = {}
                 dictentry['mfov1'] = i + 1
-                dictentry['mfov2'] = slice2
+                dictentry['mfov2'] = checkindices[j] + 1
                 dictentry['features_in_mfov1'] = num_m1
                 dictentry['features_in_mfov2'] = num_m2
                 dictentry['transformation'] = {
