@@ -60,9 +60,9 @@ def analyzeimg(slicenumber, mfovnumber, num, data):
     resps = f['pts']['responses'][:]
     descs = f['descs'][:]
     octas = f['pts']['octaves'][:]
-    jsonindex = (mfovnumber - 1) * 61 + num
-    xtransform = float(data[jsonindex - 1]["transforms"][0]["dataString"].encode("ascii").split(" ")[0])
-    ytransform = float(data[jsonindex - 1]["transforms"][0]["dataString"].encode("ascii").split(" ")[1])
+    jsonindex = (mfovnumber - 1) * 61 + num - 1
+    xtransform = float(data[jsonindex]["transforms"][0]["dataString"].encode("ascii").split(" ")[0])
+    ytransform = float(data[jsonindex]["transforms"][0]["dataString"].encode("ascii").split(" ")[1])
 
     xlocs = []
     ylocs = []
@@ -88,9 +88,9 @@ def analyzeimg(slicenumber, mfovnumber, num, data):
 def getcenter(slicenumber, mfovnumber, data):
     xlocsum, ylocsum, nump = 0, 0, 0
     for num in range(1, 62):
-        jsonindex = (mfovnumber - 1) * 61 + num
-        xlocsum += data[jsonindex - 1]["bbox"][0] + data[jsonindex - 1]["bbox"][1]
-        ylocsum += data[jsonindex - 1]["bbox"][2] + data[jsonindex - 1]["bbox"][3]
+        jsonindex = (mfovnumber - 1) * 61 + num - 1
+        xlocsum += data[jsonindex]["bbox"][0] + data[jsonindex]["bbox"][1]
+        ylocsum += data[jsonindex]["bbox"][2] + data[jsonindex]["bbox"][3]
         nump += 2
     return [xlocsum / nump, ylocsum / nump]
 

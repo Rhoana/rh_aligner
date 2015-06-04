@@ -31,9 +31,9 @@ def analyzeimg(slicenumber, mfovnumber, num, data):
     resps = f['pts']['responses'][:]
     descs = f['descs'][:]
     octas = f['pts']['octaves'][:]
-    jsonindex = (mfovnumber - 1) * 61 + num
-    xtransform = float(data[jsonindex - 1]["transforms"][0]["dataString"].encode("ascii").split(" ")[0])
-    ytransform = float(data[jsonindex - 1]["transforms"][0]["dataString"].encode("ascii").split(" ")[1])
+    jsonindex = (mfovnumber - 1) * 61 + num - 1
+    xtransform = float(data[jsonindex]["transforms"][0]["dataString"].encode("ascii").split(" ")[0])
+    ytransform = float(data[jsonindex]["transforms"][0]["dataString"].encode("ascii").split(" ")[1])
 
     xlocs = []
     ylocs = []
@@ -56,12 +56,21 @@ def analyzeimg(slicenumber, mfovnumber, num, data):
     return (points, allresps, alldescs)
 
 
-def getcenter(slicenumber, mfovnumber, imgnumber, data):
+def getimagecenter(slicenumber, mfovnumber, imgnumber, data):
     xlocsum, ylocsum, nump = 0, 0, 0
-    for num in range(imgnumber, imgnumber + 1):
-        jsonindex = (mfovnumber - 1) * 61 + num
-        xlocsum += data[jsonindex - 1]["bbox"][0] + data[jsonindex - 1]["bbox"][1]
-        ylocsum += data[jsonindex - 1]["bbox"][2] + data[jsonindex - 1]["bbox"][3]
+    jsonindex = (mfovnumber - 1) * 61 + imgnumber - 1
+    xlocsum += data[jsonindex]["bbox"][0] + data[jsonindex]["bbox"][1]
+    ylocsum += data[jsonindex]["bbox"][2] + data[jsonindex]["bbox"][3]
+    nump += 2
+    return [xlocsum / nump, ylocsum / nump]
+
+    
+def getcenter(slicenumber, mfovnumber, data):
+    xlocsum, ylocsum, nump = 0, 0, 0
+    for num in range(1, 62):
+        jsonindex = (mfovnumber - 1) * 61 + num - 1
+        xlocsum += data[jsonindex]["bbox"][0] + data[jsonindex]["bbox"][1]
+        ylocsum += data[jsonindex]["bbox"][2] + data[jsonindex]["bbox"][3]
         nump += 2
     return [xlocsum / nump, ylocsum / nump]
 
@@ -106,6 +115,25 @@ def generatematches_brute(allpoints1, allpoints2, alldescs1, alldescs2):
     return match_points
 
 
+def gettransformationbetween(mfov1, mfovmatches):
+    for i in range(0, len(mfovmatches["matches"])):
+        if mfovmatches["matches"][i]["mfov1"] == mfov1:
+            return mfovmatches["matches"][i]["transformation"]["matrix"]
+    # Need to find a more intelligent way to do this, but this suffices for now
+    # Uses transformation of another mfov (should be changed to the closest, unvisited mfov)
+    return gettransformationbetween(mfov1 - 1, mfovmatches)
+
+
+def getimgcentersfromjson(data):
+    centers = []
+    for i in range(0, len(data)):
+        xlocsum, ylocsum, nump = 0
+        xlocsum += data[i]["bbox"][0] + data[i]["bbox"][1]
+        ylocsum += data[i]["bbox"][2] + data[i]["bbox"][3]
+        nump += 2
+        centers.append([xlocsum / nump, ylocsum / nump])
+    return centers
+
 slice1 = 90
 slice2 = 91
 nummfovs = 5
@@ -118,3 +146,4 @@ with open("tilespecs/W01_Sec" + slicestring2 + ".json") as data_file2:
 with open("Slice" + str(slice1) + "vs" + str(slice2) + ".json") as data_matches:
     mfovmatches = json.load(data_matches)
     
+# jsonindex = (mfovnumber - 1) * 61 + imgnumber - 1
