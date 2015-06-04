@@ -66,7 +66,7 @@ def analyzeimg(slicenumber, mfovnumber, num, data):
 
     xlocs = []
     ylocs = []
-    if not resps:
+    if len(resps) != 0:
         xlocs = f['pts']['locations'][:, 0] + xtransform
         ylocs = f['pts']['locations'][:, 1] + ytransform
 
@@ -245,7 +245,7 @@ def main():
     jsonfile['matches'] = retval
     jsonfile['runtime'] = time.clock() - starttime
     os.chdir("/home/raahilsha")
-    json.dump(jsonfile, open('outputs.json', 'w'), indent=4)
+    json.dump(jsonfile, open("Slice" + str(slice1) + "vs" + str(slice2) + ".json", 'w'), indent=4)
 
 if __name__ == '__main__':
     main()
