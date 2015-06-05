@@ -127,16 +127,16 @@ def gettransformationbetween(mfov1, mfovmatches):
 def getimgcentersfromjson(data):
     centers = []
     for i in range(0, len(data)):
-        xlocsum, ylocsum, nump = 0
+        xlocsum, ylocsum, nump = 0, 0, 0
         xlocsum += data[i]["bbox"][0] + data[i]["bbox"][1]
         ylocsum += data[i]["bbox"][2] + data[i]["bbox"][3]
         nump += 2
         centers.append([xlocsum / nump, ylocsum / nump])
     return centers
 
-slice1 = 90
-slice2 = 91
-nummfovs = 5
+slice1 = 1
+slice2 = 2
+nummfovs = 53
 slicestring1 = ("%03d" % slice1)
 slicestring2 = ("%03d" % slice2)
 with open("tilespecs/W01_Sec" + slicestring1 + ".json") as data_file1:
@@ -148,3 +148,18 @@ with open("Slice" + str(slice1) + "vs" + str(slice2) + ".json") as data_matches:
     
 allimgsin1 = getimgcentersfromjson(data1)
 allimgsin2 = getimgcentersfromjson(data2)
+
+imgmatches = []
+
+for mfovnum in range(1, nummfovs + 1):
+    print mfovnum
+    for imgnum in range(1, 62):
+        jsonindex = (mfovnum - 1) * 61 + imgnum - 1
+        img1center = allimgsin1[jsonindex]
+        expectedtransform = gettransformationbetween(mfovnum, mfovmatches)
+        expectednewcenter = np.dot(expectedtransform, np.append(img1center, [1]))[0:2]
+        distances = np.zeros(len(allimgsin2))
+        for j in range(0, len(allimgsin2)):
+            distances[j] = np.linalg.norm(expectednewcenter - allimgsin2[j])
+        checkindices = distances.argsort()[0:10]
+        imgmatches.append((jsonindex, checkindices))
