@@ -133,6 +133,12 @@ def getimgcentersfromjson(data):
         nump += 2
         centers.append([xlocsum / nump, ylocsum / nump])
     return centers
+    
+def getnumsfromindex(ind):
+    return (ind / 61 + 1, ind % 61 + 1)
+    
+def getindexfromnums((mfovnum, imgnum)):
+    return (mfovnum - 1) * 61 + imgnum - 1
 
 slice1 = 1
 slice2 = 2
