@@ -1,3 +1,8 @@
+# -*- coding: utf-8 -*-
+# <nbformat>3.0</nbformat>
+
+# <codecell>
+
 # Setup
 import utils
 import models
@@ -18,9 +23,7 @@ from scipy.spatial import KDTree
 import cv2
 import time
 import glob
-os.chdir("C:/Users/Raahil/Documents/Research2015_eclipse/Testing")
-# os.chdir("/data/SCS_2015-4-27_C1w7_alignment")
-
+os.chdir("/data/SCS_2015-4-27_C1w7_alignment")
 
 def analyzeimg(slicenumber, mfovnumber, num, data):
     slicestring = ("%03d" % slicenumber)
@@ -134,38 +137,105 @@ def getimgcentersfromjson(data):
         centers.append([xlocsum / nump, ylocsum / nump])
     return centers
     
+    
 def getnumsfromindex(ind):
     return (ind / 61 + 1, ind % 61 + 1)
+    
     
 def getindexfromnums((mfovnum, imgnum)):
     return (mfovnum - 1) * 61 + imgnum - 1
 
-slice1 = 1
-slice2 = 2
-nummfovs = 53
-slicestring1 = ("%03d" % slice1)
-slicestring2 = ("%03d" % slice2)
-with open("tilespecs/W01_Sec" + slicestring1 + ".json") as data_file1:
-    data1 = json.load(data_file1)
-with open("tilespecs/W01_Sec" + slicestring2 + ".json") as data_file2:
-    data2 = json.load(data_file2)
-with open("Slice" + str(slice1) + "vs" + str(slice2) + ".json") as data_matches:
-    mfovmatches = json.load(data_matches)
+
+def getimgmatches(slice1, slice2, nummfovs):
+    slicestring1 = ("%03d" % slice1)
+    slicestring2 = ("%03d" % slice2)
+    with open("tilespecs/W01_Sec" + slicestring1 + ".json") as data_file1:
+        data1 = json.load(data_file1)
+    with open("tilespecs/W01_Sec" + slicestring2 + ".json") as data_file2:
+        data2 = json.load(data_file2)
+    with open("/home/raahilsha/Slice" + str(slice1) + "vs" + str(slice2) + ".json") as data_matches:
+        mfovmatches = json.load(data_matches)
+        
+    allimgsin1 = getimgcentersfromjson(data1)
+    allimgsin2 = getimgcentersfromjson(data2)
     
-allimgsin1 = getimgcentersfromjson(data1)
-allimgsin2 = getimgcentersfromjson(data2)
+    imgmatches = []
+    
+    for mfovnum in range(1, nummfovs + 1):
+        for imgnum in range(1, 62):
+            jsonindex = (mfovnum - 1) * 61 + imgnum - 1
+            img1center = allimgsin1[jsonindex]
+            expectedtransform = gettransformationbetween(mfovnum, mfovmatches)
+            expectednewcenter = np.dot(expectedtransform, np.append(img1center, [1]))[0:2]
+            distances = np.zeros(len(allimgsin2))
+            for j in range(0, len(allimgsin2)):
+                distances[j] = np.linalg.norm(expectednewcenter - allimgsin2[j])
+            checkindices = distances.argsort()[0:10]
+            imgmatches.append((jsonindex, checkindices))
+            
+    return imgmatches
 
-imgmatches = []
 
-for mfovnum in range(1, nummfovs + 1):
-    print mfovnum
-    for imgnum in range(1, 62):
-        jsonindex = (mfovnum - 1) * 61 + imgnum - 1
-        img1center = allimgsin1[jsonindex]
-        expectedtransform = gettransformationbetween(mfovnum, mfovmatches)
-        expectednewcenter = np.dot(expectedtransform, np.append(img1center, [1]))[0:2]
-        distances = np.zeros(len(allimgsin2))
-        for j in range(0, len(allimgsin2)):
-            distances[j] = np.linalg.norm(expectednewcenter - allimgsin2[j])
-        checkindices = distances.argsort()[0:10]
-        imgmatches.append((jsonindex, checkindices))
+def getimgsfrominds(imginds, slice):
+    imgarr = []
+    for i in range(0, len(imginds)):
+        slicestring = ("%03d" % slice)
+        (imgmfov, imgnum) = getnumsfromindex(imginds[i])
+        mfovstring = ("%06d" % imgmfov)
+        numstring = ("%03d" % imgnum)
+        imgurl = "/data/images/SCS_2015-4-27_C1w7/" + slicestring + "/" + mfovstring + "/" + slicestring + "_" + mfovstring + "_" + numstring
+        imgt = cv2.imread(glob.glob(imgurl + "*.bmp")[0])
+        imgarr.append(imgt)
+    return imgarr
+
+
+def gettemplatesfromimg(img1):
+    imgheight = img1.shape[0]
+    imgwidth = img1.shape[1]
+    templates = []
+    for i in range(0, 15):
+        for j in range(0, 15):
+            ystart = imgheight / 15 * i
+            xstart = imgwidth / 15 * j
+            template = img1[ystart:(ystart + 150), xstart:(xstart + 150)]
+            templates.append(template)
+    return templates
+
+# <codecell>
+
+slice1 = 2
+slice2 = 3
+nummfovs = 53
+imgmatches = getimgmatches(slice1, slice2, nummfovs)
+
+# <codecell>
+
+(img1ind, img2inds) = random.choice(imgmatches)
+(img1mfov, img1num) = getnumsfromindex(img1ind)
+
+slice1string = ("%03d" % slice1)
+mfov1string = ("%06d" % img1mfov)
+num1string = ("%03d" % img1num)
+img1url = "/data/images/SCS_2015-4-27_C1w7/" + slice1string + "/" + mfov1string + "/" + slice1string + "_" + mfov1string + "_" + num1string
+
+img1 = cv2.imread(glob.glob(img1url + "*.bmp")[0])
+img2s = getimgsfrominds(img2inds, slice2)
+
+# <codecell>
+
+img1templates = gettemplatesfromimg(img1)
+
+# <codecell>
+'''
+%matplotlib
+plt.figure(1)
+plt.imshow(img1)
+plt.figure(2)
+plt.imshow(img2s[0])
+plt.figure(3)
+plt.imshow(img2s[1])
+plt.figure(4)
+plt.imshow(img2s[2])
+plt.figure(5)
+plt.imshow(img2s[3])
+'''
