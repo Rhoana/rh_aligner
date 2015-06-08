@@ -20,10 +20,12 @@ import operator
 from scipy.spatial import Delaunay
 from scipy.spatial import distance
 from scipy.spatial import KDTree
+from scipy import ndimage
 import cv2
 import time
 import glob
 os.chdir("/data/SCS_2015-4-27_C1w7_alignment")
+
 
 def analyzeimg(slicenumber, mfovnumber, num, data):
     slicestring = ("%03d" % slicenumber)
@@ -58,6 +60,13 @@ def analyzeimg(slicenumber, mfovnumber, num, data):
     points = np.array(allpoints).reshape((len(allpoints), 2))
     return (points, allresps, alldescs)
 
+
+def getimagetransform(slicenumber, mfovnumber, num, data):
+    jsonindex = (mfovnumber - 1) * 61 + num - 1
+    xtransform = float(data[jsonindex]["transforms"][0]["dataString"].encode("ascii").split(" ")[0])
+    ytransform = float(data[jsonindex]["transforms"][0]["dataString"].encode("ascii").split(" ")[1])
+    return (xtransform, ytransform)
+    
 
 def getimagecenter(slicenumber, mfovnumber, imgnumber, data):
     xlocsum, ylocsum, nump = 0, 0, 0
@@ -193,12 +202,14 @@ def gettemplatesfromimg(img1):
     imgheight = img1.shape[0]
     imgwidth = img1.shape[1]
     templates = []
-    for i in range(0, 15):
-        for j in range(0, 15):
-            ystart = imgheight / 15 * i
-            xstart = imgwidth / 15 * j
-            template = img1[ystart:(ystart + 150), xstart:(xstart + 150)]
-            templates.append(template)
+    numslices = 6
+    searchsq = 400
+    for i in range(0, numslices):
+        for j in range(0, numslices):
+            ystart = imgheight / numslices * i
+            xstart = imgwidth / numslices * j
+            template = img1[ystart:(ystart + searchsq), xstart:(xstart + searchsq)]
+            templates.append((template, xstart, ystart))
     return templates
 
 # <codecell>
@@ -220,22 +231,51 @@ img1url = "/data/images/SCS_2015-4-27_C1w7/" + slice1string + "/" + mfov1string 
 
 img1 = cv2.imread(glob.glob(img1url + "*.bmp")[0])
 img2s = getimgsfrominds(img2inds, slice2)
-
-# <codecell>
-
 img1templates = gettemplatesfromimg(img1)
 
+# Later on, we can use scipy's ndimage to rotate the templates like this:
+# rotate_lena_noreshape = ndimage.rotate(lena, 45, reshape=False
+
 # <codecell>
-'''
-%matplotlib
+
+randtemplate, randstartx, randstarty = random.choice(img1templates)
+img2 = img2s[0].copy()
+(img2mfov, img2num) = getnumsfromindex(img2inds[0])
+
+w = randtemplate.shape[0]
+h = randtemplate.shape[1]
+meth = "cv2.TM_CCORR_NORMED"
+method = eval(meth)
+res = cv2.matchTemplate(img2, randtemplate, method)
+min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
+top_left = max_loc
+bottom_right = (top_left[0] + w, top_left[1] + h)
+
+slicestring1 = ("%03d" % slice1)
+slicestring2 = ("%03d" % slice2)
+with open("tilespecs/W01_Sec" + slicestring1 + ".json") as data_file1:
+    data1 = json.load(data_file1)
+with open("tilespecs/W01_Sec" + slicestring2 + ".json") as data_file2:
+    data2 = json.load(data_file2)
+with open("/home/raahilsha/Slice" + str(slice1) + "vs" + str(slice2) + ".json") as data_matches:
+    mfovmatches = json.load(data_matches)
+imgoffset1 = getimagetransform(slice1, img1mfov, img1num, data1)
+imgoffset2 = getimagetransform(slice2, img2mfov, img2num, data2)
+expectedtransform = gettransformationbetween(img1mfov, mfovmatches)
+centerpoint1 = np.array([randstartx + w / 2, randstarty + h / 2]) + imgoffset1
+expectednewcenter = np.dot(expectedtransform, np.append(centerpoint1, [1]))[0:2] - imgoffset2
+centerpoint1 = centerpoint1 - imgoffset1
+
+cv2.rectangle(img2,top_left, bottom_right, 255, 20)
+cv2.circle(img2, (int(expectednewcenter[0]), int(expectednewcenter[1])), 20, 255, -1)
+plt1fig = img1.copy()
+cv2.rectangle(plt1fig, (randstartx, randstarty), (randstartx + w, randstarty + h), 255, 20)
+cv2.circle(plt1fig, (int(centerpoint1[0]), int(centerpoint1[1])), 20, 255, -1)
+
+# %matplotlib
 plt.figure(1)
-plt.imshow(img1)
+plt.imshow(plt1fig)
 plt.figure(2)
-plt.imshow(img2s[0])
+plt.imshow(img2)
 plt.figure(3)
-plt.imshow(img2s[1])
-plt.figure(4)
-plt.imshow(img2s[2])
-plt.figure(5)
-plt.imshow(img2s[3])
-'''
+plt.imshow(res)
