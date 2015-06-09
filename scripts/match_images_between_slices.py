@@ -65,8 +65,32 @@ def getimagetransform(slicenumber, mfovnumber, num, data):
     jsonindex = (mfovnumber - 1) * 61 + num - 1
     xtransform = float(data[jsonindex]["transforms"][0]["dataString"].encode("ascii").split(" ")[0])
     ytransform = float(data[jsonindex]["transforms"][0]["dataString"].encode("ascii").split(" ")[1])
-    return (xtransform, ytransform)
-    
+    return [xtransform, ytransform]
+
+
+def getimagetopleft(slicenumber, mfovnumber, num, data):
+    jsonindex = (mfovnumber - 1) * 61 + imgnumber - 1
+    xlocsum = data[jsonindex]["bbox"][0]
+    ylocsum = data[jsonindex]["bbox"][2]
+    return [xlocsum, ylocsum]
+
+
+def getimagebottomright(slicenumber, mfovnumber, num, data):
+    jsonindex = (mfovnumber - 1) * 61 + imgnumber - 1
+    xlocsum = data[jsonindex]["bbox"][1]
+    ylocsum = data[jsonindex]["bbox"][3]
+    return [xlocsum, ylocsum]
+
+
+def imghittest(point, slicenumber, mfovnumber, num, data):
+    pointx = point[0]
+    pointy = point[1]
+    jsonindex = (mfovnumber - 1) * 61 + imgnumber - 1
+    if (pointx > data[jsonindex]["bbox"][0] and pointy > data[jsonindex]["bbox"][2] 
+            and pointx < data[jsonindex]["bbox"][1] and pointy < data[jsonindex]["bbox"][3]):
+        return True
+    return False
+
 
 def getimagecenter(slicenumber, mfovnumber, imgnumber, data):
     xlocsum, ylocsum, nump = 0, 0, 0
@@ -145,12 +169,12 @@ def getimgcentersfromjson(data):
         nump += 2
         centers.append([xlocsum / nump, ylocsum / nump])
     return centers
-    
-    
+
+
 def getnumsfromindex(ind):
     return (ind / 61 + 1, ind % 61 + 1)
-    
-    
+
+
 def getindexfromnums((mfovnum, imgnum)):
     return (mfovnum - 1) * 61 + imgnum - 1
 
@@ -167,7 +191,6 @@ def getimgmatches(slice1, slice2, nummfovs):
         
     allimgsin1 = getimgcentersfromjson(data1)
     allimgsin2 = getimgcentersfromjson(data2)
-    
     imgmatches = []
     
     for mfovnum in range(1, nummfovs + 1):
@@ -181,7 +204,6 @@ def getimgmatches(slice1, slice2, nummfovs):
                 distances[j] = np.linalg.norm(expectednewcenter - allimgsin2[j])
             checkindices = distances.argsort()[0:10]
             imgmatches.append((jsonindex, checkindices))
-            
     return imgmatches
 
 
@@ -272,10 +294,14 @@ plt1fig = img1.copy()
 cv2.rectangle(plt1fig, (randstartx, randstarty), (randstartx + w, randstarty + h), 255, 20)
 cv2.circle(plt1fig, (int(centerpoint1[0]), int(centerpoint1[1])), 20, 255, -1)
 
-# %matplotlib
+%matplotlib
 plt.figure(1)
 plt.imshow(plt1fig)
 plt.figure(2)
 plt.imshow(img2)
 plt.figure(3)
 plt.imshow(res)
+
+# <codecell>
+
+
