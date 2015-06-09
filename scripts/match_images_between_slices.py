@@ -171,6 +171,28 @@ def getimgcentersfromjson(data):
     return centers
 
 
+def getimgindsfrompoint(point, slicenumber, data):
+    centers = getimgcentersfromjson(data)
+    pointX = point[0]
+    pointY = point[1]
+    indmatches = []
+    for i in range(0, len(data)):
+        (mfovnum, numnum) = getnumsfromindex(i)
+        if imghittest(point, slicenumber, mfovnum, numnum, data):
+            indmatches.append(i)
+    return indmatches
+    
+def getclosestindtopoint(point, slicenumber, data):
+    indmatches = getimgindsfrompoint(point, slicenumber, data)
+    distances = []
+    for i in range(0, len(indmatches)):
+        (mfovnum, numnum) = getnumsfromindex(indmatches[i])
+        center = getimagecenter(slicenumber, mfovnum, numnum, data)
+        dist = np.linalg.norm(np.array(center) - np.array(point))
+        distances.append(dist)
+    checkindices = distances.argsort()[0]
+    return checkindices
+
 def getnumsfromindex(ind):
     return (ind / 61 + 1, ind % 61 + 1)
 
