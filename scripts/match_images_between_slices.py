@@ -7,6 +7,7 @@
 import utils
 import models
 import ransac
+import PMCC_filter_example
 import os
 import numpy as np
 import matplotlib.pyplot as plt
@@ -292,10 +293,10 @@ with open("/home/raahilsha/Slice" + str(slice1) + "vs" + str(slice2) + ".json") 
 pointmatches = []
 starttime = time.clock()
 scaling = 0.2
-templatesize = 100
+templatesize = 200
 
 for i in range(0, len(imgmatches)):
-    print str(float(i) / len(imgmatches))
+    print str(float(i) / len(imgmatches) * 100) + "% done"
     (img1ind, img2inds) = imgmatches[i]
     (img1mfov, img1num) = getnumsfromindex(img1ind)
 
@@ -322,6 +323,14 @@ for i in range(0, len(imgmatches)):
             img2resized = cv2.resize(img2, (0, 0), fx = scaling, fy = scaling)
             imgoffset2 = getimagetransform(slice2, img2mfov, img2num, data2)
             
+            template1topleft = centerpoint1 = np.array([startx, starty]) / scaling + imgoffset1
+            result, reason = PMCC_filter_example.PMCC_match(img2resized, chosentemplate, min_correlation=0.2)
+            if result is not None:            
+                img1topleft = np.array([startx, starty]) / scaling + imgoffset1
+                img2topleft = np.array(reason) / scaling + imgoffset2
+                pointmatches.append((img1topleft, img2topleft))
+            
+            '''
             res = cv2.matchTemplate(img2resized, chosentemplate, cv2.TM_CCORR_NORMED)
             min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
             top_left = max_loc
@@ -329,10 +338,10 @@ for i in range(0, len(imgmatches)):
             centerpoint2 = np.array([top_left[0] + w / 2, top_left[1] + h / 2]) / scaling + imgoffset2
             
             pointmatches.append((centerpoint1, centerpoint2))
+            '''
 
 # <codecell>
 
-'''
 (img1ind, img2inds) = random.choice(imgmatches)
 (img1mfov, img1num) = getnumsfromindex(img1ind)
 
@@ -389,11 +398,9 @@ plt.figure(2)
 plt.imshow(img2)
 plt.figure(3)
 plt.imshow(res)
-'''
 
 # <codecell>
 
-'''
 # Use img1 and img2
 scalings = [.2, .3, .5, .75, 1]
 templatesizes = [5, 10, 50, 75, 100, 125, 150, 175, 200, 300, 400]
@@ -428,6 +435,31 @@ for scalingr in range(0, len(scalings)):
 for row in finalarr:
     plt.plot(templatesizes, row)
 plt.show()
-'''
+
+# <codecell>
+
+%matplotlib
+plt.figure(1)
+plt.imshow(img1resized)
+plt.figure(2)
+plt.imshow(img2resized)
+plt.figure(3)
+plt.imshow(chosentemplate)
+
+# <codecell>
+
+img1url
+
+# <codecell>
+
+img2s
+
+# <codecell>
+
+getnumsfromindex(314)
+
+# <codecell>
+
+np.array((10,10))
 
 # <codecell>
