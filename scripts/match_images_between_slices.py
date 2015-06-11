@@ -22,6 +22,7 @@ from scipy.spatial import Delaunay
 from scipy.spatial import distance
 from scipy.spatial import KDTree
 from scipy import ndimage
+from pylab import axis
 import cv2
 import time
 import glob
@@ -183,6 +184,8 @@ def getimgindsfrompoint(point, slicenumber, data):
 
 def getclosestindtopoint(point, slicenumber, data):
     indmatches = getimgindsfrompoint(point, slicenumber, data)
+    if (len(indmatches) == 0):
+        return None
     distances = []
     for i in range(0, len(indmatches)):
         (mfovnum, numnum) = getnumsfromindex(indmatches[i])
@@ -201,15 +204,9 @@ def getindexfromnums((mfovnum, imgnum)):
     return (mfovnum - 1) * 61 + imgnum - 1
 
 
-def getimgmatches(slice1, slice2, nummfovs):
+def getimgmatches(slice1, slice2, nummfovs, data1, data2, mfovmatches):
     slicestring1 = ("%03d" % slice1)
     slicestring2 = ("%03d" % slice2)
-    with open("tilespecs/W01_Sec" + slicestring1 + ".json") as data_file1:
-        data1 = json.load(data_file1)
-    with open("tilespecs/W01_Sec" + slicestring2 + ".json") as data_file2:
-        data2 = json.load(data_file2)
-    with open("/home/raahilsha/Slice" + str(slice1) + "vs" + str(slice2) + ".json") as data_matches:
-        mfovmatches = json.load(data_matches)
         
     allimgsin1 = getimgcentersfromjson(data1)
     allimgsin2 = getimgcentersfromjson(data2)
@@ -260,7 +257,7 @@ def gettemplatesfromimg(img1, templatesize):
     imgheight = img1.shape[0]
     imgwidth = img1.shape[1]
     templates = []
-    numslices = int(imgwidth / templatesize) - 1
+    numslices = int(imgwidth / templatesize)
     searchsq = templatesize
     for i in range(0, numslices):
         for j in range(0, numslices):
@@ -272,13 +269,7 @@ def gettemplatesfromimg(img1, templatesize):
 
 # <codecell>
 
-slice1 = 2
-slice2 = 3
-nummfovs = 53
-imgmatches = getimgmatches(slice1, slice2, nummfovs)
-
-# <codecell>
-
+starttime = time.clock()
 slicestring1 = ("%03d" % slice1)
 slicestring2 = ("%03d" % slice2)
 with open("tilespecs/W01_Sec" + slicestring1 + ".json") as data_file1:
@@ -287,16 +278,22 @@ with open("tilespecs/W01_Sec" + slicestring2 + ".json") as data_file2:
     data2 = json.load(data_file2)
 with open("/home/raahilsha/Slice" + str(slice1) + "vs" + str(slice2) + ".json") as data_matches:
     mfovmatches = json.load(data_matches)
+slice1 = 2
+slice2 = 3
+nummfovs = 53
+imgmatches = getimgmatches(slice1, slice2, nummfovs, data1, data2, mfovmatches)
+print "Runtime: " + str(time.clock() - starttime) + " seconds"
 
 # <codecell>
 
 pointmatches = []
 starttime = time.clock()
 scaling = 0.2
-templatesize = 200
+templatesize = 300
 
 for i in range(0, len(imgmatches)):
-    print str(float(i) / len(imgmatches) * 100) + "% done"
+    if i % 100 == 0:
+        print str(float(i) / len(imgmatches) * 100) + "% done"
     (img1ind, img2inds) = imgmatches[i]
     (img1mfov, img1num) = getnumsfromindex(img1ind)
 
@@ -310,6 +307,7 @@ for i in range(0, len(imgmatches)):
     img1templates = gettemplatesfromimg(img1resized, templatesize)
     imgoffset1 = getimagetransform(slice1, img1mfov, img1num, data1)
     expectedtransform = gettransformationbetween(img1mfov, mfovmatches)
+    # rotationmatrix = np.matrix(np.array(expectedtransform[0:2]).T[0:2].T)
     
     for j in range(0, len(img1templates)):
         chosentemplate, startx, starty = img1templates[j]
@@ -317,149 +315,59 @@ for i in range(0, len(imgmatches)):
         centerpoint1 = np.array([startx + w / 2, starty + h / 2]) / scaling + imgoffset1
         expectednewcenter = np.dot(expectedtransform, np.append(centerpoint1, [1]))[0:2]
         img2s = getimgsfromindsandpoint(img2inds, slice2, expectednewcenter, data2)
+        ro, col = chosentemplate.shape
+        rad2deg = -180 / math.pi
+        angleofrot = rad2deg * math.atan2(expectedtransform[1][0], expectedtransform[0][0])
+        rotationmatrix = cv2.getRotationMatrix2D((h / 2, w / 2), angleofrot, 1)
+        rotatedtemp1 = cv2.warpAffine(chosentemplate, rotationmatrix, (col, ro))
+        xaa = int(w / 2.9) # Divide by a bit more than the square root of 2
+        rotatedandcroppedtemp1 = rotatedtemp1[(w / 2 - xaa):(w / 2 + xaa), (h / 2 - xaa):(h / 2 + xaa)]
+        neww, newh = rotatedandcroppedtemp1.shape[0], rotatedandcroppedtemp1.shape[1]
+        
         for k in range(0, len(img2s)):
             img2, img2ind = img2s[k]
             (img2mfov, img2num) = getnumsfromindex(img2ind)
             img2resized = cv2.resize(img2, (0, 0), fx = scaling, fy = scaling)
             imgoffset2 = getimagetransform(slice2, img2mfov, img2num, data2)
             
-            template1topleft = centerpoint1 = np.array([startx, starty]) / scaling + imgoffset1
-            result, reason = PMCC_filter_example.PMCC_match(img2resized, chosentemplate, min_correlation=0.2)
-            if result is not None:            
+            template1topleft = np.array([startx, starty]) / scaling + imgoffset1
+            result, reason = PMCC_filter_example.PMCC_match(img2resized, rotatedandcroppedtemp1, min_correlation=0.3)
+            if result is not None:
+                reasonx, reasony = reason
                 img1topleft = np.array([startx, starty]) / scaling + imgoffset1
                 img2topleft = np.array(reason) / scaling + imgoffset2
-                pointmatches.append((img1topleft, img2topleft))
+                img1centerpoint = np.array([startx + w / 2, starty + h / w]) / scaling + imgoffset1
+                img2centerpoint = np.array([reasonx + neww / 2, reasony + newh / 2]) / scaling + imgoffset2
+                pointmatches.append((img1centerpoint, img2centerpoint))
             
-            '''
-            res = cv2.matchTemplate(img2resized, chosentemplate, cv2.TM_CCORR_NORMED)
-            min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
-            top_left = max_loc
-            bottom_right = (top_left[0] + w, top_left[1] + h)
-            centerpoint2 = np.array([top_left[0] + w / 2, top_left[1] + h / 2]) / scaling + imgoffset2
-            
-            pointmatches.append((centerpoint1, centerpoint2))
-            '''
+print "Runtime: " + str(time.clock() - starttime) + " seconds"
 
 # <codecell>
 
-(img1ind, img2inds) = random.choice(imgmatches)
-(img1mfov, img1num) = getnumsfromindex(img1ind)
-
-slice1string = ("%03d" % slice1)
-mfov1string = ("%06d" % img1mfov)
-num1string = ("%03d" % img1num)
-img1url = "/data/images/SCS_2015-4-27_C1w7/" + slice1string + "/" + mfov1string + "/" + slice1string + "_" + mfov1string + "_" + num1string
-
-img1 = cv2.imread(glob.glob(img1url + "*.bmp")[0], 0)
-img2s = getimgsfrominds(img2inds, slice2)
-img1templates = gettemplatesfromimg(img1)
-
-# Later on, we can use scipy's ndimage to rotate the templates like this:
-# rotate_lena_noreshape = ndimage.rotate(lena, 45, reshape=False
-
-randtemplate, randstartx, randstarty = random.choice(img1templates)
-img2 = img2s[0].copy()
-(img2mfov, img2num) = getnumsfromindex(img2inds[0])
-
-w = randtemplate.shape[0]
-h = randtemplate.shape[1]
-meth = "cv2.TM_CCOEFF_NORMED"
-method = eval(meth)
-res = cv2.matchTemplate(img2, randtemplate, method)
-min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
-top_left = max_loc
-bottom_right = (top_left[0] + w, top_left[1] + h)
-
-slicestring1 = ("%03d" % slice1)
-slicestring2 = ("%03d" % slice2)
-with open("tilespecs/W01_Sec" + slicestring1 + ".json") as data_file1:
-    data1 = json.load(data_file1)
-with open("tilespecs/W01_Sec" + slicestring2 + ".json") as data_file2:
-    data2 = json.load(data_file2)
-with open("/home/raahilsha/Slice" + str(slice1) + "vs" + str(slice2) + ".json") as data_matches:
-    mfovmatches = json.load(data_matches)
-imgoffset1 = getimagetransform(slice1, img1mfov, img1num, data1)
-imgoffset2 = getimagetransform(slice2, img2mfov, img2num, data2)
-expectedtransform = gettransformationbetween(img1mfov, mfovmatches)
-centerpoint1 = np.array([randstartx + w / 2, randstarty + h / 2]) + imgoffset1
-expectednewcenter = np.dot(expectedtransform, np.append(centerpoint1, [1]))[0:2] - imgoffset2
-centerpoint1 = centerpoint1 - imgoffset1
-
-cv2.rectangle(img2,top_left, bottom_right, 255, 20)
-cv2.circle(img2, (int(expectednewcenter[0]), int(expectednewcenter[1])), 20, 255, -1)
-plt1fig = img1.copy()
-cv2.rectangle(plt1fig, (randstartx, randstarty), (randstartx + w, randstarty + h), 255, 20)
-cv2.circle(plt1fig, (int(centerpoint1[0]), int(centerpoint1[1])), 20, 255, -1)
-
-%matplotlib
-plt.figure(1)
-plt.imshow(plt1fig)
-plt.figure(2)
-plt.imshow(img2)
-plt.figure(3)
-plt.imshow(res)
-
-# <codecell>
-
-# Use img1 and img2
-scalings = [.2, .3, .5, .75, 1]
-templatesizes = [5, 10, 50, 75, 100, 125, 150, 175, 200, 300, 400]
-finalarr = np.zeros((len(scalings), len(templatesizes)))
-
-for scalingr in range(0, len(scalings)):
-    scaling = scalings[scalingr]
-    print scaling
-    for templater in range(0, len(templatesizes)):
-        templatesize = templatesizes[templater]
-        timearr = []
-        img1resized = cv2.resize(img1, (0, 0), fx = scaling, fy = scaling)
-        img2resized = cv2.resize(img2, (0, 0), fx = scaling, fy = scaling)
-        img1templates = gettemplatesfromimg(img1resized, templatesize)
-        
-        k = len(img1templates)
-        if k > 3:
-            k = 3
-        for i in range(0, k):
-            for boo in range(0,5):
-                starttime = time.clock()
-                method = cv2.TM_CCOEFF_NORMED
-                chosentemplate, startx, starty = img1templates[i]
-                res = cv2.matchTemplate(img2resized, chosentemplate, method)
-                timearr.append(time.clock() - starttime)
-        if len(timearr) != 0:
-            avgtime = (sum(timearr) / len(timearr)) * (float(img1resized.size) / res.size)
-        else:
-            avgtime = 0
-        finalarr[scalingr, templater] = avgtime
-
-for row in finalarr:
-    plt.plot(templatesizes, row)
-plt.show()
+point1s = map(list, zip(*pointmatches))[0]
+point1s = map(lambda x: np.matrix(x).T, point1s)
+point2s = map(list, zip(*pointmatches))[1]
+point2s = map(lambda x: np.matrix(x).T, point2s)
+centroid1 = [np.array(point1s)[:,0].mean(), np.array(point1s)[:,1].mean()]
+centroid2 = [np.array(point2s)[:,0].mean(), np.array(point2s)[:,1].mean()]
+h = np.matrix(np.zeros((2,2)))
+for i in range(0, len(point1s)):
+    sumpart = (np.matrix(point1s[i]) - centroid1).dot((np.matrix(point2s[i]) - centroid2).T)
+    h = h + sumpart
+U, S, Vt = np.linalg.svd(h)
+R = Vt.T.dot(U.T)
 
 # <codecell>
 
 %matplotlib
 plt.figure(1)
-plt.imshow(img1resized)
-plt.figure(2)
-plt.imshow(img2resized)
-plt.figure(3)
-plt.imshow(chosentemplate)
+for i in range(0,len(pointmatches)):
+    point1, point2 = pointmatches[i]
+    # point1 = np.matrix(point1 - centroid1).dot(R.T).tolist()[0]
+    # point2 = point2 - centroid2
+    plt.plot([point1[0], point2[0]], [point1[1], point2[1]])
+    axis('equal')
 
 # <codecell>
 
-img1url
 
-# <codecell>
-
-img2s
-
-# <codecell>
-
-getnumsfromindex(314)
-
-# <codecell>
-
-np.array((10,10))
-
-# <codecell>
