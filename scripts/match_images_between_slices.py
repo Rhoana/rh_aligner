@@ -182,6 +182,20 @@ def getimgindsfrompoint(point, slicenumber, data):
     return indmatches
 
 
+def getboundingbox(imgindlist, data):
+    finalbox = [data[0]["bbox"][0], data[0]["bbox"][1], data[0]["bbox"][2], data[0]["bbox"][3]]
+    for i in range(0, len(data)):
+        if data[i]["bbox"][0] < finalbox[0]:
+            finalbox[0] = data[i]["bbox"][0]
+        if data[i]["bbox"][1] > finalbox[1]:
+            finalbox[1] = data[i]["bbox"][1]
+        if data[i]["bbox"][2] < finalbox[2]:
+            finalbox[2] = data[i]["bbox"][2]
+        if data[i]["bbox"][3] > finalbox[3]:
+            finalbox[3] = data[i]["bbox"][3]
+    return finalbox
+
+
 def getclosestindtopoint(point, slicenumber, data):
     indmatches = getimgindsfrompoint(point, slicenumber, data)
     if (len(indmatches) == 0):
@@ -205,9 +219,6 @@ def getindexfromnums((mfovnum, imgnum)):
 
 
 def getimgmatches(slice1, slice2, nummfovs, data1, data2, mfovmatches):
-    slicestring1 = ("%03d" % slice1)
-    slicestring2 = ("%03d" % slice2)
-        
     allimgsin1 = getimgcentersfromjson(data1)
     allimgsin2 = getimgcentersfromjson(data2)
     imgmatches = []
@@ -267,9 +278,24 @@ def gettemplatesfromimg(img1, templatesize):
             templates.append((template, xstart, ystart))
     return templates
 
+def generatehexagonalgrid(boundingbox, spacing):
+    sizex = int((boundingbox[1] - boundingbox[0]) / spacing)
+    sizey = int((boundingbox[3] - boundingbox[2]) / spacing)
+    pointsret = []
+    for i in range(0, sizex):
+        for j in range(0, sizey):
+            xpos = i * spacing
+            ypos = j * spacing
+            if j % 2 == 0:
+                xpos += spacing * 0.5
+            pointsret.append([xpos, ypos])
+    return pointsret
+
 # <codecell>
 
-starttime = time.clock()
+slice1 = 2
+slice2 = 3
+nummfovs = 53
 slicestring1 = ("%03d" % slice1)
 slicestring2 = ("%03d" % slice2)
 with open("tilespecs/W01_Sec" + slicestring1 + ".json") as data_file1:
@@ -278,9 +304,10 @@ with open("tilespecs/W01_Sec" + slicestring2 + ".json") as data_file2:
     data2 = json.load(data_file2)
 with open("/home/raahilsha/Slice" + str(slice1) + "vs" + str(slice2) + ".json") as data_matches:
     mfovmatches = json.load(data_matches)
-slice1 = 2
-slice2 = 3
-nummfovs = 53
+
+# <codecell>
+
+starttime = time.clock()
 imgmatches = getimgmatches(slice1, slice2, nummfovs, data1, data2, mfovmatches)
 print "Runtime: " + str(time.clock() - starttime) + " seconds"
 
@@ -367,6 +394,24 @@ for i in range(0,len(pointmatches)):
     # point2 = point2 - centroid2
     plt.plot([point1[0], point2[0]], [point1[1], point2[1]])
     axis('equal')
+
+# <codecell>
+
+bb = getboundingbox(range(0, len(data1)), data1)
+hexgr = generatehexagonalgrid(bb, 1500)
+%matplotlib
+plt.figure(1)
+for i in range(0, len(hexgr)):
+    if i % 1000 == 0:
+        print i
+    plt.scatter(hexgr[i][0], hexgr[i][1])
+    axis('equal')
+
+# <codecell>
+
+bb = getboundingbox(range(0, len(data1)), data1)
+hexgr = generatehexagonalgrid(bb, 1500)
+len(hexgr)
 
 # <codecell>
 
