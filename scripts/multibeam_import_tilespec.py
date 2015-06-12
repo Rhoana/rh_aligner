@@ -145,6 +145,13 @@ def parse_wafer(wafer_folder, output_folder, wafer_num=1, start_layer=1):
             print("Parsing subfolder: {}".format(sub_folder))
             coords_file = os.path.join(sub_folder, "full_image_coordinates.txt")
             if os.path.exists(coords_file):
+                layer = int(sub_folder.split(os.path.sep)[-1])
+                output_json_fname = os.path.join(output_folder, "W{0:02d}_Sec{1:03d}.json".format(wafer_num, layer))
+
+                if os.path.exists(output_json_fname):
+                    print "Output file {} already found, skipping".format(output_json_fname)
+                    continue
+
                 images, x, y = parse_coordinates_file(coords_file)
                 # Reset top left to 0,0
                 x = offset_list(x)
@@ -152,7 +159,6 @@ def parse_wafer(wafer_folder, output_folder, wafer_num=1, start_layer=1):
                 cur_layer = parse_layer(sub_folder, images, x, y)
                 #max_layer_width = max(max_layer_width, cur_layer["width"])
                 #max_layer_height = max(max_layer_height, cur_layer["height"])
-                layer = int(sub_folder.split(os.path.sep)[-1])
                 cur_layer["layer_num"] = layer + start_layer - 1
 #                all_layers.append(cur_layer)
 
@@ -182,7 +188,6 @@ def parse_wafer(wafer_folder, output_folder, wafer_num=1, start_layer=1):
 
                     export.append(tilespec)
 
-                output_json_fname = os.path.join(output_folder, "W{0:02d}_Sec{1:03d}.json".format(wafer_num, layer))
                 if len(export) > 0:
                     with open(output_json_fname, 'w') as outjson:
                         json.dump(export, outjson, sort_keys=True, indent=4)
