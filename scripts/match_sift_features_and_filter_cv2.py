@@ -48,6 +48,21 @@ def get_tilespec_transformation(tilespec):
     return t
 
 
+def save_empty_matches_file(out_fname, image_url1, image_url2):
+    out_data = [{
+        "mipmapLevel" : 0,
+        "url1" : image_url1,
+        "url2" : image_url2, 
+        "correspondencePointPairs" : [],
+        "model" : []
+    }]
+
+    print "Saving matches into {}".format(out_fname)
+    with open(out_fname, 'w') as out:
+        json.dump(out_data, out, sort_keys=True, indent=4)
+ 
+
+
 def match_single_sift_features_and_filter(tiles_file, features_file1, features_file2, out_fname, index_pair, conf_fname=None):
 
     params = utils.conf_from_file(conf_fname, 'MatchSiftFeaturesAndFilter')
@@ -96,6 +111,12 @@ def match_single_sift_features_and_filter(tiles_file, features_file1, features_f
     descs2 = descs2[features_mask2]
     print "Found {} features in the overlap from file: {}".format(pts1.shape[0], features_file1)
     print "Found {} features in the overlap from file: {}".format(pts2.shape[0], features_file2)
+
+    min_features_num = 5
+    if pts1.shape[0] < min_features_num or pts2.shape[0] < min_features_num:
+        print "Less than {} features in the overlap of one of the tiles, saving an empty match file"
+        save_empty_matches_file(out_fname, ts1["mipmapLevels"]["0"]["imageUrl"], ts2["mipmapLevels"]["0"]["imageUrl"])
+        return
 
 
     # Match the features
