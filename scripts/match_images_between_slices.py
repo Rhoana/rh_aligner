@@ -332,163 +332,99 @@ def findindwithinmatches(imgmatches, img1ind):
 
 # <codecell>
 
-slice1 = 2
-slice2 = 3
-nummfovs = 53
-slicestring1 = ("%03d" % slice1)
-slicestring2 = ("%03d" % slice2)
-with open("tilespecs/W01_Sec" + slicestring1 + ".json") as data_file1:
-    data1 = json.load(data_file1)
-with open("tilespecs/W01_Sec" + slicestring2 + ".json") as data_file2:
-    data2 = json.load(data_file2)
-with open("/home/raahilsha/Slice" + str(slice1) + "vs" + str(slice2) + ".json") as data_matches:
-    mfovmatches = json.load(data_matches)
-
-# <codecell>
-
-starttime = time.clock()
-imgmatches = getimgmatches(slice1, slice2, nummfovs, data1, data2, mfovmatches)
-print "Runtime: " + str(time.clock() - starttime) + " seconds"
-
-# <codecell>
-
-starttime = time.clock()
-bb = getboundingbox(range(0, len(data1)), data1)
-hexgr = generatehexagonalgrid(bb, 1500)
-
-pointmatches = []
-scaling = 0.2
-templatesize = 200
-
-for i in range(0, len(hexgr)):
-    if i % 1000 == 0 and i > 0:
-        print i
-    img1ind = getclosestindtopoint(hexgr[i], slice1, data1)
-    if img1ind is None:
-        continue
+def main():
+    script, slice1, slice2, nummfovs = sys.argv
+    slicestring1 = ("%03d" % slice1)
+    slicestring2 = ("%03d" % slice2)
+    with open("tilespecs/W01_Sec" + slicestring1 + ".json") as data_file1:
+        data1 = json.load(data_file1)
+    with open("tilespecs/W01_Sec" + slicestring2 + ".json") as data_file2:
+        data2 = json.load(data_file2)
+    with open("/home/raahilsha/Slice" + str(slice1) + "vs" + str(slice2) + ".json") as data_matches:
+        mfovmatches = json.load(data_matches)
     
-    # Fix this line. Instead of indexing into img1ind, i need to find the index that match
-    (img1ind, img2inds) = imgmatches[findindwithinmatches(imgmatches, img1ind)] #imgmatches[img1ind]
-    (img1mfov, img1num) = getnumsfromindex(img1ind)
-
-    slice1string = ("%03d" % slice1)
-    mfov1string = ("%06d" % img1mfov)
-    num1string = ("%03d" % img1num)
-    img1url = "/data/images/SCS_2015-4-27_C1w7/" + slice1string + "/" + mfov1string + "/" + slice1string + "_" + mfov1string + "_" + num1string
-
-    img1 = cv2.imread(glob.glob(img1url + "*.bmp")[0], 0)
-    img1resized = cv2.resize(img1, (0, 0), fx = scaling, fy = scaling)
-    imgoffset1 = getimagetransform(slice1, img1mfov, img1num, data1)
-    expectedtransform = gettransformationbetween(img1mfov, mfovmatches)
+    starttime = time.clock()
+    imgmatches = getimgmatches(slice1, slice2, nummfovs, data1, data2, mfovmatches)
     
-    img1templates = gettemplatefromimgandpoint(img1resized, templatesize, (np.array(hexgr[i]) - imgoffset1) * scaling)
-    if img1templates is None:
-        continue
+    bb = getboundingbox(range(0, len(data1)), data1)
+    hexgr = generatehexagonalgrid(bb, 1500)
     
-    chosentemplate, startx, starty = img1templates
-    w, h = chosentemplate.shape[0], chosentemplate.shape[1]
-    centerpoint1 = np.array([startx + w / 2, starty + h / 2]) / scaling + imgoffset1
-    expectednewcenter = np.dot(expectedtransform, np.append(centerpoint1, [1]))[0:2]
-    img2s = getimgsfromindsandpoint(img2inds, slice2, expectednewcenter, data2)
-    ro, col = chosentemplate.shape
-    rad2deg = -180 / math.pi
-    angleofrot = rad2deg * math.atan2(expectedtransform[1][0], expectedtransform[0][0])
-    rotationmatrix = cv2.getRotationMatrix2D((h / 2, w / 2), angleofrot, 1)
-    rotatedtemp1 = cv2.warpAffine(chosentemplate, rotationmatrix, (col, ro))
-    xaa = int(w / 2.9) # Divide by a bit more than the square root of 2
-    rotatedandcroppedtemp1 = rotatedtemp1[(w / 2 - xaa):(w / 2 + xaa), (h / 2 - xaa):(h / 2 + xaa)]
-    neww, newh = rotatedandcroppedtemp1.shape[0], rotatedandcroppedtemp1.shape[1]
+    pointmatches = []
+    scaling = 0.2
+    templatesize = 200
     
-    for k in range(0, len(img2s)):
-        img2, img2ind = img2s[k]
-        (img2mfov, img2num) = getnumsfromindex(img2ind)
-        img2resized = cv2.resize(img2, (0, 0), fx = scaling, fy = scaling)
-        imgoffset2 = getimagetransform(slice2, img2mfov, img2num, data2)
+    for i in range(0, len(hexgr)):
+        if i % 1000 == 0 and i > 0:
+            print i
+        img1ind = getclosestindtopoint(hexgr[i], slice1, data1)
+        if img1ind is None:
+            continue
         
-        template1topleft = np.array([startx, starty]) / scaling + imgoffset1
-        result, reason = PMCC_filter_example.PMCC_match(img2resized, rotatedandcroppedtemp1, min_correlation=0.3)
-        if result is not None:
-            reasonx, reasony = reason
-            img1topleft = np.array([startx, starty]) / scaling + imgoffset1
-            img2topleft = np.array(reason) / scaling + imgoffset2
-            img1centerpoint = np.array([startx + w / 2, starty + h / w]) / scaling + imgoffset1
-            img2centerpoint = np.array([reasonx + neww / 2, reasony + newh / 2]) / scaling + imgoffset2
-            pointmatches.append((img1centerpoint, img2centerpoint))
+        # Fix this line. Instead of indexing into img1ind, i need to find the index that match
+        (img1ind, img2inds) = imgmatches[findindwithinmatches(imgmatches, img1ind)] #imgmatches[img1ind]
+        (img1mfov, img1num) = getnumsfromindex(img1ind)
+    
+        slice1string = ("%03d" % slice1)
+        mfov1string = ("%06d" % img1mfov)
+        num1string = ("%03d" % img1num)
+        img1url = "/data/images/SCS_2015-4-27_C1w7/" + slice1string + "/" + mfov1string + "/" + slice1string + "_" + mfov1string + "_" + num1string
+    
+        img1 = cv2.imread(glob.glob(img1url + "*.bmp")[0], 0)
+        img1resized = cv2.resize(img1, (0, 0), fx = scaling, fy = scaling)
+        imgoffset1 = getimagetransform(slice1, img1mfov, img1num, data1)
+        expectedtransform = gettransformationbetween(img1mfov, mfovmatches)
+        
+        img1templates = gettemplatefromimgandpoint(img1resized, templatesize, (np.array(hexgr[i]) - imgoffset1) * scaling)
+        if img1templates is None:
+            continue
+        
+        chosentemplate, startx, starty = img1templates
+        w, h = chosentemplate.shape[0], chosentemplate.shape[1]
+        centerpoint1 = np.array([startx + w / 2, starty + h / 2]) / scaling + imgoffset1
+        expectednewcenter = np.dot(expectedtransform, np.append(centerpoint1, [1]))[0:2]
+        img2s = getimgsfromindsandpoint(img2inds, slice2, expectednewcenter, data2)
+        ro, col = chosentemplate.shape
+        rad2deg = -180 / math.pi
+        angleofrot = rad2deg * math.atan2(expectedtransform[1][0], expectedtransform[0][0])
+        rotationmatrix = cv2.getRotationMatrix2D((h / 2, w / 2), angleofrot, 1)
+        rotatedtemp1 = cv2.warpAffine(chosentemplate, rotationmatrix, (col, ro))
+        xaa = int(w / 2.9) # Divide by a bit more than the square root of 2
+        rotatedandcroppedtemp1 = rotatedtemp1[(w / 2 - xaa):(w / 2 + xaa), (h / 2 - xaa):(h / 2 + xaa)]
+        neww, newh = rotatedandcroppedtemp1.shape[0], rotatedandcroppedtemp1.shape[1]
+        
+        for k in range(0, len(img2s)):
+            img2, img2ind = img2s[k]
+            (img2mfov, img2num) = getnumsfromindex(img2ind)
+            img2resized = cv2.resize(img2, (0, 0), fx = scaling, fy = scaling)
+            imgoffset2 = getimagetransform(slice2, img2mfov, img2num, data2)
             
-            ''' Code below saves out template and corresponding match to a file
-            temp1finalsizex = rotatedandcroppedtemp1.shape[0]
-            temp1finalsizey = rotatedandcroppedtemp1.shape[1]
-            imgout = np.zeros((1230,630), np.uint8)
-            pikoo = np.array([startx + w / 2, starty + h / 2])
-            # cv2.circle(img1resized, (int(pikoo[0]), int(pikoo[1])), 15, (0,0,255), -1)
-            imgout[0:545,0:626] = img1resized
-            # cv2.circle(img2resized, (int(reasony + temp1finalsize / 2), int(reasonx + temp1finalsize / 2)), 15, (0,0,255), -1)
-            imgout[545:1090,0:626] = img2resized
-            imgout[1090:(1090 + temp1finalsizex),0:temp1finalsizey] = rotatedandcroppedtemp1
-            img2cutout = img2resized[reasonx:(reasonx + temp1finalsizex), reasony:(reasony + temp1finalsizey)]
-            imgout[1090:(1090 + temp1finalsizey), (temp1finalsizey + 10):(temp1finalsizex + 10 + temp1finalsizex)] = img2cutout
-            finalimgout = imgout[1090:(1090 + temp1finalsize), 0:300]
-            cv2.imwrite("/home/raahilsha/billy/ImageComparison#" + str(i) + ".png",finalimgout)
-            '''
-
-print str(time.clock() - starttime)
-
-# <codecell>
-
-jsonfile = {}
-jsonfile['tilespec1'] = "file://" + os.getcwd() + "/tilespecs/W01_Sec" + ("%03d" % slice1) + ".json"
-jsonfile['tilespec2'] = "file://" + os.getcwd() + "/tilespecs/W01_Sec" + ("%03d" % slice2) + ".json"
-jsonfile['runtime'] = time.clock() - starttime
-jsonfile['mesh'] = hexgr
-
-finalpointmatches = []
-for i in range(0, len(pointmatches)):
-    p1, p2 = pointmatches[i]
-    record = {}
-    record['point1'] = p1.tolist()
-    record['point2'] = p2.tolist()
-    finalpointmatches.append(record)
-
-jsonfile['pointmatches'] = finalpointmatches
-json.dump(jsonfile, open("/home/raahilsha/Images_Slice" + str(slice1) + "vs" + str(slice2) + ".json", 'w'), indent=4)
-
-# <codecell>
-
-'''
-%matplotlib
-plt.figure(1)
-for i in range(0,len(pointmatches)):
-    point1, point2 = pointmatches[i]
-    # point1 = np.matrix(point1 - centroid1).dot(R.T).tolist()[0]
-    # point2 = point2 - centroid2
-    plt.plot([point1[0], point2[0]], [point1[1], point2[1]])
-    axis('equal')
-
-# <codecell>
-
-point1s = map(list, zip(*pointmatches))[0]
-point1s = map(lambda x: np.matrix(x).T, point1s)
-point2s = map(list, zip(*pointmatches))[1]
-point2s = map(lambda x: np.matrix(x).T, point2s)
-centroid1 = [np.array(point1s)[:,0].mean(), np.array(point1s)[:,1].mean()]
-centroid2 = [np.array(point2s)[:,0].mean(), np.array(point2s)[:,1].mean()]
-h = np.matrix(np.zeros((2,2)))
-for i in range(0, len(point1s)):
-    sumpart = (np.matrix(point1s[i]) - centroid1).dot((np.matrix(point2s[i]) - centroid2).T)
-    h = h + sumpart
-U, S, Vt = np.linalg.svd(h)
-R = Vt.T.dot(U.T)
-
-%matplotlib
-plt.figure(1)
-for i in range(0,len(pointmatches)):
-    point1, point2 = pointmatches[i]
-    point1 = np.matrix(point1 - centroid1).dot(R.T).tolist()[0]
-    point2 = point2 - centroid2
-    plt.plot([point1[0], point2[0]], [point1[1], point2[1]])
-    axis('equal')
+            template1topleft = np.array([startx, starty]) / scaling + imgoffset1
+            result, reason = PMCC_filter_example.PMCC_match(img2resized, rotatedandcroppedtemp1, min_correlation=0.3)
+            if result is not None:
+                reasonx, reasony = reason
+                img1topleft = np.array([startx, starty]) / scaling + imgoffset1
+                img2topleft = np.array(reason) / scaling + imgoffset2
+                img1centerpoint = np.array([startx + w / 2, starty + h / w]) / scaling + imgoffset1
+                img2centerpoint = np.array([reasonx + neww / 2, reasony + newh / 2]) / scaling + imgoffset2
+                pointmatches.append((img1centerpoint, img2centerpoint))
+    
+    jsonfile = {}
+    jsonfile['tilespec1'] = "file://" + os.getcwd() + "/tilespecs/W01_Sec" + ("%03d" % slice1) + ".json"
+    jsonfile['tilespec2'] = "file://" + os.getcwd() + "/tilespecs/W01_Sec" + ("%03d" % slice2) + ".json"
+    jsonfile['runtime'] = time.clock() - starttime
+    jsonfile['mesh'] = hexgr
+    
+    finalpointmatches = []
+    for i in range(0, len(pointmatches)):
+        p1, p2 = pointmatches[i]
+        record = {}
+        record['point1'] = p1.tolist()
+        record['point2'] = p2.tolist()
+        finalpointmatches.append(record)
+    
+    jsonfile['pointmatches'] = finalpointmatches
+    json.dump(jsonfile, open("/home/raahilsha/Images_Slice" + str(slice1) + "vs" + str(slice2) + ".json", 'w'), indent=4)
 
 
-# <codecell>
-'''
-
+if __name__ == '__main__':
+    main()
