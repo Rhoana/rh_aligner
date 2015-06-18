@@ -176,16 +176,27 @@ def analyze2slicesmfovs(slice1, mfov1, slice2, mfov2, data1, data2):
     return (model, filtered_matches.shape[1], float(filtered_matches.shape[1]) / match_points.shape[1], match_points.shape[1], len(allpoints1), len(allpoints2))
 
 
-def analyze2slices(slice1, slice2, data1, data2, nummfovs1, nummfovs2):
+def analyze2slices(slice1, slice2, data1, data2, nummfovs1, nummfovs2, trytimes):
     toret = []
     modelarr = np.zeros((nummfovs1, nummfovs2), dtype=models.RigidModel)
     numfilterarr = np.zeros((nummfovs1, nummfovs2))
     filterratearr = np.zeros((nummfovs1, nummfovs2))
     besttransform = None
+    
+    randomchoices = []
+    timestorand = trytimes * max(nummfovs1, nummfovs2)
+    timesrandtried = 0
+    for i in range(0,nummfovs1):
+        for j in range(0,nummfovs2):
+            randomchoices.append((i + 1, j + 1))
 
-    while besttransform is None:
-        mfov1 = random.randint(1, nummfovs1)
-        mfov2 = random.randint(1, nummfovs2)
+    while (besttransform is None) and (len(randomchoices) > 0):
+        randind = random.randint(1, len(randomchoices)) - 1
+        mfovcomppicked = randomchoices[randind]
+        mfov1, mfov2 = mfovcomppicked
+        randomchoices.remove(mfovcomppicked)
+        timesrandtried = timesrandtried + 1
+        
         (model, num_filtered, filter_rate, num_rod, num_m1, num_m2) = analyze2slicesmfovs(slice1, mfov1, slice2, mfov2, data1, data2)
         modelarr[mfov1 - 1, mfov2 - 1] = model
         numfilterarr[mfov1 - 1, mfov2 - 1] = num_filtered
@@ -193,6 +204,8 @@ def analyze2slices(slice1, slice2, data1, data2, nummfovs1, nummfovs2):
         if num_filtered > 50 and filter_rate > 0.25:
             besttransform = model.get_matrix()
             break
+        if timesrandtried > timestorand:
+            return toret
     print "Preliminary Transform Found"
 
     for i in range(0, nummfovs1):
@@ -227,19 +240,25 @@ def analyze2slices(slice1, slice2, data1, data2, nummfovs1, nummfovs2):
 
 
 def main():
-    script, slice1, slice2, nummfovs1, nummfovs2 = sys.argv
+    if len(sys.argv) == 5:
+        script, slice1, slice2, nummfovs1, nummfovs2 = sys.argv
+        trytimes = 10
+    elif len(sys.argv == 6):
+        script, slice1, slice2, nummfovs1, nummfovs2, trytimes = sys.argv
+    
     starttime = time.clock()
     slice1 = int(slice1)
     slice2 = int(slice2)
     nummfovs1 = int(nummfovs1)
     nummfovs2 = int(nummfovs2)
+    trytimes = int(trytimes)
     slicestring1 = ("%03d" % slice1)
     slicestring2 = ("%03d" % slice2)
     with open("tilespecs/W01_Sec" + slicestring1 + ".json") as data_file1:
         data1 = json.load(data_file1)
     with open("tilespecs/W01_Sec" + slicestring2 + ".json") as data_file2:
         data2 = json.load(data_file2)
-    retval = analyze2slices(slice1, slice2, data1, data2, nummfovs1, nummfovs2)
+    retval = analyze2slices(slice1, slice2, data1, data2, nummfovs1, nummfovs2, trytimes)
 
     jsonfile = {}
     jsonfile['tilespec1'] = "file://" + os.getcwd() + "/tilespecs/W01_Sec" + ("%03d" % slice1) + ".json"
