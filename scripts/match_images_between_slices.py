@@ -282,6 +282,7 @@ def gettemplatesfromimg(img1, templatesize):
 def gettemplatefromimgandpoint(img1resized, templatesize, centerpoint):
     imgheight = img1resized.shape[1]
     imgwidth = img1resized.shape[0]
+    notonmesh = False
     
     xstart = centerpoint[0] - templatesize / 2
     ystart = centerpoint[1] - templatesize / 2
@@ -291,22 +292,26 @@ def gettemplatefromimgandpoint(img1resized, templatesize, centerpoint):
     if (xstart < 0):
         xend = 1 + xstart
         xstart = 1
+        notonmesh = True
     if (ystart < 0):
         yend = 1 + ystart
         ystart = 1
+        notonmesh = True
     if (xend >= imgwidth):
         diff = xend - imgwidth
         xstart -= diff + 1
         xend -= diff + 1
+        notonmesh = True
     if (yend >= imgwidth):
         diff = yend - imgwidth
         ystart -= diff + 1
         yend -= diff + 1
+        notonmesh = True
     
     if (xstart < 0) or (ystart < 0) or (xend >= imgwidth) or (yend >= imgheight):
         return None
     
-    return (img1resized[xstart:(xstart + templatesize), ystart:(ystart + templatesize)].copy(), xstart, ystart)
+    return (img1resized[xstart:(xstart + templatesize), ystart:(ystart + templatesize)].copy(), xstart, ystart, notonmesh)
     
 
 def generatehexagonalgrid(boundingbox, spacing):
@@ -378,7 +383,7 @@ def main():
         if img1templates is None:
             continue
         
-        chosentemplate, startx, starty = img1templates
+        chosentemplate, startx, starty, notonmesh = img1templates
         w, h = chosentemplate.shape[0], chosentemplate.shape[1]
         centerpoint1 = np.array([startx + w / 2, starty + h / 2]) / scaling + imgoffset1
         expectednewcenter = np.dot(expectedtransform, np.append(centerpoint1, [1]))[0:2]
@@ -406,7 +411,7 @@ def main():
                 img2topleft = np.array(reason) / scaling + imgoffset2
                 img1centerpoint = np.array([startx + w / 2, starty + h / w]) / scaling + imgoffset1
                 img2centerpoint = np.array([reasonx + neww / 2, reasony + newh / 2]) / scaling + imgoffset2
-                pointmatches.append((img1centerpoint, img2centerpoint))
+                pointmatches.append((img1centerpoint, img2centerpoint, notonmesh))
     
     jsonfile = {}
     jsonfile['tilespec1'] = "file://" + os.getcwd() + "/tilespecs/W01_Sec" + ("%03d" % slice1) + ".json"
@@ -416,10 +421,11 @@ def main():
     
     finalpointmatches = []
     for i in range(0, len(pointmatches)):
-        p1, p2 = pointmatches[i]
+        p1, p2, nmesh = pointmatches[i]
         record = {}
         record['point1'] = p1.tolist()
         record['point2'] = p2.tolist()
+        record['isvirtualpoint'] = nmesh
         finalpointmatches.append(record)
     
     jsonfile['pointmatches'] = finalpointmatches
