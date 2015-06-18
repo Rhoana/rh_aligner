@@ -20,6 +20,7 @@ import time
 import glob
 # os.chdir("C:/Users/Raahil/Documents/Research2015_eclipse/Testing")
 os.chdir("/data/SCS_2015-4-27_C1w7_alignment")
+# os.chdir("/data/jpeg2k_test_sections_alignment")
 
 
 def secondlargest(nums):
@@ -175,16 +176,16 @@ def analyze2slicesmfovs(slice1, mfov1, slice2, mfov2, data1, data2):
     return (model, filtered_matches.shape[1], float(filtered_matches.shape[1]) / match_points.shape[1], match_points.shape[1], len(allpoints1), len(allpoints2))
 
 
-def analyze2slices(slice1, slice2, data1, data2, nummfovs):
+def analyze2slices(slice1, slice2, data1, data2, nummfovs1, nummfovs2):
     toret = []
-    modelarr = np.zeros((nummfovs, nummfovs), dtype=models.RigidModel)
-    numfilterarr = np.zeros((nummfovs, nummfovs))
-    filterratearr = np.zeros((nummfovs, nummfovs))
+    modelarr = np.zeros((nummfovs1, nummfovs2), dtype=models.RigidModel)
+    numfilterarr = np.zeros((nummfovs1, nummfovs2))
+    filterratearr = np.zeros((nummfovs1, nummfovs2))
     besttransform = None
 
     while besttransform is None:
-        mfov1 = random.randint(1, nummfovs)
-        mfov2 = random.randint(1, nummfovs)
+        mfov1 = random.randint(1, nummfovs1)
+        mfov2 = random.randint(1, nummfovs2)
         (model, num_filtered, filter_rate, num_rod, num_m1, num_m2) = analyze2slicesmfovs(slice1, mfov1, slice2, mfov2, data1, data2)
         modelarr[mfov1 - 1, mfov2 - 1] = model
         numfilterarr[mfov1 - 1, mfov2 - 1] = num_filtered
@@ -194,11 +195,11 @@ def analyze2slices(slice1, slice2, data1, data2, nummfovs):
             break
     print "Preliminary Transform Found"
 
-    for i in range(0, nummfovs):
+    for i in range(0, nummfovs1):
         mycenter = getcenter(slice1, i + 1, data1)
         mycentertrans = np.dot(besttransform, np.append(mycenter, [1]))[0:2]
-        distances = np.zeros(nummfovs)
-        for j in range(0, nummfovs):
+        distances = np.zeros(nummfovs2)
+        for j in range(0, nummfovs2):
             distances[j] = np.linalg.norm(mycentertrans - getcenter(slice2, j + 1, data2))
         checkindices = distances.argsort()[0:7]
         for j in range(0, len(checkindices)):
@@ -226,18 +227,19 @@ def analyze2slices(slice1, slice2, data1, data2, nummfovs):
 
 
 def main():
-    script, slice1, slice2, nummfovs = sys.argv
+    script, slice1, slice2, nummfovs1, nummfovs2 = sys.argv
     starttime = time.clock()
     slice1 = int(slice1)
     slice2 = int(slice2)
-    nummfovs = int(nummfovs)
+    nummfovs1 = int(nummfovs1)
+    nummfovs2 = int(nummfovs2)
     slicestring1 = ("%03d" % slice1)
     slicestring2 = ("%03d" % slice2)
     with open("tilespecs/W01_Sec" + slicestring1 + ".json") as data_file1:
         data1 = json.load(data_file1)
     with open("tilespecs/W01_Sec" + slicestring2 + ".json") as data_file2:
         data2 = json.load(data_file2)
-    retval = analyze2slices(slice1, slice2, data1, data2, nummfovs)
+    retval = analyze2slices(slice1, slice2, data1, data2, nummfovs1, nummfovs2)
 
     jsonfile = {}
     jsonfile['tilespec1'] = "file://" + os.getcwd() + "/tilespecs/W01_Sec" + ("%03d" % slice1) + ".json"
