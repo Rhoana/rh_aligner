@@ -153,13 +153,21 @@ def generatematches_brute(allpoints1, allpoints2, alldescs1, alldescs2):
     return match_points
 
 
-def gettransformationbetween(mfov1, mfovmatches):
+def gettransformationbetween(slice1, mfov1, mfovmatches, data1):
     for i in range(0, len(mfovmatches["matches"])):
         if mfovmatches["matches"][i]["mfov1"] == mfov1:
             return mfovmatches["matches"][i]["transformation"]["matrix"]
     # Need to find a more intelligent way to do this, but this suffices for now
     # Uses transformation of another mfov (should be changed to the closest, unvisited mfov)
-    return gettransformationbetween(mfov1 - 1, mfovmatches)
+    # return gettransformationbetween(mfov1 - 1, mfovmatches)
+    distances = []
+    mfov1center = getcenter(slice1, mfov1, data1)
+    for i in range(0, len(mfovmatches["matches"])):
+        mfovma = mfovmatches["matches"][i]["mfov1"]
+        mfovmacenter = getcenter(slice1, mfovma, data1)
+        distances.append(distance.euclidean(mfov1center, mfovmacenter))
+    closestindex = np.array(distances).argsort()[0]
+    return mfovmatches["matches"][closestindex]["transformation"]["matrix"]
 
 
 def getimgcentersfromjson(data):
@@ -218,16 +226,16 @@ def getindexfromnums((mfovnum, imgnum)):
     return (mfovnum - 1) * 61 + imgnum - 1
 
 
-def getimgmatches(slice1, slice2, nummfovs, data1, data2, mfovmatches):
+def getimgmatches(slice1, slice2, nummfovs1, nummfovs2, data1, data2, mfovmatches):
     allimgsin1 = getimgcentersfromjson(data1)
     allimgsin2 = getimgcentersfromjson(data2)
     imgmatches = []
     
-    for mfovnum in range(1, nummfovs + 1):
+    for mfovnum in range(1, nummfovs1 + 1):
         for imgnum in range(1, 62):
             jsonindex = (mfovnum - 1) * 61 + imgnum - 1
             img1center = allimgsin1[jsonindex]
-            expectedtransform = gettransformationbetween(mfovnum, mfovmatches)
+            expectedtransform = gettransformationbetween(slice1, mfovnum, mfovmatches, data1)
             expectednewcenter = np.dot(expectedtransform, np.append(img1center, [1]))[0:2]
             distances = np.zeros(len(allimgsin2))
             for j in range(0, len(allimgsin2)):
@@ -338,7 +346,7 @@ def findindwithinmatches(imgmatches, img1ind):
 # <codecell>
 
 def main():
-    script, slice1, slice2, nummfovs = sys.argv
+    script, slice1, slice2, nummfovs1, nummfovs2 = sys.argv
     slicestring1 = ("%03d" % slice1)
     slicestring2 = ("%03d" % slice2)
     with open("tilespecs/W01_Sec" + slicestring1 + ".json") as data_file1:
@@ -349,7 +357,7 @@ def main():
         mfovmatches = json.load(data_matches)
     
     starttime = time.clock()
-    imgmatches = getimgmatches(slice1, slice2, nummfovs, data1, data2, mfovmatches)
+    imgmatches = getimgmatches(slice1, slice2, nummfovs1, nummfovs2, data1, data2, mfovmatches)
     
     bb = getboundingbox(range(0, len(data1)), data1)
     hexgr = generatehexagonalgrid(bb, 1500)
@@ -377,7 +385,7 @@ def main():
         img1 = cv2.imread(glob.glob(img1url + "*.bmp")[0], 0)
         img1resized = cv2.resize(img1, (0, 0), fx = scaling, fy = scaling)
         imgoffset1 = getimagetransform(slice1, img1mfov, img1num, data1)
-        expectedtransform = gettransformationbetween(img1mfov, mfovmatches)
+        expectedtransform = gettransformationbetween(slice1, img1mfov, mfovmatches, data1)
         
         img1templates = gettemplatefromimgandpoint(img1resized, templatesize, (np.array(hexgr[i]) - imgoffset1) * scaling)
         if img1templates is None:
