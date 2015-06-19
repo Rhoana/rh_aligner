@@ -31,13 +31,24 @@ def compute_restricted_moving_ls_radius(url_optimized_mesh):
     return cached_radius
 
 
-def get_restricted_moving_ls_transform(url_optimized_mesh):
+def get_restricted_moving_ls_transform(url_optimized_mesh, bbox):
+    # Find the tile bbox with a halo of radius around it
     radius = compute_restricted_moving_ls_radius(url_optimized_mesh)
-    all_matches_str = " ".join(["{0} {1} {2} {3} 1.0".format(m[0][0], m[0][1], m[1][0], m[1][1]) for m in zip(url_optimized_mesh[0], url_optimized_mesh[1])])
-# change the transfromation
+    bbox_with_halo = list(bbox)
+    bbox_with_halo[0] -= radius
+    bbox_with_halo[2] -= radius
+    bbox_with_halo[1] += radius
+    bbox_with_halo[3] += radius
+
+    # filter the matches according to the new bounding box
+    matches_str = " ".join(["{0} {1} {2} {3} 1.0".format(m[0][0], m[0][1], m[1][0], m[1][1])
+                             for m in zip(url_optimized_mesh[0], url_optimized_mesh[1])
+                                 if (bbox_with_halo[0] <= m[0][0] <= bbox_with_halo[1]) and (bbox_with_halo[2] <= m[0][1] <= bbox_with_halo[3])])
+
+    # create the tile transformation
     transform = {
             "className" : "mpicbg.trakem2.transform.RestrictedMovingLeastSquaresTransform2",
-            "dataString" : "affine 2 2.0 {0} {1}".format(radius, all_matches_str)
+            "dataString" : "affine 2 2.0 {0} {1}".format(radius, matches_str)
         }
     return transform
 
@@ -53,10 +64,11 @@ def get_moving_ls_transform(url_optimized_mesh):
 
 
 
-def save_optimized_meshes(tile_files, optimized_meshes, out_dir):
-    for ts_url in optimized_meshes.keys():
+def save_optimized_meshes(all_tile_urls, optimized_meshes, out_dir):
+    for ts_url in all_tile_urls:
         ts_fname = ts_url.replace('file://', '')
-        out_fname = os.path.join(out_dir, os.path.basename(ts_fname))
+        ts_base = os.path.basename(ts_fname)
+        out_fname = os.path.join(out_dir, ts_base)
         # read tilespec
         data = None
         with open(ts_fname, 'r') as data_file:
@@ -64,13 +76,14 @@ def save_optimized_meshes(tile_files, optimized_meshes, out_dir):
 
         if len(data) > 0:
             #transform = get_moving_ls_transform(optimized_meshes[ts_url])
-            transform = get_restricted_moving_ls_transform(optimized_meshes[ts_url])
 
             # change the transfromation
             for tile in data:
+                # Used for restricting the restricted_moving_ls_transform to a specific bbox
+                tile_transform = get_restricted_moving_ls_transform(optimized_meshes[ts_base], tile["bbox"])
                 if "transforms" not in tile.keys():
                     tile["transforms"] = []
-                tile["transforms"].append(transform)
+                tile["transforms"].append(tile_transform)
 
             # save the output tile spec
             with open(out_fname, 'w') as outjson:
@@ -95,7 +108,7 @@ def read_ts_layers(tile_files):
         tsfile = os.path.basename(url)
         tsfile_to_layerid[tsfile] = layerid
 
-    return tsfile_to_layerid
+    return tsfile_to_layerid, actual_tile_urls
     
 
 
@@ -105,7 +118,7 @@ def optimize_layers_elastic_theano(tile_files, corr_files, image_width, image_he
     mesh_json = './mesh.json'
     export_mesh.export_mesh(jar_file, image_width, image_height, mesh_json, conf)
 
-    tsfile_to_layerid = read_ts_layers(tile_files)
+    tsfile_to_layerid, all_tile_urls = read_ts_layers(tile_files)
 
     # TODO - make sure its not a json files list
     actual_corr_files = []
@@ -122,7 +135,7 @@ def optimize_layers_elastic_theano(tile_files, corr_files, image_width, image_he
     
     # Save the output
     utils.create_dir(out_dir)
-    save_optimized_meshes(tile_files, optimized_meshes, out_dir)
+    save_optimized_meshes(all_tile_urls, optimized_meshes, out_dir)
     
 
 

@@ -7,3 +7,9 @@ release.properties
 *.pyc
 *~
 *.pickle
+*.sh
+*.json
+.fuse*
+scripts/mesh_derivs.c
+scripts/mesh_derivs.pyxbldc
+core
