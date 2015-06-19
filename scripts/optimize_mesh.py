@@ -156,8 +156,8 @@ def mean_offset(all_mesh_pts,
         all_offsets[id1 - lo, id2 - lo] = np.median(lens)
         if abs(int(id1) - int(id2)) == 1:
             means.append(np.median(lens))
-    for r in all_offsets:
-        print " ".join("{0:.2f}".format(v) if v > 0.01 else "    " for v in r)
+    #for r in all_offsets:
+    #    print " ".join("{0:.2f}".format(v) if v > 0.01 else "    " for v in r)
     return np.mean(means)
 
 
