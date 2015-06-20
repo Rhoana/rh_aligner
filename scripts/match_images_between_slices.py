@@ -355,6 +355,19 @@ def main():
         data2 = json.load(data_file2)
     with open("/home/raahilsha/Slice" + str(slice1) + "vs" + str(slice2) + ".json") as data_matches:
         mfovmatches = json.load(data_matches)
+        
+    if len(mfovmatches["matches"] == 0):
+        jsonfile = {}
+        jsonfile['tilespec1'] = "file://" + os.getcwd() + "/tilespecs/W01_Sec" + ("%03d" % slice1) + ".json"
+        jsonfile['tilespec2'] = "file://" + os.getcwd() + "/tilespecs/W01_Sec" + ("%03d" % slice2) + ".json"
+        jsonfile['runtime'] = 0
+        bb = getboundingbox(range(0, len(data1)), data1)
+        hexgr = generatehexagonalgrid(bb, 1500)
+        jsonfile['mesh'] = hexgr
+        finalpointmatches = []
+        jsonfile['pointmatches'] = finalpointmatches
+        json.dump(jsonfile, open("/home/raahilsha/Images_Slice" + str(slice1) + "vs" + str(slice2) + ".json", 'w'), indent=4)
+        return
     
     starttime = time.clock()
     imgmatches = getimgmatches(slice1, slice2, nummfovs1, nummfovs2, data1, data2, mfovmatches)
