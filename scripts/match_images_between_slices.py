@@ -323,15 +323,23 @@ def gettemplatefromimgandpoint(img1resized, templatesize, centerpoint):
     
 
 def generatehexagonalgrid(boundingbox, spacing):
-    sizex = int((boundingbox[1] - boundingbox[0]) / spacing)
-    sizey = int((boundingbox[3] - boundingbox[2]) / spacing)
+    hexheight = spacing
+    hexwidth = math.sqrt(3) * spacing / 2
+    vertspacing = 0.75 * hexheight
+    horizspacing = hexwidth
+    sizex = int((boundingbox[1] - boundingbox[0]) / horizspacing) + 2
+    sizey = int((boundingbox[3] - boundingbox[2]) / vertspacing) + 2
+    if sizey % 2 == 0:
+        sizey += 1
     pointsret = []
-    for i in range(0, sizex):
-        for j in range(0, sizey):
+    for i in range(-2, sizex):
+        for j in range(-2, sizey):
             xpos = i * spacing
             ypos = j * spacing
-            if j % 2 == 0:
+            if j % 2 == 1:
                 xpos += spacing * 0.5
+            if (j % 2 == 1) and (i == sizex - 1):
+                continue
             pointsret.append([int(xpos), int(ypos)])
     return pointsret
 
