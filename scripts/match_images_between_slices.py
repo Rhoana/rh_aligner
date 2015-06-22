@@ -347,6 +347,10 @@ def findindwithinmatches(imgmatches, img1ind):
 
 def main():
     script, slice1, slice2, nummfovs1, nummfovs2 = sys.argv
+    slice1 = int(slice1)
+    slice2 = int(slice2)
+    nummfovs1 = int(nummfovs1)
+    nummfovs2 = int(nummfovs2)
     slicestring1 = ("%03d" % slice1)
     slicestring2 = ("%03d" % slice2)
     with open("tilespecs/W01_Sec" + slicestring1 + ".json") as data_file1:
@@ -356,7 +360,7 @@ def main():
     with open("/home/raahilsha/Slice" + str(slice1) + "vs" + str(slice2) + ".json") as data_matches:
         mfovmatches = json.load(data_matches)
         
-    if len(mfovmatches["matches"] == 0):
+    if len(mfovmatches["matches"]) == 0:
         jsonfile = {}
         jsonfile['tilespec1'] = "file://" + os.getcwd() + "/tilespecs/W01_Sec" + ("%03d" % slice1) + ".json"
         jsonfile['tilespec2'] = "file://" + os.getcwd() + "/tilespecs/W01_Sec" + ("%03d" % slice2) + ".json"
