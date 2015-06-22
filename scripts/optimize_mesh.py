@@ -107,7 +107,7 @@ def optimize_meshes(meshes, links, conf_dict={}):
 
     # block_size = conf_dict.get("block_size", 35)
     # block_step = conf_dict.get("block_step", 25)
-    # rigid_iterations = conf_dict.get("rigid_iterations", 50)
+    rigid_iterations = conf_dict.get("rigid_iterations", 50)
     # min_iterations = conf_dict.get("min_iterations", 200)
     max_iterations = conf_dict.get("max_iterations", 5000)
     # mean_offset_threshold = conf_dict.get("mean_offset_threshold", 5)
@@ -122,6 +122,31 @@ def optimize_meshes(meshes, links, conf_dict={}):
     # Build internal structural mesh
     # (edge_indices, edge_lengths, face_indices, face_areas)
     structural_meshes = {ts: mesh.internal_structural_mesh() for ts, mesh in meshes.iteritems()}
+
+    # pre-optimization: rigid alignment of slices
+    sorted_slices = sorted(meshes.keys())
+    for active_ts in sorted_slices[1:]:
+        for iter in range(rigid_iterations):
+            cost = 0.0
+
+            active_gradient = np.zeros_like(meshes[active_ts].pts)
+            ignore_gradient = np.empty_like(active_gradient)
+
+            for (ts1, ts2), ((idx1, w1), (idx2, w2)) in links.iteritems():
+                if active_ts in (ts1, ts2) and (ts1 <= active_ts) and (ts2 <= active_ts):
+                    if ts1 != active_ts:
+                        ts1, ts2 = ts2, ts1
+                        idx1, idx2 = idx2, idx1
+                        w1, w2 = w2, w1
+                    cost += mesh_derivs.external_grad(meshes[ts1].pts, meshes[ts2].pts,
+                                                      active_gradient, ignore_gradient,
+                                                      idx1, w1,
+                                                      idx2, w2,
+                                                      cross_slice_weight, cross_slice_winsor)
+
+            g = linearize_grad(meshes[ts1].pts, active_gradient)
+            mesh[ts1].pts -= 0.1 * g
+            print iter, cost, active_ts
 
     for iter in range(max_iterations):
         cost = 0.0
