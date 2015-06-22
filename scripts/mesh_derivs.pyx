@@ -84,37 +84,53 @@ cpdef FLOAT_TYPE crosslink_mesh_derivs(FLOAT_TYPE[:, ::1] mesh1,
                                        FLOAT_TYPE[:, ::1] mesh2,
                                        FLOAT_TYPE[:, ::1] d_cost_d_mesh1,
                                        FLOAT_TYPE[:, ::1] d_cost_d_mesh2,
-                                       uint32[::1] src_indices,
-                                       uint32[:, ::1] dest_indices,
-                                       FLOAT_TYPE[:, ::1] dest_weights,
+                                       uint32[:, ::1] indices1,
+                                       uint32[:, ::1] indices2,
+                                       FLOAT_TYPE[:, ::1] barys1,
+                                       FLOAT_TYPE[:, ::1] barys2,
                                        FLOAT_TYPE all_weight,
                                        FLOAT_TYPE sigma) nogil:
     cdef:
+        int i
         FLOAT_TYPE px, py, qx, qy
-        int i, didx0, didx1, didx2
-        FLOAT_TYPE w0, w1, w2
+        int pidx0, pidx1, pidx2
+        int qidx0, qidx1, qidx2
+        FLOAT_TYPE pb0, pb1, pb2
+        FLOAT_TYPE qb0, qb1, qb2
         FLOAT_TYPE r, h
         FLOAT_TYPE dr_dx, dr_dy, dh_dx, dh_dy
         FLOAT_TYPE cost
 
     cost = 0
-    for i in range(src_indices.shape[0]):
-        didx0 = dest_indices[i, 0]
-        didx1 = dest_indices[i, 1]
-        didx2 = dest_indices[i, 2]
-        w0 = dest_weights[i, 0]
-        w1 = dest_weights[i, 1]
-        w2 = dest_weights[i, 2]
+    for i in range(indices1.shape[0]):
+        pidx0 = indices1[i, 0]
+        pidx1 = indices1[i, 1]
+        pidx2 = indices1[i, 2]
+        pb0 = barys1[i, 0]
+        pb1 = barys1[i, 1]
+        pb2 = barys1[i, 2]
 
-        px = mesh1[src_indices[i], 0]
-        py = mesh1[src_indices[i], 1]
+        qidx0 = indices2[i, 0]
+        qidx1 = indices2[i, 1]
+        qidx2 = indices2[i, 2]
+        qb0 = barys2[i, 0]
+        qb1 = barys2[i, 1]
+        qb2 = barys2[i, 2]
 
-        qx = (mesh2[didx0, 0] * w0 +
-              mesh2[didx1, 0] * w1 +
-              mesh2[didx2, 0] * w2)
-        qy = (mesh2[didx0, 1] * w0 +
-              mesh2[didx1, 1] * w1 +
-              mesh2[didx2, 1] * w2)
+        px = (mesh1[pidx0, 0] * pb0 +
+              mesh1[pidx1, 0] * pb1 +
+              mesh1[pidx2, 0] * pb2)
+        py = (mesh1[pidx0, 1] * pb0 +
+              mesh1[pidx1, 1] * pb1 +
+              mesh1[pidx2, 1] * pb2)
+
+        qx = (mesh1[qidx0, 0] * qb0 +
+              mesh1[qidx1, 0] * qb1 +
+              mesh1[qidx2, 0] * qb2)
+        qy = (mesh1[qidx0, 1] * qb0 +
+              mesh1[qidx1, 1] * qb1 +
+              mesh1[qidx2, 1] * qb2)
+
         r = c_reglen(px - qx, py - qy,
                      1, 1,
                      &(dr_dx), &(dr_dy))
@@ -126,15 +142,19 @@ cpdef FLOAT_TYPE crosslink_mesh_derivs(FLOAT_TYPE[:, ::1] mesh1,
         dh_dy *= all_weight
 
         # update derivs
-        d_cost_d_mesh1[src_indices[i], 0] += dh_dx
-        d_cost_d_mesh1[src_indices[i], 1] += dh_dy
+        d_cost_d_mesh1[pidx0, 0] += pb0 * dh_dx
+        d_cost_d_mesh1[pidx1, 0] += pb1 * dh_dx
+        d_cost_d_mesh1[pidx2, 0] += pb2 * dh_dx
+        d_cost_d_mesh1[pidx0, 1] += pb0 * dh_dy
+        d_cost_d_mesh1[pidx1, 1] += pb1 * dh_dy
+        d_cost_d_mesh1[pidx2, 1] += pb2 * dh_dy
         # opposite direction for other end of spring, and distributed according to weight
-        d_cost_d_mesh2[didx0, 0] -= w0 * dh_dx
-        d_cost_d_mesh2[didx1, 0] -= w1 * dh_dx
-        d_cost_d_mesh2[didx2, 0] -= w2 * dh_dx
-        d_cost_d_mesh2[didx0, 1] -= w0 * dh_dy
-        d_cost_d_mesh2[didx1, 1] -= w1 * dh_dy
-        d_cost_d_mesh2[didx2, 1] -= w2 * dh_dy
+        d_cost_d_mesh2[qidx0, 0] -= qb0 * dh_dx
+        d_cost_d_mesh2[qidx1, 0] -= qb1 * dh_dx
+        d_cost_d_mesh2[qidx2, 0] -= qb2 * dh_dx
+        d_cost_d_mesh2[qidx0, 1] -= qb0 * dh_dy
+        d_cost_d_mesh2[qidx1, 1] -= qb1 * dh_dy
+        d_cost_d_mesh2[qidx2, 1] -= qb2 * dh_dy
     return cost
 
 
@@ -237,108 +257,55 @@ cpdef FLOAT_TYPE area_mesh_derivs(FLOAT_TYPE[:, ::1] mesh,
 
     return cost
 
-
-
 ##################################################
-# ALL DERIVS IN PARALLEL
+# MESH INTERNAL DERIVS
 ##################################################
-
-cpdef FLOAT_TYPE all_derivs(FLOAT_TYPE[:, :, ::1] meshes,
-                            numpy.ndarray[FLOAT_TYPE, ndim=3] d_cost_d_meshes,
-                            uint32[:, ::1] pairs,  # Nx2
-                            FLOAT_TYPE[::1] between_mesh_weights,
-                            uint32[::1] src_indices,
-                            uint32[:, ::1] dest_indices,
-                            FLOAT_TYPE[:, ::1] dest_weights,
-                            uint32[::1] match_offsets,
-                            uint32[:, ::1] edge_indices,   # same for all meshes
-                            FLOAT_TYPE[::1] rest_lengths,  # same for all meshes
-                            uint32[:, ::1] triangle_indices,   # same for all meshes
-                            FLOAT_TYPE[::1] triangle_rest_areas,  # same for all meshes
-                            FLOAT_TYPE within_mesh_weight,
-                            FLOAT_TYPE between_winsor,
-                            FLOAT_TYPE within_winsor,
-                            uint32 lo, uint32 hi,
-                            int num_threads) except -1:
+cpdef FLOAT_TYPE internal_grad(FLOAT_TYPE[:, ::1] mesh,
+                               FLOAT_TYPE[:, ::1] d_cost_d_mesh,
+                               uint32[:, ::1] edge_indices,
+                               FLOAT_TYPE[::1] rest_lengths,
+                               uint32[:, ::1] triangle_indices,
+                               FLOAT_TYPE[::1] triangle_rest_areas,
+                               FLOAT_TYPE within_mesh_weight,
+                               FLOAT_TYPE within_winsor) except -1:
     cdef:
-        int num_meshes, num_pairs, num_pts
-        FLOAT_TYPE[:, :, :, ::1] d_cost_per_thread
-        FLOAT_TYPE[:] costs
-        int m1, m2, i, j, k, tid, m1d_idx, m2d_idx
-        uint32 offset, num_matches
-
-    num_meshes = meshes.shape[0]
-    num_pts = meshes.shape[1]
-    num_pairs = pairs.shape[0]
-
-    # we allocate one extra block for derivatives outside [lo..hi)
-    np_d_cost_per_thread = np.zeros((num_threads, hi - lo + 1, meshes.shape[1], 2), dtype=npFLOAT_TYPE)
-    d_cost_per_thread = np_d_cost_per_thread
-
-    np_costs = np.zeros(num_threads, dtype=npFLOAT_TYPE)
-    costs = np_costs
+        FLOAT_TYPE cost = 0
 
     with nogil:
-        # between mesh cost
-        for i in prange(num_pairs, num_threads=num_threads, schedule='dynamic'):
-            tid = threadid()
+        cost += internal_mesh_derivs(mesh, d_cost_d_mesh,
+                                     edge_indices, rest_lengths,
+                                     within_mesh_weight, within_winsor)
+        cost += area_mesh_derivs(mesh, d_cost_d_mesh,
+                                 triangle_indices, triangle_rest_areas,
+                                 within_mesh_weight)
+    return cost
 
-            m1 = pairs[i, 0]
-            m2 = pairs[i, 1]
-            # index into the d_cost_per_thread array
-            m1d_idx = (m1 - lo) if (m1 >= lo) else (hi - lo)
-            m2d_idx = (m2 - lo) if (m2 >= lo) else (hi - lo)
+##################################################
+# MESH EXTERNAL DERIVS
+##################################################
+cpdef FLOAT_TYPE external_grad(FLOAT_TYPE[:, ::1] mesh1,
+                               FLOAT_TYPE[:, ::1] mesh2,
+                               FLOAT_TYPE[:, ::1] d_cost_d_mesh1,
+                               FLOAT_TYPE[:, ::1] d_cost_d_mesh2,
+                               uint32[:, ::1] indices1,
+                               FLOAT_TYPE[:, ::1] barys1,
+                               uint32[:, ::1] indices2,
+                               FLOAT_TYPE[:, ::1] barys2,
+                               FLOAT_TYPE between_weight,
+                               FLOAT_TYPE between_winsor) except -1:
 
-            if (m1 < lo) and (m2 < lo):  # ignore already-processed pairs, but keep ones that straddle
-                continue
-            if (m1 >= hi) or (m2 >= hi):  # ignore to-be-processed meshes completely
-                continue
+    return crosslink_mesh_derivs(mesh1, mesh2,
+                                 d_cost_d_mesh1, d_cost_d_mesh2,
+                                 indices1, indices2,
+                                 barys1, barys2,
+                                 between_winsor, between_winsor)
 
-            offset = match_offsets[i]
-            num_matches = match_offsets[i + 1] - offset
-
-            costs[tid] += crosslink_mesh_derivs(meshes[m1, ...],
-                                                meshes[m2, ...],
-                                                d_cost_per_thread[tid, m1d_idx, ...],
-                                                d_cost_per_thread[tid, m2d_idx, ...],
-                                                src_indices[offset:(offset + num_matches)],
-                                                dest_indices[offset:(offset + num_matches), ...],
-                                                dest_weights[offset:(offset + num_matches), ...],
-                                                between_mesh_weights[i],
-                                                between_winsor)
-
-        # within mesh cost
-        for i in prange(num_meshes, num_threads=num_threads, schedule='dynamic'):
-            tid = threadid()
-            # compute interior costs and derivs, and sum into output derivs
-            if (i < lo) or (i >= hi):  # ignore already-processed meshes
-                continue
-            costs[tid] += internal_mesh_derivs(meshes[i, ...],
-                                               d_cost_per_thread[tid, i - lo, ...],
-                                               edge_indices,
-                                               rest_lengths,
-                                               within_mesh_weight,
-                                               within_winsor)
-            costs[tid] += area_mesh_derivs(meshes[i, ...],
-                                           d_cost_per_thread[tid, i - lo, ...],
-                                           triangle_indices,
-                                           triangle_rest_areas,
-                                           within_mesh_weight)
-
-
-
-    # ignore last block of derivatives (see above)
-    np_d_cost_per_thread[:, :-1, ...].sum(axis=0, out=d_cost_d_meshes)
-
-    assert not np.any(np.isnan(d_cost_d_meshes)), "NaN deriv"
-
-    return np_costs.sum()
 
 def compare(x, y, eps, restlen, sigma):
     l, dl_dx, dl_dy = reglen(x, y)
     h0, dh_dx, dh_dy = huber(l, restlen, sigma, dl_dx, dl_dy)
-    hx = huber(reglen(x+eps, y)[0], restlen, sigma, dl_dx, dl_dy)[0]
-    hy = huber(reglen(x, y+eps)[0], restlen, sigma, dl_dx, dl_dy)[0]
+    hx = huber(reglen(x + eps, y)[0], restlen, sigma, dl_dx, dl_dy)[0]
+    hy = huber(reglen(x, y + eps)[0], restlen, sigma, dl_dx, dl_dy)[0]
     print x, y, restlen, sigma, "->", (dh_dx, dh_dy), "vs", ((hx - h0) / eps, (hy - h0) / eps)
 
 if __name__ == '__main__':
@@ -354,4 +321,3 @@ if __name__ == '__main__':
     compare(10.0, 2.0, eps, 3.0, 20.0)
     compare(10.0, 2.0, eps, 3.0, 2.0)
     compare(-10.0, -2.0, eps, 3.0, 2.0)
-
