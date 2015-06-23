@@ -30,6 +30,7 @@ import glob
 # os.chdir("/data/jpeg2k_test_sections_alignment")
 datadir, imgdir, workdir, outdir = os.getcwd(), os.getcwd(), os.getcwd(), os.getcwd()
 
+
 def analyzeimg(slicenumber, mfovnumber, num, data):
     slicestring = ("%03d" % slicenumber)
     numstring = ("%03d" % num)
@@ -90,8 +91,8 @@ def imghittest(point, slicenumber, mfovnumber, imgnumber, data):
     pointx = point[0]
     pointy = point[1]
     jsonindex = (mfovnumber - 1) * 61 + imgnumber - 1
-    if (pointx > data[jsonindex]["bbox"][0] and pointy > data[jsonindex]["bbox"][2] 
-            and pointx < data[jsonindex]["bbox"][1] and pointy < data[jsonindex]["bbox"][3]):
+    if (pointx > data[jsonindex]["bbox"][0] and pointy > data[jsonindex]["bbox"][2] and
+            pointx < data[jsonindex]["bbox"][1] and pointy < data[jsonindex]["bbox"][3]):
         return True
     return False
 
@@ -104,7 +105,7 @@ def getimagecenter(slicenumber, mfovnumber, imgnumber, data):
     nump += 2
     return [xlocsum / nump, ylocsum / nump]
 
-    
+
 def getcenter(slicenumber, mfovnumber, data):
     xlocsum, ylocsum, nump = 0, 0, 0
     for num in range(1, 62):
@@ -232,7 +233,7 @@ def getimgmatches(slice1, slice2, nummfovs1, nummfovs2, data1, data2, mfovmatche
     allimgsin1 = getimgcentersfromjson(data1)
     allimgsin2 = getimgcentersfromjson(data2)
     imgmatches = []
-    
+
     for mfovnum in range(1, nummfovs1 + 1):
         for imgnum in range(1, 62):
             jsonindex = (mfovnum - 1) * 61 + imgnum - 1
@@ -293,12 +294,12 @@ def gettemplatefromimgandpoint(img1resized, templatesize, centerpoint):
     imgheight = img1resized.shape[1]
     imgwidth = img1resized.shape[0]
     notonmesh = False
-    
+
     xstart = centerpoint[0] - templatesize / 2
     ystart = centerpoint[1] - templatesize / 2
     xend = centerpoint[0] + templatesize / 2
     yend = centerpoint[1] + templatesize / 2
-    
+
     if (xstart < 0):
         xend = 1 + xstart
         xstart = 1
@@ -317,12 +318,11 @@ def gettemplatefromimgandpoint(img1resized, templatesize, centerpoint):
         ystart -= diff + 1
         yend -= diff + 1
         notonmesh = True
-    
+
     if (xstart < 0) or (ystart < 0) or (xend >= imgwidth) or (yend >= imgheight):
         return None
-    
     return (img1resized[xstart:(xstart + templatesize), ystart:(ystart + templatesize)].copy(), xstart, ystart, notonmesh)
-    
+
 
 def generatehexagonalgrid(boundingbox, spacing):
     hexheight = spacing
@@ -355,6 +355,7 @@ def findindwithinmatches(imgmatches, img1ind):
 
 # <codecell>
 
+
 def main():
     global datadir
     global imgdir
@@ -365,19 +366,19 @@ def main():
     slice2 = int(slice2)
     slicestring1 = ("%03d" % slice1)
     slicestring2 = ("%03d" % slice2)
-    
+
     os.chdir(datadir)
     with open("tilespecs/W01_Sec" + slicestring1 + ".json") as data_file1:
         data1 = json.load(data_file1)
     with open("tilespecs/W01_Sec" + slicestring2 + ".json") as data_file2:
         data2 = json.load(data_file2)
-        
+
     os.chdir(workdir)
     with open("Slice" + str(slice1) + "vs" + str(slice2) + ".json") as data_matches:
         mfovmatches = json.load(data_matches)
     nummfovs1 = len(data1) / 61
     nummfovs2 = len(data2) / 61
-        
+
     if len(mfovmatches["matches"]) == 0:
         os.chdir(outdir)
         jsonfile = {}
@@ -391,43 +392,40 @@ def main():
         jsonfile['pointmatches'] = finalpointmatches
         json.dump(jsonfile, open("Images_Slice" + str(slice1) + "vs" + str(slice2) + ".json", 'w'), indent=4)
         return
-    
+
     starttime = time.clock()
     imgmatches = getimgmatches(slice1, slice2, nummfovs1, nummfovs2, data1, data2, mfovmatches)
-    
+
     bb = getboundingbox(range(0, len(data1)), data1)
     hexgr = generatehexagonalgrid(bb, 1500)
-    
+
     pointmatches = []
     scaling = 0.2
     templatesize = 200
-    
+
     for i in range(0, len(hexgr)):
         if i % 1000 == 0 and i > 0:
             print i
         img1ind = getclosestindtopoint(hexgr[i], slice1, data1)
         if img1ind is None:
             continue
-        
-        # Fix this line. Instead of indexing into img1ind, i need to find the index that match
-        (img1ind, img2inds) = imgmatches[findindwithinmatches(imgmatches, img1ind)] #imgmatches[img1ind]
+
+        (img1ind, img2inds) = imgmatches[findindwithinmatches(imgmatches, img1ind)]
         (img1mfov, img1num) = getnumsfromindex(img1ind)
-    
         slice1string = ("%03d" % slice1)
         mfov1string = ("%06d" % img1mfov)
         num1string = ("%03d" % img1num)
-        # img1url = "/data/images/SCS_2015-4-27_C1w7/" + slice1string + "/" + mfov1string + "/" + slice1string + "_" + mfov1string + "_" + num1string
         img1url = imgdir + slice1string + "/" + mfov1string + "/" + slice1string + "_" + mfov1string + "_" + num1string
-    
+
         img1 = cv2.imread(glob.glob(img1url + "*.bmp")[0], 0)
-        img1resized = cv2.resize(img1, (0, 0), fx = scaling, fy = scaling)
+        img1resized = cv2.resize(img1, (0, 0), fx=scaling, fy=scaling)
         imgoffset1 = getimagetransform(slice1, img1mfov, img1num, data1)
         expectedtransform = gettransformationbetween(slice1, img1mfov, mfovmatches, data1)
-        
+
         img1templates = gettemplatefromimgandpoint(img1resized, templatesize, (np.array(hexgr[i]) - imgoffset1) * scaling)
         if img1templates is None:
             continue
-        
+
         chosentemplate, startx, starty, notonmesh = img1templates
         w, h = chosentemplate.shape[0], chosentemplate.shape[1]
         centerpoint1 = np.array([startx + w / 2, starty + h / 2]) / scaling + imgoffset1
@@ -438,16 +436,16 @@ def main():
         angleofrot = rad2deg * math.atan2(expectedtransform[1][0], expectedtransform[0][0])
         rotationmatrix = cv2.getRotationMatrix2D((h / 2, w / 2), angleofrot, 1)
         rotatedtemp1 = cv2.warpAffine(chosentemplate, rotationmatrix, (col, ro))
-        xaa = int(w / 2.9) # Divide by a bit more than the square root of 2
+        xaa = int(w / 2.9)
         rotatedandcroppedtemp1 = rotatedtemp1[(w / 2 - xaa):(w / 2 + xaa), (h / 2 - xaa):(h / 2 + xaa)]
         neww, newh = rotatedandcroppedtemp1.shape[0], rotatedandcroppedtemp1.shape[1]
-        
+
         for k in range(0, len(img2s)):
             img2, img2ind = img2s[k]
             (img2mfov, img2num) = getnumsfromindex(img2ind)
-            img2resized = cv2.resize(img2, (0, 0), fx = scaling, fy = scaling)
+            img2resized = cv2.resize(img2, (0, 0), fx=scaling, fy=scaling)
             imgoffset2 = getimagetransform(slice2, img2mfov, img2num, data2)
-            
+
             # template1topleft = np.array([startx, starty]) / scaling + imgoffset1
             result, reason = PMCC_filter_example.PMCC_match(img2resized, rotatedandcroppedtemp1, min_correlation=0.3)
             if result is not None:
@@ -457,14 +455,14 @@ def main():
                 img1centerpoint = np.array([startx + w / 2, starty + h / w]) / scaling + imgoffset1
                 img2centerpoint = np.array([reasonx + neww / 2, reasony + newh / 2]) / scaling + imgoffset2
                 pointmatches.append((img1centerpoint, img2centerpoint, notonmesh))
-    
+
     os.chdir(outdir)
     jsonfile = {}
     jsonfile['tilespec1'] = "file://" + os.getcwd() + "/tilespecs/W01_Sec" + ("%03d" % slice1) + ".json"
     jsonfile['tilespec2'] = "file://" + os.getcwd() + "/tilespecs/W01_Sec" + ("%03d" % slice2) + ".json"
     jsonfile['runtime'] = time.clock() - starttime
     jsonfile['mesh'] = hexgr
-    
+
     finalpointmatches = []
     for i in range(0, len(pointmatches)):
         p1, p2, nmesh = pointmatches[i]
@@ -473,7 +471,7 @@ def main():
         record['point2'] = p2.tolist()
         record['isvirtualpoint'] = nmesh
         finalpointmatches.append(record)
-    
+
     jsonfile['pointmatches'] = finalpointmatches
     json.dump(jsonfile, open("Images_Slice" + str(slice1) + "vs" + str(slice2) + ".json", 'w'), indent=4)
 

@@ -182,12 +182,12 @@ def analyze2slices(slice1, slice2, data1, data2, nummfovs1, nummfovs2, trytimes)
     numfilterarr = np.zeros((nummfovs1, nummfovs2))
     filterratearr = np.zeros((nummfovs1, nummfovs2))
     besttransform = None
-    
+
     randomchoices = []
     timestorand = trytimes * max(nummfovs1, nummfovs2)
     timesrandtried = 0
-    for i in range(0,nummfovs1):
-        for j in range(0,nummfovs2):
+    for i in range(0, nummfovs1):
+        for j in range(0, nummfovs2):
             randomchoices.append((i + 1, j + 1))
 
     while (besttransform is None) and (len(randomchoices) > 0):
@@ -196,7 +196,7 @@ def analyze2slices(slice1, slice2, data1, data2, nummfovs1, nummfovs2, trytimes)
         mfov1, mfov2 = mfovcomppicked
         randomchoices.remove(mfovcomppicked)
         timesrandtried = timesrandtried + 1
-        
+
         (model, num_filtered, filter_rate, num_rod, num_m1, num_m2) = analyze2slicesmfovs(slice1, mfov1, slice2, mfov2, data1, data2)
         modelarr[mfov1 - 1, mfov2 - 1] = model
         numfilterarr[mfov1 - 1, mfov2 - 1] = num_filtered
@@ -247,15 +247,15 @@ def main():
     slice2 = int(slice2)
     slicestring1 = ("%03d" % slice1)
     slicestring2 = ("%03d" % slice2)
-    
+
     os.chdir(datadir)
     with open("tilespecs/W01_Sec" + slicestring1 + ".json") as data_file1:
         data1 = json.load(data_file1)
     with open("tilespecs/W01_Sec" + slicestring2 + ".json") as data_file2:
         data2 = json.load(data_file2)
     nummfovs1 = len(data1) / 61
-    nummfovs2 = len(data2) / 61        
-        
+    nummfovs2 = len(data2) / 61
+
     retval = analyze2slices(slice1, slice2, data1, data2, nummfovs1, nummfovs2, trytimes)
 
     jsonfile = {}
