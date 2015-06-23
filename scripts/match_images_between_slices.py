@@ -361,7 +361,7 @@ def main():
     global imgdir
     global workdir
     global outdir
-    script, slice1, slice2, datadir, imgdir, workdir, outdir = sys.argv
+    script, slice1, slice2, datadir, imgdir, workdir, outdir, conffile = sys.argv
     slice1 = int(slice1)
     slice2 = int(slice2)
     slicestring1 = ("%03d" % slice1)
@@ -372,6 +372,8 @@ def main():
         data1 = json.load(data_file1)
     with open("tilespecs/W01_Sec" + slicestring2 + ".json") as data_file2:
         data2 = json.load(data_file2)
+    with open(conffile) as conf_file:
+        conf = json.load(conf_file)
 
     os.chdir(workdir)
     with open("Slice" + str(slice1) + "vs" + str(slice2) + ".json") as data_matches:
@@ -386,7 +388,7 @@ def main():
         jsonfile['tilespec2'] = "file://" + os.getcwd() + "/tilespecs/W01_Sec" + ("%03d" % slice2) + ".json"
         jsonfile['runtime'] = 0
         bb = getboundingbox(range(0, len(data1)), data1)
-        hexgr = generatehexagonalgrid(bb, 1500)
+        hexgr = generatehexagonalgrid(bb, conf["template_matching_args"]["hexspacing"])
         jsonfile['mesh'] = hexgr
         finalpointmatches = []
         jsonfile['pointmatches'] = finalpointmatches
@@ -397,11 +399,11 @@ def main():
     imgmatches = getimgmatches(slice1, slice2, nummfovs1, nummfovs2, data1, data2, mfovmatches)
 
     bb = getboundingbox(range(0, len(data1)), data1)
-    hexgr = generatehexagonalgrid(bb, 1500)
+    hexgr = generatehexagonalgrid(bb, conf["template_matching_args"]["hexspacing"])
 
     pointmatches = []
-    scaling = 0.2
-    templatesize = 200
+    scaling = conf["template_matching_args"]["scaling"]
+    templatesize = conf["template_matching_args"]["templatesize"]
 
     for i in range(0, len(hexgr)):
         if i % 1000 == 0 and i > 0:
@@ -447,7 +449,10 @@ def main():
             imgoffset2 = getimagetransform(slice2, img2mfov, img2num, data2)
 
             # template1topleft = np.array([startx, starty]) / scaling + imgoffset1
-            result, reason = PMCC_filter_example.PMCC_match(img2resized, rotatedandcroppedtemp1, min_correlation=0.3)
+            minco = conf["PMCC_args"]["min_correlation"]
+            maxcu = conf["PMCC_args"]["maximal_curvature_ratio"]
+            maxro = conf["PMCC_args"]["maximal_ROD"]
+            result, reason = PMCC_filter_example.PMCC_match(img2resized, rotatedandcroppedtemp1, min_correlation=minco, maximal_curvature_ratio=maxcu, maximal_ROD=maxro)
             if result is not None:
                 reasonx, reasony = reason
                 # img1topleft = np.array([startx, starty]) / scaling + imgoffset1

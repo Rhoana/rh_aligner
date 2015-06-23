@@ -119,12 +119,12 @@ def analyzemfov(slicenumber, mfovnumber, maximgs, data):
     return (allpoints, allresps, alldescs)
 
 
-def generatematches_cv2(allpoints1, allpoints2, alldescs1, alldescs2):
+def generatematches_cv2(allpoints1, allpoints2, alldescs1, alldescs2, conf):
     matcher = cv2.BFMatcher()
     matches = matcher.knnMatch(np.array(alldescs1), np.array(alldescs2), k=2)
     goodmatches = []
     for m, n in matches:
-        if m.distance / n.distance < 0.92:
+        if m.distance / n.distance < conf["prelim_matching_args"]["ROD_cutoff"]:
             goodmatches.append([m])
     match_points = np.array([
         np.array([allpoints1[[m[0].queryIdx for m in goodmatches]]][0]),
@@ -132,7 +132,7 @@ def generatematches_cv2(allpoints1, allpoints2, alldescs1, alldescs2):
     return match_points
 
 
-def generatematches_brute(allpoints1, allpoints2, alldescs1, alldescs2):
+def generatematches_brute(allpoints1, allpoints2, alldescs1, alldescs2, conf):
     bestpoints1 = []
     bestpoints2 = []
     for pointrange in range(0, len(allpoints1)):
@@ -152,31 +152,31 @@ def generatematches_brute(allpoints1, allpoints2, alldescs1, alldescs2):
                 bestcomparedpoint = allpoints2[num]
             elif bestdist < secondbestdistsofar:
                 secondbestdistsofar = bestdist
-        if bestdistsofar / secondbestdistsofar < .92:
+        if bestdistsofar / secondbestdistsofar < conf["prelim_matching_args"]["ROD_cutoff"]:
             bestpoints1.append(selectedpoint)
             bestpoints2.append(bestcomparedpoint)
     match_points = np.array([bestpoints1, bestpoints2])
     return match_points
 
 
-def analyze2slicesmfovs(slice1, mfov1, slice2, mfov2, data1, data2):
+def analyze2slicesmfovs(slice1, mfov1, slice2, mfov2, data1, data2, conf):
     print str(slice1) + "-" + str(mfov1) + " vs. " + str(slice2) + "-" + str(mfov2)
     (allpoints1, allresps1, alldescs1) = analyzemfov(slice1, mfov1, 61, data1)
     (allpoints2, allresps2, alldescs2) = analyzemfov(slice2, mfov2, 61, data2)
     match_points = generatematches_cv2(allpoints1, allpoints2, alldescs1, alldescs2)
-    model_index = 1
-    iterations = 2000
-    max_epsilon = 500
-    min_inlier_ratio = 0
-    min_num_inlier = 7
-    max_trust = 3
+    model_index = conf["RANSAC_args"]["model_index"]
+    iterations = conf["RANSAC_args"]["iterations"]
+    max_epsilon = conf["RANSAC_args"]["max_epsilon"]
+    min_inlier_ratio = conf["RANSAC_args"]["min_inlier_ratio"]
+    min_num_inlier = conf["RANSAC_args"]["min_num_inlier"]
+    max_trust = conf["RANSAC_args"]["max_trust"]
     model, filtered_matches = ransac.filter_matches(match_points, model_index, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, max_trust)
     if filtered_matches is None:
         filtered_matches = np.zeros((0, 0))
     return (model, filtered_matches.shape[1], float(filtered_matches.shape[1]) / match_points.shape[1], match_points.shape[1], len(allpoints1), len(allpoints2))
 
 
-def analyze2slices(slice1, slice2, data1, data2, nummfovs1, nummfovs2, trytimes):
+def analyze2slices(slice1, slice2, data1, data2, nummfovs1, nummfovs2, conf):
     toret = []
     modelarr = np.zeros((nummfovs1, nummfovs2), dtype=models.RigidModel)
     numfilterarr = np.zeros((nummfovs1, nummfovs2))
@@ -184,6 +184,7 @@ def analyze2slices(slice1, slice2, data1, data2, nummfovs1, nummfovs2, trytimes)
     besttransform = None
 
     randomchoices = []
+    trytimes = conf["prelim_matching_args"]["trytime"]
     timestorand = trytimes * max(nummfovs1, nummfovs2)
     timesrandtried = 0
     for i in range(0, nummfovs1):
@@ -197,11 +198,11 @@ def analyze2slices(slice1, slice2, data1, data2, nummfovs1, nummfovs2, trytimes)
         randomchoices.remove(mfovcomppicked)
         timesrandtried = timesrandtried + 1
 
-        (model, num_filtered, filter_rate, num_rod, num_m1, num_m2) = analyze2slicesmfovs(slice1, mfov1, slice2, mfov2, data1, data2)
+        (model, num_filtered, filter_rate, num_rod, num_m1, num_m2) = analyze2slicesmfovs(slice1, mfov1, slice2, mfov2, data1, data2, conf)
         modelarr[mfov1 - 1, mfov2 - 1] = model
         numfilterarr[mfov1 - 1, mfov2 - 1] = num_filtered
         filterratearr[mfov1 - 1, mfov2 - 1] = filter_rate
-        if num_filtered > 50 and filter_rate > 0.25:
+        if num_filtered > conf["prelim_matching_args"]["numfiltered_cutoff"] and filter_rate > conf["prelim_matching_args"]["filterrate_cutoff"]:
             besttransform = model.get_matrix()
             break
         if timesrandtried > timestorand:
@@ -216,11 +217,11 @@ def analyze2slices(slice1, slice2, data1, data2, nummfovs1, nummfovs2, trytimes)
             distances[j] = np.linalg.norm(mycentertrans - getcenter(slice2, j + 1, data2))
         checkindices = distances.argsort()[0:7]
         for j in range(0, len(checkindices)):
-            (model, num_filtered, filter_rate, num_rod, num_m1, num_m2) = analyze2slicesmfovs(slice1, i + 1, slice2, checkindices[j] + 1, data1, data2)
+            (model, num_filtered, filter_rate, num_rod, num_m1, num_m2) = analyze2slicesmfovs(slice1, i + 1, slice2, checkindices[j] + 1, data1, data2, conf)
             modelarr[i, checkindices[j]] = model
             numfilterarr[i, checkindices[j]] = num_filtered
             filterratearr[i, checkindices[j]] = filter_rate
-            if num_filtered > 50 and filter_rate > 0.25:
+            if num_filtered > conf["prelim_matching_args"]["numfiltered_cutoff"] and filter_rate > conf["prelim_matching_args"]["filterrate_cutoff"]:
                 besttransform = model.get_matrix()
                 dictentry = {}
                 dictentry['mfov1'] = i + 1
@@ -240,8 +241,7 @@ def analyze2slices(slice1, slice2, data1, data2, nummfovs1, nummfovs2, trytimes)
 
 
 def main():
-    script, slice1, slice2, datadir, outdir = sys.argv
-    trytimes = 10
+    script, slice1, slice2, datadir, outdir, conffile = sys.argv
     starttime = time.clock()
     slice1 = int(slice1)
     slice2 = int(slice2)
@@ -253,10 +253,12 @@ def main():
         data1 = json.load(data_file1)
     with open("tilespecs/W01_Sec" + slicestring2 + ".json") as data_file2:
         data2 = json.load(data_file2)
+    with open(conffile) as conf_file:
+        conf = json.load(conf_file)
     nummfovs1 = len(data1) / 61
     nummfovs2 = len(data2) / 61
 
-    retval = analyze2slices(slice1, slice2, data1, data2, nummfovs1, nummfovs2, trytimes)
+    retval = analyze2slices(slice1, slice2, data1, data2, nummfovs1, nummfovs2, conf)
 
     jsonfile = {}
     jsonfile['tilespec1'] = "file://" + os.getcwd() + "/tilespecs/W01_Sec" + ("%03d" % slice1) + ".json"
