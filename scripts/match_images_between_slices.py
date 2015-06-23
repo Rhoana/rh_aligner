@@ -26,7 +26,8 @@ from pylab import axis
 import cv2
 import time
 import glob
-os.chdir("/data/SCS_2015-4-27_C1w7_alignment")
+# os.chdir("/data/SCS_2015-4-27_C1w7_alignment")
+os.chdir("/data/jpeg2k_test_sections_alignment")
 
 
 def analyzeimg(slicenumber, mfovnumber, num, data):
@@ -266,7 +267,8 @@ def getimgsfromindsandpoint(imginds, slicenumber, point, data):
             slicestring = ("%03d" % slicenumber)
             mfovstring = ("%06d" % imgmfov)
             numstring = ("%03d" % imgnum)
-            imgurl = "/data/images/SCS_2015-4-27_C1w7/" + slicestring + "/" + mfovstring + "/" + slicestring + "_" + mfovstring + "_" + numstring
+            # imgurl = "/data/images/SCS_2015-4-27_C1w7/" + slicestring + "/" + mfovstring + "/" + slicestring + "_" + mfovstring + "_" + numstring
+            imgurl = "/data/jpeg2k_test_sections/" + slicestring + "/" + mfovstring + "/" + slicestring + "_" + mfovstring + "_" + numstring
             imgt = cv2.imread(glob.glob(imgurl + "*.bmp")[0], 0)
             imgarr.append((imgt, imginds[i]))
     return imgarr
@@ -405,7 +407,8 @@ def main():
         slice1string = ("%03d" % slice1)
         mfov1string = ("%06d" % img1mfov)
         num1string = ("%03d" % img1num)
-        img1url = "/data/images/SCS_2015-4-27_C1w7/" + slice1string + "/" + mfov1string + "/" + slice1string + "_" + mfov1string + "_" + num1string
+        # img1url = "/data/images/SCS_2015-4-27_C1w7/" + slice1string + "/" + mfov1string + "/" + slice1string + "_" + mfov1string + "_" + num1string
+        img1url = "/data/jpeg2k_test_sections/" + slice1string + "/" + mfov1string + "/" + slice1string + "_" + mfov1string + "_" + num1string
     
         img1 = cv2.imread(glob.glob(img1url + "*.bmp")[0], 0)
         img1resized = cv2.resize(img1, (0, 0), fx = scaling, fy = scaling)

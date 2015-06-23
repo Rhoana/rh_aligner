@@ -19,7 +19,7 @@ import cv2
 import time
 import glob
 # os.chdir("C:/Users/Raahil/Documents/Research2015_eclipse/Testing")
-os.chdir("/data/SCS_2015-4-27_C1w7_alignment")
+# os.chdir("/data/SCS_2015-4-27_C1w7_alignment")
 # os.chdir("/data/jpeg2k_test_sections_alignment")
 
 
@@ -240,24 +240,22 @@ def analyze2slices(slice1, slice2, data1, data2, nummfovs1, nummfovs2, trytimes)
 
 
 def main():
-    if len(sys.argv) == 5:
-        script, slice1, slice2, nummfovs1, nummfovs2 = sys.argv
-        trytimes = 10
-    elif len(sys.argv == 6):
-        script, slice1, slice2, nummfovs1, nummfovs2, trytimes = sys.argv
-    
+    script, slice1, slice2, workdir, outdir = sys.argv
+    trytimes = 10
     starttime = time.clock()
     slice1 = int(slice1)
     slice2 = int(slice2)
-    nummfovs1 = int(nummfovs1)
-    nummfovs2 = int(nummfovs2)
-    trytimes = int(trytimes)
     slicestring1 = ("%03d" % slice1)
     slicestring2 = ("%03d" % slice2)
+    
+    os.chdir(workdir)
     with open("tilespecs/W01_Sec" + slicestring1 + ".json") as data_file1:
         data1 = json.load(data_file1)
     with open("tilespecs/W01_Sec" + slicestring2 + ".json") as data_file2:
         data2 = json.load(data_file2)
+    nummfovs1 = len(data1) / 61
+    nummfovs2 = len(data2) / 61        
+        
     retval = analyze2slices(slice1, slice2, data1, data2, nummfovs1, nummfovs2, trytimes)
 
     jsonfile = {}
@@ -265,7 +263,7 @@ def main():
     jsonfile['tilespec2'] = "file://" + os.getcwd() + "/tilespecs/W01_Sec" + ("%03d" % slice2) + ".json"
     jsonfile['matches'] = retval
     jsonfile['runtime'] = time.clock() - starttime
-    os.chdir("/home/raahilsha")
+    os.chdir(outdir)
     json.dump(jsonfile, open("Slice" + str(slice1) + "vs" + str(slice2) + ".json", 'w'), indent=4)
 
 if __name__ == '__main__':
