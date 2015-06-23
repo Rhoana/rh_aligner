@@ -11,6 +11,11 @@ def ransac(matches, target_model_type, iterations, epsilon, min_inlier_ratio, mi
     best_inlier_mask = None
     best_model_mean_dists = 0
     proposed_model = Transforms.create(target_model_type)
+
+    if proposed_model.MIN_MATCHES_NUM > matches.shape[1]:
+        print "RANSAC cannot find a good model because the number of initial matches ({}) is too small.".format(matches.shape[1])
+        return None, None, None
+        
     for i in xrange(iterations):
         if (i + 1) % 100 == 0:
             print "starting RANSAC iteration {}".format(i + 1)

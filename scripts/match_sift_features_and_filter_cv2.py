@@ -133,12 +133,13 @@ def match_single_sift_features_and_filter(tiles_file, features_file1, features_f
     model, filtered_matches = ransac.filter_matches(match_points, model_index, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, max_trust)
 
     model_json = []
+    p1s = []
+    p2s = []
     if model is not None:
         model_json = model.to_modelspec()
-
-    # save the output (matches)
-    p1s = [pts1[[m[0].queryIdx for m in matches]]][0]
-    p2s = [pts2[[m[0].trainIdx for m in matches]]][0]
+        # save the output (matches)
+        p1s = [pts1[[m[0].queryIdx for m in matches]]][0]
+        p2s = [pts2[[m[0].trainIdx for m in matches]]][0]
 
     out_data = [{
         "mipmapLevel" : 0,
