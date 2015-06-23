@@ -1,0 +1,24 @@
+{
+    "RANSAC_args" : {
+        "model_index" : 1,
+        "iterations" : 2000,
+        "max_epsilon" : 500,
+        "min_inlier_ratio" : 0,
+        "min_num_inlier" : 7,
+        "max_trust" : 3
+    },
+    "PMCC_args" : {
+        "min_correlation" : 0.2,
+        "maximal_curvature_ratio" : 10,
+        "maximal_ROD" : 0.9
+    },
+    "prelim_matching_args" : {
+        "ROD_cutoff" : 0.92,
+        "filterrate_cutoff" : 0.25,
+        "numfiltered_cutoff" : 50,
+        "trytime" : 10
+    },
+    "template_matching_args" : {
+        "hexspacing" : 1500
+    }
+}
