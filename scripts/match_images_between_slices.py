@@ -27,13 +27,14 @@ import cv2
 import time
 import glob
 # os.chdir("/data/SCS_2015-4-27_C1w7_alignment")
-os.chdir("/data/jpeg2k_test_sections_alignment")
-
+# os.chdir("/data/jpeg2k_test_sections_alignment")
+datadir, imgdir, workdir, outdir = os.getcwd(), os.getcwd(), os.getcwd(), os.getcwd()
 
 def analyzeimg(slicenumber, mfovnumber, num, data):
     slicestring = ("%03d" % slicenumber)
     numstring = ("%03d" % num)
     mfovstring = ("%06d" % mfovnumber)
+    os.chdir(datadir)
     imgname = "2d_work_dir/W01_Sec" + slicestring + "/W01_Sec" + slicestring + "_sifts_" + slicestring + "_" + mfovstring + "_" + numstring + "*"
     f = h5py.File(glob.glob(imgname)[0], 'r')
     resps = f['pts']['responses'][:]
@@ -253,7 +254,7 @@ def getimgsfrominds(imginds, slice):
         (imgmfov, imgnum) = getnumsfromindex(imginds[i])
         mfovstring = ("%06d" % imgmfov)
         numstring = ("%03d" % imgnum)
-        imgurl = "/data/images/SCS_2015-4-27_C1w7/" + slicestring + "/" + mfovstring + "/" + slicestring + "_" + mfovstring + "_" + numstring
+        imgurl = imgdir + slicestring + "/" + mfovstring + "/" + slicestring + "_" + mfovstring + "_" + numstring
         imgt = cv2.imread(glob.glob(imgurl + "*.bmp")[0], 0)
         imgarr.append(imgt)
     return imgarr
@@ -267,8 +268,7 @@ def getimgsfromindsandpoint(imginds, slicenumber, point, data):
             slicestring = ("%03d" % slicenumber)
             mfovstring = ("%06d" % imgmfov)
             numstring = ("%03d" % imgnum)
-            # imgurl = "/data/images/SCS_2015-4-27_C1w7/" + slicestring + "/" + mfovstring + "/" + slicestring + "_" + mfovstring + "_" + numstring
-            imgurl = "/data/jpeg2k_test_sections/" + slicestring + "/" + mfovstring + "/" + slicestring + "_" + mfovstring + "_" + numstring
+            imgurl = imgdir + slicestring + "/" + mfovstring + "/" + slicestring + "_" + mfovstring + "_" + numstring
             imgt = cv2.imread(glob.glob(imgurl + "*.bmp")[0], 0)
             imgarr.append((imgt, imginds[i]))
     return imgarr
@@ -356,21 +356,30 @@ def findindwithinmatches(imgmatches, img1ind):
 # <codecell>
 
 def main():
-    script, slice1, slice2, nummfovs1, nummfovs2 = sys.argv
+    global datadir
+    global imgdir
+    global workdir
+    global outdir
+    script, slice1, slice2, datadir, imgdir, workdir, outdir = sys.argv
     slice1 = int(slice1)
     slice2 = int(slice2)
-    nummfovs1 = int(nummfovs1)
-    nummfovs2 = int(nummfovs2)
     slicestring1 = ("%03d" % slice1)
     slicestring2 = ("%03d" % slice2)
+    
+    os.chdir(datadir)
     with open("tilespecs/W01_Sec" + slicestring1 + ".json") as data_file1:
         data1 = json.load(data_file1)
     with open("tilespecs/W01_Sec" + slicestring2 + ".json") as data_file2:
         data2 = json.load(data_file2)
-    with open("/home/raahilsha/Slice" + str(slice1) + "vs" + str(slice2) + ".json") as data_matches:
+        
+    os.chdir(workdir)
+    with open("Slice" + str(slice1) + "vs" + str(slice2) + ".json") as data_matches:
         mfovmatches = json.load(data_matches)
+    nummfovs1 = len(data1) / 61
+    nummfovs2 = len(data2) / 61
         
     if len(mfovmatches["matches"]) == 0:
+        os.chdir(outdir)
         jsonfile = {}
         jsonfile['tilespec1'] = "file://" + os.getcwd() + "/tilespecs/W01_Sec" + ("%03d" % slice1) + ".json"
         jsonfile['tilespec2'] = "file://" + os.getcwd() + "/tilespecs/W01_Sec" + ("%03d" % slice2) + ".json"
@@ -380,7 +389,7 @@ def main():
         jsonfile['mesh'] = hexgr
         finalpointmatches = []
         jsonfile['pointmatches'] = finalpointmatches
-        json.dump(jsonfile, open("/home/raahilsha/Images_Slice" + str(slice1) + "vs" + str(slice2) + ".json", 'w'), indent=4)
+        json.dump(jsonfile, open("Images_Slice" + str(slice1) + "vs" + str(slice2) + ".json", 'w'), indent=4)
         return
     
     starttime = time.clock()
@@ -408,7 +417,7 @@ def main():
         mfov1string = ("%06d" % img1mfov)
         num1string = ("%03d" % img1num)
         # img1url = "/data/images/SCS_2015-4-27_C1w7/" + slice1string + "/" + mfov1string + "/" + slice1string + "_" + mfov1string + "_" + num1string
-        img1url = "/data/jpeg2k_test_sections/" + slice1string + "/" + mfov1string + "/" + slice1string + "_" + mfov1string + "_" + num1string
+        img1url = imgdir + slice1string + "/" + mfov1string + "/" + slice1string + "_" + mfov1string + "_" + num1string
     
         img1 = cv2.imread(glob.glob(img1url + "*.bmp")[0], 0)
         img1resized = cv2.resize(img1, (0, 0), fx = scaling, fy = scaling)
@@ -439,16 +448,17 @@ def main():
             img2resized = cv2.resize(img2, (0, 0), fx = scaling, fy = scaling)
             imgoffset2 = getimagetransform(slice2, img2mfov, img2num, data2)
             
-            template1topleft = np.array([startx, starty]) / scaling + imgoffset1
+            # template1topleft = np.array([startx, starty]) / scaling + imgoffset1
             result, reason = PMCC_filter_example.PMCC_match(img2resized, rotatedandcroppedtemp1, min_correlation=0.3)
             if result is not None:
                 reasonx, reasony = reason
-                img1topleft = np.array([startx, starty]) / scaling + imgoffset1
-                img2topleft = np.array(reason) / scaling + imgoffset2
+                # img1topleft = np.array([startx, starty]) / scaling + imgoffset1
+                # img2topleft = np.array(reason) / scaling + imgoffset2
                 img1centerpoint = np.array([startx + w / 2, starty + h / w]) / scaling + imgoffset1
                 img2centerpoint = np.array([reasonx + neww / 2, reasony + newh / 2]) / scaling + imgoffset2
                 pointmatches.append((img1centerpoint, img2centerpoint, notonmesh))
     
+    os.chdir(outdir)
     jsonfile = {}
     jsonfile['tilespec1'] = "file://" + os.getcwd() + "/tilespecs/W01_Sec" + ("%03d" % slice1) + ".json"
     jsonfile['tilespec2'] = "file://" + os.getcwd() + "/tilespecs/W01_Sec" + ("%03d" % slice2) + ".json"
@@ -465,7 +475,7 @@ def main():
         finalpointmatches.append(record)
     
     jsonfile['pointmatches'] = finalpointmatches
-    json.dump(jsonfile, open("/home/raahilsha/Images_Slice" + str(slice1) + "vs" + str(slice2) + ".json", 'w'), indent=4)
+    json.dump(jsonfile, open("Images_Slice" + str(slice1) + "vs" + str(slice2) + ".json", 'w'), indent=4)
 
 
 if __name__ == '__main__':

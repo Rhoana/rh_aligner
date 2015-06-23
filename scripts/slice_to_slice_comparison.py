@@ -240,7 +240,7 @@ def analyze2slices(slice1, slice2, data1, data2, nummfovs1, nummfovs2, trytimes)
 
 
 def main():
-    script, slice1, slice2, workdir, outdir = sys.argv
+    script, slice1, slice2, datadir, outdir = sys.argv
     trytimes = 10
     starttime = time.clock()
     slice1 = int(slice1)
@@ -248,7 +248,7 @@ def main():
     slicestring1 = ("%03d" % slice1)
     slicestring2 = ("%03d" % slice2)
     
-    os.chdir(workdir)
+    os.chdir(datadir)
     with open("tilespecs/W01_Sec" + slicestring1 + ".json") as data_file1:
         data1 = json.load(data_file1)
     with open("tilespecs/W01_Sec" + slicestring2 + ".json") as data_file2:
