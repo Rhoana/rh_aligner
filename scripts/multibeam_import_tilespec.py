@@ -71,6 +71,8 @@ def parse_layer(base_dir, images, x, y):
         tile["height"] = image_size[0]
         tile["tx"] = x[i]
         tile["ty"] = y[i]
+        tile["mfov"] = int(tile["file_base_name"].split('_')[1])
+        tile["tile_index"] = int(tile["file_base_name"].split('_')[2])
         tiles.append(tile)
         layer_size[0] = max(layer_size[0], image_size[0] + tile["ty"])
         layer_size[1] = max(layer_size[1], image_size[1] + tile["tx"])
@@ -181,6 +183,10 @@ def parse_wafer(wafer_folder, output_folder, wafer_num=1, start_layer=1):
                             "className" : "mpicbg.trakem2.transform.TranslationModel2D",
                             "dataString" : "{0} {1}".format(tile["tx"], tile["ty"])
                         }],
+                        "width" : tile["width"],
+                        "height" : tile["height"],
+                        "mfov" : tile["mfov"],
+                        "tile_index" : tile["tile_index"],
                         # BoundingBox in the format "from_x to_x from_y to_y" (left right top bottom)
                         "bbox" : [ tile["tx"], tile["tx"] + tile["width"],
                             tile["ty"], tile["ty"] + tile["height"] ]
