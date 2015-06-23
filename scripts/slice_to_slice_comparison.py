@@ -265,6 +265,31 @@ def main():
     jsonfile['runtime'] = time.clock() - starttime
     os.chdir(outdir)
     json.dump(jsonfile, open("Slice" + str(slice1) + "vs" + str(slice2) + ".json", 'w'), indent=4)
+    
+    
+    '''
+    point1s = map(list, zip(*pointmatches))[0]
+    point1s = map(lambda x: np.matrix(x).T, point1s)
+    point2s = map(list, zip(*pointmatches))[1]
+    point2s = map(lambda x: np.matrix(x).T, point2s)
+    centroid1 = [np.array(point1s)[:,0].mean(), np.array(point1s)[:,1].mean()]
+    centroid2 = [np.array(point2s)[:,0].mean(), np.array(point2s)[:,1].mean()]
+    h = np.matrix(np.zeros((2,2)))
+    for i in range(0, len(point1s)):
+        sumpart = (np.matrix(point1s[i]) - centroid1).dot((np.matrix(point2s[i]) - centroid2).T)
+        h = h + sumpart
+    U, S, Vt = np.linalg.svd(h)
+    R = Vt.T.dot(U.T)
+    
+    %matplotlib
+    plt.figure(1)
+    for i in range(0,len(pointmatches)):
+        point1, point2 = pointmatches[i]
+        point1 = np.matrix(point1 - centroid1).dot(R.T).tolist()[0]
+        point2 = point2 - centroid2
+        plt.plot([point1[0], point2[0]], [point1[1], point2[1]])
+        axis('equal')
+    '''
 
 if __name__ == '__main__':
     main()
