@@ -141,19 +141,19 @@ def match_single_sift_features_and_filter(tiles_file, features_file1, features_f
     model_json = []
     p1s = []
     p2s = []
-    if model is not None:
+    if model is None:
+        filtered_matches = [[], []]
+    else:
         model_json = model.to_modelspec()
-        # save the output (matches)
-        p1s = [pts1[[m[0].queryIdx for m in matches]]][0]
-        p2s = [pts2[[m[0].trainIdx for m in matches]]][0]
 
+    # save the output (matches)
     out_data = [{
         "mipmapLevel" : 0,
         "url1" : ts1["mipmapLevels"]["0"]["imageUrl"],
         "url2" : ts2["mipmapLevels"]["0"]["imageUrl"],
         "correspondencePointPairs" : [
             { "p1" : { "w": np.array(ts1_transform.apply(p1)[:2]).tolist(), "l": np.array([p1[0], p1[1]]).tolist() }, 
-              "p2" : { "w": np.array(ts2_transform.apply(p2)[:2]).tolist(), "l": np.array([p2[0], p2[1]]).tolist() } } for p1, p2 in zip(p1s, p2s)
+              "p2" : { "w": np.array(ts2_transform.apply(p2)[:2]).tolist(), "l": np.array([p2[0], p2[1]]).tolist() } } for p1, p2 in zip(filtered_matches[0], filtered_matches[1])
         ],
         "model" : model_json
     }]
