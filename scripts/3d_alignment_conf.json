@@ -22,5 +22,14 @@
         "hexspacing" : 1500,
         "scaling" : 0.2,
         "templatesize" : 200
+    },
+    "driver_args" : {
+        "slice1" : 90,
+        "slice2" : 91,
+        "datadir" : "/data/jpeg2k_test_sections_alignment/",
+        "imgdir" : "/data/jpeg2k_test_sections/",
+        "workdir" : "/data/raahilsha/workdir/",
+        "outdir" : "/data/raahilsha/finaloutput/",
+        "conffile" : "/home/raahilsha/3d_alignment_conf.json"
     }
 }

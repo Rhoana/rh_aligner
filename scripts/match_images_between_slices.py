@@ -1,28 +1,12 @@
-# -*- coding: utf-8 -*-
-# <nbformat>3.0</nbformat>
-
-# <codecell>
-
 # Setup
-import utils
-import models
-import ransac
 import PMCC_filter_example
 import os
 import numpy as np
-import matplotlib.pyplot as plt
 import h5py
 import json
-import random
 import math
 import sys
-import getopt
-import operator
-from scipy.spatial import Delaunay
 from scipy.spatial import distance
-from scipy.spatial import KDTree
-from scipy import ndimage
-from pylab import axis
 import cv2
 import time
 import glob

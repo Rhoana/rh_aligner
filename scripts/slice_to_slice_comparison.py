@@ -1,20 +1,13 @@
 # Setup
-import utils
 import models
 import ransac
 import os
 import numpy as np
-import matplotlib.pyplot as plt
 import h5py
 import json
 import random
-import math
 import sys
-import getopt
-import operator
-from scipy.spatial import Delaunay
 from scipy.spatial import distance
-from scipy.spatial import KDTree
 import cv2
 import time
 import glob
