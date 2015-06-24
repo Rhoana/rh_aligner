@@ -31,6 +31,7 @@
         "imgdir" : "/data/jpeg2k_test_sections/",
         "workdir" : "/data/raahilsha/workdir/",
         "outdir" : "/data/raahilsha/finaloutput/",
-        "conffile" : "/home/raahilsha/3d_alignment_conf.json"
+        "conffile" : "/home/raahilsha/3d_alignment_conf.json",
+        "numconcurrent" : 10
     }
 }

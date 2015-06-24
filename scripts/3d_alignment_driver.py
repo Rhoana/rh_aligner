@@ -22,6 +22,7 @@ def main():
     imgdir = conf["driver_args"]["imgdir"]
     outdir = conf["driver_args"]["outdir"]
     conffile = conf["driver_args"]["conffile"]
+    numconcurrent = conf["driver_args"]["numconcurrent"]
     
     # Preliminary MFOV Matching
     commands = []
@@ -32,7 +33,7 @@ def main():
                 cmdid += 1
                 commands.append(("python /home/raahilsha/slice_to_slice_comparison.py " + str(slice1) + " " + str(slice2) + " " + datadir + " " + workdir + " " + conffile, cmdid))
 
-    pool = multiprocessing.Pool(10)
+    pool = multiprocessing.Pool(numconcurrent)
     pool.map(prelimmatchingworker, commands);
     print "Preliminary MFOV Matching Done"
     
@@ -44,7 +45,7 @@ def main():
                 cmdid += 1
                 commands.append(("python /home/raahilsha/match_images_between_slices.py " + str(slice1) + " " + str(slice2) + " " + datadir + " " + imgdir + " " + workdir + " " + workdir + " " + conffile, cmdid))
 
-    pool = multiprocessing.Pool(10)
+    pool = multiprocessing.Pool(numconcurrent)
     pool.map(prelimmatchingworker, commands);
     print "Image Template Matching Dome"
 
