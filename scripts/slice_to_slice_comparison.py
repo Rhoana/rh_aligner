@@ -156,7 +156,7 @@ def analyze2slicesmfovs(slice1, mfov1, slice2, mfov2, data1, data2, conf):
     print str(slice1) + "-" + str(mfov1) + " vs. " + str(slice2) + "-" + str(mfov2)
     (allpoints1, allresps1, alldescs1) = analyzemfov(slice1, mfov1, 61, data1)
     (allpoints2, allresps2, alldescs2) = analyzemfov(slice2, mfov2, 61, data2)
-    match_points = generatematches_cv2(allpoints1, allpoints2, alldescs1, alldescs2)
+    match_points = generatematches_cv2(allpoints1, allpoints2, alldescs1, alldescs2, conf)
     model_index = conf["RANSAC_args"]["model_index"]
     iterations = conf["RANSAC_args"]["iterations"]
     max_epsilon = conf["RANSAC_args"]["max_epsilon"]
@@ -201,6 +201,8 @@ def analyze2slices(slice1, slice2, data1, data2, nummfovs1, nummfovs2, conf):
         if timesrandtried > timestorand:
             return toret
     print "Preliminary Transform Found"
+    if (besttransform is None):
+        return toret
 
     for i in range(0, nummfovs1):
         mycenter = getcenter(slice1, i + 1, data1)
