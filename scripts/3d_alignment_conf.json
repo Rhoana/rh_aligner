@@ -24,8 +24,9 @@
         "templatesize" : 200
     },
     "driver_args" : {
-        "slice1" : 90,
-        "slice2" : 91,
+        "slicemin" : 90,
+        "slicemax" : 95,
+        "numforwardback" : 3,
         "datadir" : "/data/jpeg2k_test_sections_alignment/",
         "imgdir" : "/data/jpeg2k_test_sections/",
         "workdir" : "/data/raahilsha/workdir/",

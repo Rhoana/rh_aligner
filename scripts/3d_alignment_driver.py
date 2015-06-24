@@ -1,10 +1,12 @@
 import sys
 import json
 import subprocess
-from multiprocessing.pool import Pool
+import multiprocessing
+import os
+from subprocess import PIPE
 
 def prelimmatchingworker(cmd):
-    p = subprocess.Popen(cmd);
+    p = subprocess.Popen([cmd], stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=True)
     p.wait()
 
 def main():
@@ -22,11 +24,11 @@ def main():
     # First pass for preliminary mfov matching
     for slice1 in range(slicemin, slicemax + 1):
         for slice2 in range(slicemin, slicemax + 1):
-            if abs(slice1 - slice2) <= numforwardback:
-                commands.append("python slice_to_slice_comparison.py " + str(slice1) + " " + str(slice2) + " " + datadir + " " + workdir + " " + conffile)
+            if abs(slice1 - slice2) <= numforwardback and slice1 != slice2:
+                commands.append("python /home/raahilsha/slice_to_slice_comparison.py " + str(slice1) + " " + str(slice2) + " " + datadir + " " + workdir + " " + conffile)
 
-    pool = Pool(processes=10);
-    results = [pool.apply_async(prelimmatchingworker, [cmd]) for cmd in commands];
+    pool = multiprocessing.Pool(10)
+    pool.map(prelimmatchingworker, commands);
 
 if __name__ == '__main__':
     main()
