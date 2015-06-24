@@ -90,6 +90,12 @@ def match_single_sift_features_and_filter(tiles_file, features_file1, features_f
     print "Loaded {} features from file: {}".format(pts1.shape[0], features_file1)
     print "Loaded {} features from file: {}".format(pts2.shape[0], features_file2)
 
+    min_features_num = 5
+    if pts1.shape[0] < min_features_num or pts2.shape[0] < min_features_num:
+        print "Less than {} features (even before overlap) of one of the tiles, saving an empty match file"
+        save_empty_matches_file(out_fname, ts1["mipmapLevels"]["0"]["imageUrl"], ts2["mipmapLevels"]["0"]["imageUrl"])
+        return
+
     # Get the tilespec transformation
     print "Getting transformation"
     ts1_transform = get_tilespec_transformation(ts1)
@@ -102,6 +108,7 @@ def match_single_sift_features_and_filter(tiles_file, features_file1, features_f
     print "bbox2", bbox2.toStr()
     overlap_bbox = bbox1.intersect(bbox2).expand(offset=50)
     print "overlap_bbox", overlap_bbox.toStr()
+
     features_mask1 = overlap_bbox.contains(ts1_transform.apply(pts1))
     features_mask2 = overlap_bbox.contains(ts2_transform.apply(pts2))
 
@@ -117,7 +124,6 @@ def match_single_sift_features_and_filter(tiles_file, features_file1, features_f
         print "Less than {} features in the overlap of one of the tiles, saving an empty match file"
         save_empty_matches_file(out_fname, ts1["mipmapLevels"]["0"]["imageUrl"], ts2["mipmapLevels"]["0"]["imageUrl"])
         return
-
 
     # Match the features
     print "Matching sift features"
