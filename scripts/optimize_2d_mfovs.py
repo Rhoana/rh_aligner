@@ -14,7 +14,6 @@ def dist(p1, p2):
 
 def find_rotation(p1, p2, scale):
     U, S, VT = np.linalg.svd(np.dot(p1, p2.T))
-    print S
     R = np.dot(VT.T, U.T)
     angle = stepsize * np.arctan2(R[1, 0], R[0, 0])
     return np.array([[np.cos(angle), -np.sin(angle)],
@@ -26,7 +25,7 @@ if __name__ == "__main__":
     # all points from a given tile
     all_pts = defaultdict(list)
 
-    match_files = glob.glob(os.path.join(sys.argv[1], '*sift_matches*000004*000004*.json'))
+    match_files = glob.glob(os.path.join(sys.argv[1], '*sift_matches*000005*000005*.json'))
     pbar = progressbar.ProgressBar()
     for f in pbar(match_files):
         data = json.load(open(f))
