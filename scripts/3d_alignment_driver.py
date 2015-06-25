@@ -9,6 +9,7 @@ def prelimmatchingworker((cmd, cmdid)):
     p.wait()
     output, error = p.communicate()
     print "Job Done: " + str(cmdid)
+    print error
 
 def main():
     script, conffile = sys.argv
@@ -22,7 +23,6 @@ def main():
     imgdir = conf["driver_args"]["imgdir"]
     outdir = conf["driver_args"]["outdir"]
     conffile = conf["driver_args"]["conffile"]
-    numconcurrent = conf["driver_args"]["numconcurrent"]
     
     # Preliminary MFOV Matching
     commands = []
@@ -33,21 +33,24 @@ def main():
                 cmdid += 1
                 commands.append(("python /home/raahilsha/slice_to_slice_comparison.py " + str(slice1) + " " + str(slice2) + " " + datadir + " " + workdir + " " + conffile, cmdid))
 
-    pool = multiprocessing.Pool(numconcurrent)
+    print "Expected Number of Jobs in Prelim Matching: " + str(cmdid)
+    pool = multiprocessing.Pool(10)
     pool.map(prelimmatchingworker, commands);
     print "Preliminary MFOV Matching Done"
     
     # Image template Matching
     commands = []
+    cmdid = 0
     for slice1 in range(slicemin, slicemax + 1):
         for slice2 in range(slicemin, slicemax + 1):
             if abs(slice1 - slice2) <= numforwardback and slice1 != slice2:
                 cmdid += 1
                 commands.append(("python /home/raahilsha/match_images_between_slices.py " + str(slice1) + " " + str(slice2) + " " + datadir + " " + imgdir + " " + workdir + " " + workdir + " " + conffile, cmdid))
 
-    pool = multiprocessing.Pool(numconcurrent)
+    print "Expected Number of Jobs in Template Matching: " + str(cmdid)
+    pool = multiprocessing.Pool(10)
     pool.map(prelimmatchingworker, commands);
-    print "Image Template Matching Dome"
+    print "Image Template Matching Done"
 
 if __name__ == '__main__':
     main()

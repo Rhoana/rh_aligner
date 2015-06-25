@@ -1,7 +1,7 @@
 {
     "RANSAC_args" : {
         "model_index" : 1,
-        "iterations" : 2000,
+        "iterations" : 500,
         "max_epsilon" : 500,
         "min_inlier_ratio" : 0,
         "min_num_inlier" : 7,
@@ -24,14 +24,13 @@
         "templatesize" : 200
     },
     "driver_args" : {
-        "slicemin" : 90,
-        "slicemax" : 95,
+        "slicemin" : 2,
+        "slicemax" : 9,
         "numforwardback" : 3,
-        "datadir" : "/data/jpeg2k_test_sections_alignment/",
-        "imgdir" : "/data/jpeg2k_test_sections/",
+        "datadir" : "/data/150615_Christof_alignment/",
+        "imgdir" : "/data/images/150615_Christof/",
         "workdir" : "/data/raahilsha/workdir/",
         "outdir" : "/data/raahilsha/finaloutput/",
-        "conffile" : "/home/raahilsha/3d_alignment_conf.json",
-        "numconcurrent" : 10
+        "conffile" : "/home/raahilsha/3d_alignment_conf.json"
     }
 }
