@@ -20,7 +20,7 @@ def analyzeimg(slicenumber, mfovnumber, num, data):
     numstring = ("%03d" % num)
     mfovstring = ("%06d" % mfovnumber)
     os.chdir(datadir)
-    imgname = "2d_stitched_work_dir/W01_Sec" + slicestring + "/W01_Sec" + slicestring + "_sifts_" + slicestring + "_" + mfovstring + "_" + numstring + "*"
+    imgname = "2d_work_dir/W01_Sec" + slicestring + "/W01_Sec" + slicestring + "_sifts_" + slicestring + "_" + mfovstring + "_" + numstring + "*"
     f = h5py.File(glob.glob(imgname)[0], 'r')
     resps = f['pts']['responses'][:]
     descs = f['descs'][:]
@@ -239,7 +239,7 @@ def getimgsfrominds(imginds, slice):
         (imgmfov, imgnum) = getnumsfromindex(imginds[i])
         mfovstring = ("%06d" % imgmfov)
         numstring = ("%03d" % imgnum)
-        imgurl = imgdir + slicestring + "_S" + str(slice) + "R1/" + mfovstring + "/" + slicestring + "_" + mfovstring + "_" + numstring
+        imgurl = imgdir + slicestring + "/" + mfovstring + "/" + slicestring + "_" + mfovstring + "_" + numstring
         imgt = cv2.imread(glob.glob(imgurl + "*.bmp")[0], 0)
         imgarr.append(imgt)
     return imgarr
@@ -253,7 +253,7 @@ def getimgsfromindsandpoint(imginds, slicenumber, point, data):
             slicestring = ("%03d" % slicenumber)
             mfovstring = ("%06d" % imgmfov)
             numstring = ("%03d" % imgnum)
-            imgurl = imgdir + slicestring + "_S" + str(slicenumber) + "R1/" + mfovstring + "/" + slicestring + "_" + mfovstring + "_" + numstring
+            imgurl = imgdir + slicestring + "/" + mfovstring + "/" + slicestring + "_" + mfovstring + "_" + numstring
             imgt = cv2.imread(glob.glob(imgurl + "*.bmp")[0], 0)
             imgarr.append((imgt, imginds[i]))
     return imgarr
@@ -352,15 +352,15 @@ def main():
     slicestring2 = ("%03d" % slice2)
 
     os.chdir(datadir)
-    with open("tilespecs_stitched/W01_Sec" + slicestring1 + ".json") as data_file1:
+    with open("tilespecs/W01_Sec" + slicestring1 + ".json") as data_file1:
         data1 = json.load(data_file1)
-    with open("tilespecs_stitched/W01_Sec" + slicestring2 + ".json") as data_file2:
+    with open("tilespecs/W01_Sec" + slicestring2 + ".json") as data_file2:
         data2 = json.load(data_file2)
     with open(conffile) as conf_file:
         conf = json.load(conf_file)
 
     os.chdir(workdir)
-    with open("Slice" + str(slice1) + "vs" + str(slice2) + ".json") as data_matches:
+    with open("Prelim_Slice" + str(slice1) + "vs" + str(slice2) + ".json") as data_matches:
         mfovmatches = json.load(data_matches)
     nummfovs1 = len(data1) / 61
     nummfovs2 = len(data2) / 61
@@ -368,8 +368,8 @@ def main():
     if len(mfovmatches["matches"]) == 0:
         os.chdir(outdir)
         jsonfile = {}
-        jsonfile['tilespec1'] = "file://" + os.getcwd() + "/tilespecs_stitched/W01_Sec" + ("%03d" % slice1) + ".json"
-        jsonfile['tilespec2'] = "file://" + os.getcwd() + "/tilespecs_stitched/W01_Sec" + ("%03d" % slice2) + ".json"
+        jsonfile['tilespec1'] = "file://" + os.getcwd() + "/tilespecs/W01_Sec" + ("%03d" % slice1) + ".json"
+        jsonfile['tilespec2'] = "file://" + os.getcwd() + "/tilespecs/W01_Sec" + ("%03d" % slice2) + ".json"
         jsonfile['runtime'] = 0
         bb = getboundingbox(range(0, len(data1)), data1)
         hexgr = generatehexagonalgrid(bb, conf["template_matching_args"]["hexspacing"])
@@ -401,7 +401,7 @@ def main():
         slice1string = ("%03d" % slice1)
         mfov1string = ("%06d" % img1mfov)
         num1string = ("%03d" % img1num)
-        img1url = imgdir + slice1string + "_S" + str(slice1) + "R1/" + mfov1string + "/" + slice1string + "_" + mfov1string + "_" + num1string
+        img1url = imgdir + slice1string + "/" + mfov1string + "/" + slice1string + "_" + mfov1string + "_" + num1string
         
         img1 = cv2.imread(glob.glob(img1url + "*.bmp")[0], 0)
         img1resized = cv2.resize(img1, (0, 0), fx=scaling, fy=scaling)
@@ -441,14 +441,14 @@ def main():
                 reasonx, reasony = reason
                 # img1topleft = np.array([startx, starty]) / scaling + imgoffset1
                 # img2topleft = np.array(reason) / scaling + imgoffset2
-                img1centerpoint = np.array([startx + w / 2, starty + h / w]) / scaling + imgoffset1
-                img2centerpoint = np.array([reasonx + neww / 2, reasony + newh / 2]) / scaling + imgoffset2
+                img1centerpoint = np.array([starty + h / w, startx + w / 2]) / scaling + imgoffset1
+                img2centerpoint = np.array([reasony + newh / 2, reasonx + neww / 2]) / scaling + imgoffset2
                 pointmatches.append((img1centerpoint, img2centerpoint, notonmesh))
 
     os.chdir(outdir)
     jsonfile = {}
-    jsonfile['tilespec1'] = "file://" + os.getcwd() + "/tilespecs_stitched/W01_Sec" + ("%03d" % slice1) + ".json"
-    jsonfile['tilespec2'] = "file://" + os.getcwd() + "/tilespecs_stitched/W01_Sec" + ("%03d" % slice2) + ".json"
+    jsonfile['tilespec1'] = "file://" + os.getcwd() + "/tilespecs/W01_Sec" + ("%03d" % slice1) + ".json"
+    jsonfile['tilespec2'] = "file://" + os.getcwd() + "/tilespecs/W01_Sec" + ("%03d" % slice2) + ".json"
     jsonfile['runtime'] = time.clock() - starttime
     jsonfile['mesh'] = hexgr
 

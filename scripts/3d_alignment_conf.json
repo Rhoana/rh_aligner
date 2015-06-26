@@ -24,13 +24,14 @@
         "templatesize" : 200
     },
     "driver_args" : {
-        "slicemin" : 2,
-        "slicemax" : 9,
+        "slicemin" : 1,
+        "slicemax" : 10,
         "numforwardback" : 3,
-        "datadir" : "/data/150615_Christof_alignment/",
-        "imgdir" : "/data/images/150615_Christof/",
-        "workdir" : "/data/raahilsha/workdir/",
-        "outdir" : "/data/raahilsha/finaloutput/",
+        "numconcurrent" : 10,
+        "datadir" : "/data/SCS_2015-4-27_C1w7_alignment/",
+        "imgdir" : "/data/images/SCS_2015-4-27_C1w7/",
+        "workdir" : "/data/raahilsha/scs_workdir/",
+        "outdir" : "/data/raahilsha/scs_finaloutput/",
         "conffile" : "/home/raahilsha/3d_alignment_conf.json"
     }
 }

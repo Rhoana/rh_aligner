@@ -4,12 +4,19 @@ import subprocess
 import multiprocessing
 from subprocess import PIPE
 
-def prelimmatchingworker((cmd, cmdid)):
+def prelimmatchingworker((cmd, cmdid), jobretries=5):
     p = subprocess.Popen([cmd], stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=True)
     p.wait()
     output, error = p.communicate()
-    print "Job Done: " + str(cmdid)
-    print error
+    if error.strip() == '':
+        print "Job Done: " + str(cmdid)
+        return
+    else:
+	if jobretries <= 0:
+            print "Job " + str(cmdid) + " permanently failed: " + cmd
+            return
+        print "Retrying job " + str(cmdid)
+        prelimmatchingworker((cmd, cmdid), jobretries - 1)
 
 def main():
     script, conffile = sys.argv

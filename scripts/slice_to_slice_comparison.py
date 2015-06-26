@@ -261,7 +261,7 @@ def main():
     jsonfile['matches'] = retval
     jsonfile['runtime'] = time.clock() - starttime
     os.chdir(outdir)
-    json.dump(jsonfile, open("Slice" + str(slice1) + "vs" + str(slice2) + ".json", 'w'), indent=4)
+    json.dump(jsonfile, open("Prelim_Slice" + str(slice1) + "vs" + str(slice2) + ".json", 'w'), indent=4)
     
     
     '''
