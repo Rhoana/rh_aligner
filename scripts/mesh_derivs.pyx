@@ -124,12 +124,12 @@ cpdef FLOAT_TYPE crosslink_mesh_derivs(FLOAT_TYPE[:, ::1] mesh1,
               mesh1[pidx1, 1] * pb1 +
               mesh1[pidx2, 1] * pb2)
 
-        qx = (mesh1[qidx0, 0] * qb0 +
-              mesh1[qidx1, 0] * qb1 +
-              mesh1[qidx2, 0] * qb2)
-        qy = (mesh1[qidx0, 1] * qb0 +
-              mesh1[qidx1, 1] * qb1 +
-              mesh1[qidx2, 1] * qb2)
+        qx = (mesh2[qidx0, 0] * qb0 +
+              mesh2[qidx1, 0] * qb1 +
+              mesh2[qidx2, 0] * qb2)
+        qy = (mesh2[qidx0, 1] * qb0 +
+              mesh2[qidx1, 1] * qb1 +
+              mesh2[qidx2, 1] * qb2)
 
         r = c_reglen(px - qx, py - qy,
                      1, 1,
@@ -137,6 +137,8 @@ cpdef FLOAT_TYPE crosslink_mesh_derivs(FLOAT_TYPE[:, ::1] mesh1,
         h = c_huber(r, 0, sigma,
                     dr_dx, dr_dy,
                     &(dh_dx), &(dh_dy))
+#        with gil:
+#            print("COST: ({}, {}) to ({}, {}) = {}, L = {}, H = {}, all_weight = {}".format(px, py, qx, qy, cost, r, h, all_weight))
         cost += h * all_weight
         dh_dx *= all_weight
         dh_dy *= all_weight
