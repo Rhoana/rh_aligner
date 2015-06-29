@@ -1,4 +1,6 @@
 # Setup
+import models
+import ransac
 import os
 import numpy as np
 import h5py
@@ -23,25 +25,47 @@ def main():
         pointmatches.append((np.array(pms[i]['point1']), np.array(pms[i]['point2'])))
     
     point1s = map(list, zip(*pointmatches))[0]
+    point1r = map(list, zip(*pointmatches))[0]
     point1s = map(lambda x: np.matrix(x).T, point1s)
     point2s = map(list, zip(*pointmatches))[1]
+    point2r = map(list, zip(*pointmatches))[1]
     point2s = map(lambda x: np.matrix(x).T, point2s)
     centroid1 = [np.array(point1s)[:,0].mean(), np.array(point1s)[:,1].mean()]
     centroid2 = [np.array(point2s)[:,0].mean(), np.array(point2s)[:,1].mean()]
+
+    model_index = 1
+    iterations = 500
+    max_epsilon = 200
+    min_inlier_ratio = 0
+    min_num_inlier = 7
+    max_trust = 3
+    pointmatchesr = np.array([point1r, point2r])
+    model, filtered_matches = ransac.filter_matches(pointmatchesr, model_index, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, max_trust)
+    R = model.get_matrix()[0:2,0:2]
+    '''
     h = np.matrix(np.zeros((2,2)))
     for i in range(0, len(point1s)):
         sumpart = (np.matrix(point1s[i]) - centroid1).dot((np.matrix(point2s[i]) - centroid2).T)
         h = h + sumpart
     U, S, Vt = np.linalg.svd(h)
     R = Vt.T.dot(U.T)
+    print R
+    '''
+
     plt.figure(1)
+    linelens = []
     for i in range(0,len(pointmatches)):
         point1, point2 = pointmatches[i]
-        point1 = np.matrix(point1 - centroid1).dot(R.T).tolist()[0]
+        # point1 = np.matrix(point1 - centroid1).dot(R.T).tolist()[0]
+        point1 = point1 - centroid1
         point2 = point2 - centroid2
         plt.plot([point1[0], point2[0]], [point1[1], point2[1]])
+        linelen = ((point2[0] - point1[0]) ** 2 + (point2[1] - point1[1]) ** 2) ** 0.5
+        linelens.append(linelen)
         axis('equal')
     plt.show()
+    # plt.hist(linelens)
+    # plt.show()
 
 if __name__ == '__main__':
     main()
