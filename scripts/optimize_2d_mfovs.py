@@ -14,7 +14,7 @@ from scipy.sparse.linalg import lsqr
 def dist(p1, p2):
     return np.sqrt(((p1 - p2) ** 2).sum(axis=0))
 
-def find_rotation(p1, p2, scale):
+def find_rotation(p1, p2, stepsize):
     U, S, VT = np.linalg.svd(np.dot(p1, p2.T))
     R = np.dot(VT.T, U.T)
     angle = stepsize * np.arctan2(R[1, 0], R[0, 0])
@@ -56,9 +56,6 @@ if __name__ == "__main__":
     T = defaultdict(lambda: np.zeros((2, 1)))
     R = defaultdict(lambda: np.eye(2))
     for iter in range(maxiter):
-        if stepsize < 1e-30:
-            break
-
         # transform points by the current trans/rot
         trans_matches = {(k1, k2): (np.dot(R[k1], p1 - centers[k1]) + T[k1] + centers[k1],
                                     np.dot(R[k2], p2 - centers[k2]) + T[k2] + centers[k2])
@@ -117,24 +114,38 @@ if __name__ == "__main__":
         if iter == 0:
             continue
 
-        # find points and their matches from other groups for each tile
-        self_points = defaultdict(list)
-        other_points = defaultdict(list)
-        for (k1, k2), (p1, p2) in masked_matches.iteritems():
-            self_points[k1].append(p1)
-            self_points[k2].append(p2)
-            other_points[k1].append(p2)
-            other_points[k2].append(p1)
-        self_points = {k: np.hstack(p) for k, p in self_points.iteritems()}
-        other_points = {k: np.hstack(p) for k, p in other_points.iteritems()}
+        # don't update Rotations on last iteration
+        if stepsize < 1e-30:
+            break
 
-        # update translations
-        self_centers = {k: np.mean(p, axis=1).reshape((2, 1)) for k, p in self_points.iteritems()}
-        other_centers = {k: np.mean(p, axis=1).reshape((2, 1)) for k, p in other_points.iteritems()}
+        # don't update Rotations on last iteration
+        if (iter < maxiter - 1):
+            # find points and their matches from other groups for each tile
+            self_points = defaultdict(list)
+            other_points = defaultdict(list)
+            for (k1, k2), (p1, p2) in masked_matches.iteritems():
+                self_points[k1].append(p1)
+                self_points[k2].append(p2)
+                other_points[k1].append(p2)
+                other_points[k2].append(p1)
+            self_points = {k: np.hstack(p) for k, p in self_points.iteritems()}
+            other_points = {k: np.hstack(p) for k, p in other_points.iteritems()}
 
-        # find best rotation, multiply the angle of rotation by a stepsize, and update the rotations
-        new_R = {k: find_rotation(self_points[k] - self_centers[k],
-                                  other_points[k] - other_centers[k],
-                                  stepsize)
-                 for k in self_centers}
-        R = {k: np.dot(R[k], new_R[k]) for k in R}
+            self_centers = {k: np.mean(p, axis=1).reshape((2, 1)) for k, p in self_points.iteritems()}
+            other_centers = {k: np.mean(p, axis=1).reshape((2, 1)) for k, p in other_points.iteritems()}
+
+            # find best rotation, multiply the angle of rotation by a stepsize, and update the rotations
+            new_R = {k: find_rotation(self_points[k] - self_centers[k],
+                                      other_points[k] - other_centers[k],
+                                      stepsize)
+                     for k in self_centers}
+            R = {k: np.dot(R[k], new_R[k]) for k in R}
+
+    R = {k:v.tolist() for k, v in R.iteritems()}
+    T = {k:v.tolist() for k, v in T.iteritems()}
+    centers = {k:v.tolist() for k, v in centers.iteritems()}
+    json.dump({"Rotations": R,
+               "Translations": T,
+               "centers": centers},
+              open(sys.argv[2], "wb"),
+              indent=4)
