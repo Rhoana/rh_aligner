@@ -17,6 +17,7 @@ import ransac
 
 
 def load_features_hdf5(features_file):
+    features_file = features_file.replace('file://', '')
     with h5py.File(features_file, 'r') as m:
         imageUrl = str(m["imageUrl"][...])
         locations = m["pts/locations"][...]
@@ -37,16 +38,11 @@ def match_features(descs1, descs2, rod):
 
     return good
 
-
-
-
-
 def get_tilespec_transformation(tilespec):
     transforms = tilespec["transforms"]
     # TODO - right now it only assumes a single transform
     t = Transforms.from_tilespec(transforms[0])
     return t
-
 
 def save_empty_matches_file(out_fname, image_url1, image_url2):
     out_data = [{
@@ -60,8 +56,6 @@ def save_empty_matches_file(out_fname, image_url1, image_url2):
     print "Saving matches into {}".format(out_fname)
     with open(out_fname, 'w') as out:
         json.dump(out_data, out, sort_keys=True, indent=4)
- 
-
 
 def match_single_sift_features_and_filter(tiles_file, features_file1, features_file2, out_fname, index_pair, conf_fname=None):
 
@@ -185,11 +179,9 @@ def main():
                         help='the time to wait since the last modification date of the features_file (default: None)',
                         default=0)
 
-
     args = parser.parse_args()
 
-
-    index_pair = args.index_pair.split(':')
+    index_pair = [int(i) for i in args.index_pair.split(':')]
 
     utils.wait_after_file(args.features_file1, args.wait_time)
     utils.wait_after_file(args.features_file2, args.wait_time)
