@@ -1,14 +1,7 @@
 # Setup
-import os
 import numpy as np
-import h5py
 import json
-import math
 import sys
-from scipy.spatial import distance
-import cv2
-import time
-import glob
 import matplotlib.pyplot as plt
 from pylab import axis
 
@@ -16,7 +9,7 @@ from pylab import axis
 def main():
     script, jsonfile = sys.argv
     with open(jsonfile) as data_file1:
-            data1 = json.load(data_file1)
+        data1 = json.load(data_file1)
 
     pms = data1['pointmatches']
     pointmatches = []

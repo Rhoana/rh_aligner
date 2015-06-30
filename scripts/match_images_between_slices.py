@@ -193,7 +193,7 @@ def getboundingbox(imgindlist, data):
 
 def getclosestindtopoint(point, slicenumber, data):
     indmatches = getimgindsfrompoint(point, slicenumber, data)
-    if (len(indmatches) == 0):
+    if len(indmatches) == 0:
         return None
     distances = []
     for i in range(0, len(indmatches)):
@@ -286,20 +286,20 @@ def gettemplatefromimgandpoint(img1resized, templatesize, centerpoint):
     xend = centerpoint[0] + templatesize / 2
     yend = centerpoint[1] + templatesize / 2
 
-    if (xstart < 0):
+    if xstart < 0:
         xend = 1 + xstart
         xstart = 1
         notonmesh = True
-    if (ystart < 0):
+    if ystart < 0:
         yend = 1 + ystart
         ystart = 1
         notonmesh = True
-    if (xend >= imgwidth):
+    if xend >= imgwidth:
         diff = xend - imgwidth
         xstart -= diff + 1
         xend -= diff + 1
         notonmesh = True
-    if (yend >= imgwidth):
+    if yend >= imgwidth:
         diff = yend - imgwidth
         ystart -= diff + 1
         yend -= diff + 1

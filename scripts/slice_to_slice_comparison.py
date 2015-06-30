@@ -201,7 +201,7 @@ def analyze2slices(slice1, slice2, data1, data2, nummfovs1, nummfovs2, conf):
         if timesrandtried > timestorand:
             return toret
     print "Preliminary Transform Found"
-    if (besttransform is None):
+    if besttransform is None:
         return toret
 
     for i in range(0, nummfovs1):

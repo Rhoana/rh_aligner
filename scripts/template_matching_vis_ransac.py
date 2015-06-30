@@ -1,22 +1,15 @@
 # Setup
-import models
 import ransac
-import os
 import numpy as np
-import h5py
 import json
-import math
 import sys
-from scipy.spatial import distance
-import time
-import glob
 import matplotlib.pyplot as plt
 from matplotlib import collections as mc
 
 
 def main(jsonfile):
     with open(jsonfile) as data_file1:
-            data1 = json.load(data_file1)
+        data1 = json.load(data_file1)
 
     pms = data1['pointmatches']
     points1 = np.array([p['point1'] for p in pms])
