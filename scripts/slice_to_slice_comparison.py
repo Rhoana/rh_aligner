@@ -262,8 +262,7 @@ def main():
     jsonfile['runtime'] = time.clock() - starttime
     os.chdir(outdir)
     json.dump(jsonfile, open("Prelim_Slice" + str(slice1) + "vs" + str(slice2) + ".json", 'w'), indent=4)
-    
-    
+
     '''
     point1s = map(list, zip(*pointmatches))[0]
     point1s = map(lambda x: np.matrix(x).T, point1s)
@@ -277,7 +276,7 @@ def main():
         h = h + sumpart
     U, S, Vt = np.linalg.svd(h)
     R = Vt.T.dot(U.T)
-    
+
     %matplotlib
     plt.figure(1)
     for i in range(0,len(pointmatches)):

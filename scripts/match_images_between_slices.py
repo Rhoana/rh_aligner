@@ -365,7 +365,6 @@ def main():
     with open("tilespecs_after_rotations/W01_Sec" + slicestring2 + ".json") as data_file2:
         data2 = json.load(data_file2)
 
-
     os.chdir(workdir)
     with open("Prelim_Slice" + str(slice1) + "vs" + str(slice2) + ".json") as data_matches:
         mfovmatches = json.load(data_matches)
@@ -410,7 +409,7 @@ def main():
         mfov1string = ("%06d" % img1mfov)
         num1string = ("%03d" % img1num)
         img1url = imgdir + slice1stringpath + "/" + mfov1string + "/" + slice1string + "_" + mfov1string + "_" + num1string
-        
+
         img1 = cv2.imread(glob.glob(img1url + "*.bmp")[0], 0)
         img1resized = cv2.resize(img1, (0, 0), fx=scaling, fy=scaling)
         imgoffset1 = getimagetransform(slice1, img1mfov, img1num, data1)
