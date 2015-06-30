@@ -244,9 +244,9 @@ def main():
     slicestring2 = ("%03d" % slice2)
 
     os.chdir(datadir)
-    with open("tilespecs/W01_Sec" + slicestring1 + ".json") as data_file1:
+    with open("tilespecs_after_rotations/W01_Sec" + slicestring1 + ".json") as data_file1:
         data1 = json.load(data_file1)
-    with open("tilespecs/W01_Sec" + slicestring2 + ".json") as data_file2:
+    with open("tilespecs_after_rotations/W01_Sec" + slicestring2 + ".json") as data_file2:
         data2 = json.load(data_file2)
     with open(conffile) as conf_file:
         conf = json.load(conf_file)
@@ -256,8 +256,8 @@ def main():
     retval = analyze2slices(slice1, slice2, data1, data2, nummfovs1, nummfovs2, conf)
 
     jsonfile = {}
-    jsonfile['tilespec1'] = "file://" + os.getcwd() + "/tilespecs/W01_Sec" + ("%03d" % slice1) + ".json"
-    jsonfile['tilespec2'] = "file://" + os.getcwd() + "/tilespecs/W01_Sec" + ("%03d" % slice2) + ".json"
+    jsonfile['tilespec1'] = "file://" + os.getcwd() + "/tilespecs_after_rotations/W01_Sec" + ("%03d" % slice1) + ".json"
+    jsonfile['tilespec2'] = "file://" + os.getcwd() + "/tilespecs_after_rotations/W01_Sec" + ("%03d" % slice2) + ".json"
     jsonfile['matches'] = retval
     jsonfile['runtime'] = time.clock() - starttime
     os.chdir(outdir)

@@ -40,6 +40,7 @@ def main():
         point1 = np.matrix(point1 - centroid1).dot(R.T).tolist()[0]
         point2 = point2 - centroid2
         plt.plot([point1[0], point2[0]], [point1[1], point2[1]])
+        plt.scatter(point1[0], point1[1])
         axis('equal')
     plt.show()
 

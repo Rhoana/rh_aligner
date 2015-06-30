@@ -20,7 +20,7 @@ def analyzeimg(slicenumber, mfovnumber, num, data):
     numstring = ("%03d" % num)
     mfovstring = ("%06d" % mfovnumber)
     os.chdir(datadir)
-    imgname = "2d_stitched_work_dir/W01_Sec" + slicestring + "/W01_Sec" + slicestring + "_sifts_" + slicestring + "_" + mfovstring + "_" + numstring + "*"
+    imgname = "2d_work_dir/W01_Sec" + slicestring + "/W01_Sec" + slicestring + "_sifts_" + slicestring + "_" + mfovstring + "_" + numstring + "*"
     f = h5py.File(glob.glob(imgname)[0], 'r')
     resps = f['pts']['responses'][:]
     descs = f['descs'][:]
@@ -360,9 +360,9 @@ def main():
     outdir = conf["driver_args"]["workdir"]
 
     os.chdir(datadir)
-    with open("tilespecs_stitched/W01_Sec" + slicestring1 + ".json") as data_file1:
+    with open("tilespecs_after_rotations/W01_Sec" + slicestring1 + ".json") as data_file1:
         data1 = json.load(data_file1)
-    with open("tilespecs_stitched/W01_Sec" + slicestring2 + ".json") as data_file2:
+    with open("tilespecs_after_rotations/W01_Sec" + slicestring2 + ".json") as data_file2:
         data2 = json.load(data_file2)
 
 
@@ -375,8 +375,8 @@ def main():
     if len(mfovmatches["matches"]) == 0:
         os.chdir(outdir)
         jsonfile = {}
-        jsonfile['tilespec1'] = "file://" + os.getcwd() + "/tilespecs_stitched/W01_Sec" + ("%03d" % slice1) + ".json"
-        jsonfile['tilespec2'] = "file://" + os.getcwd() + "/tilespecs_stitched/W01_Sec" + ("%03d" % slice2) + ".json"
+        jsonfile['tilespec1'] = "file://" + os.getcwd() + "/tilespecs_after_rotations/W01_Sec" + ("%03d" % slice1) + ".json"
+        jsonfile['tilespec2'] = "file://" + os.getcwd() + "/tilespecs_after_rotations/W01_Sec" + ("%03d" % slice2) + ".json"
         jsonfile['runtime'] = 0
         bb = getboundingbox(range(0, len(data1)), data1)
         hexgr = generatehexagonalgrid(bb, conf["template_matching_args"]["hexspacing"])
@@ -455,8 +455,8 @@ def main():
 
     os.chdir(outdir)
     jsonfile = {}
-    jsonfile['tilespec1'] = "file://" + os.getcwd() + "/tilespecs_stitched/W01_Sec" + ("%03d" % slice1) + ".json"
-    jsonfile['tilespec2'] = "file://" + os.getcwd() + "/tilespecs_stitched/W01_Sec" + ("%03d" % slice2) + ".json"
+    jsonfile['tilespec1'] = "file://" + os.getcwd() + "/tilespecs_after_rotations/W01_Sec" + ("%03d" % slice1) + ".json"
+    jsonfile['tilespec2'] = "file://" + os.getcwd() + "/tilespecs_after_rotations/W01_Sec" + ("%03d" % slice2) + ".json"
     jsonfile['runtime'] = time.clock() - starttime
     jsonfile['mesh'] = hexgr
 

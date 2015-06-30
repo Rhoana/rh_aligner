@@ -45,7 +45,7 @@ def main():
         for slice2 in range(slicemin, slicemax + 1):
             if abs(slice1 - slice2) <= numforwardback and slice1 != slice2:
                 cmdid += 1
-                commands.append(("python /home/raahilsha/match_images_between_slices.py " + str(slice1) + " " + str(slice2) + " " + datadir + " " + imgdir + " " + workdir + " " + workdir + " " + conffile, cmdid))
+                commands.append(("python /home/raahilsha/match_images_between_slices.py " + str(slice1) + " " + str(slice2) + " " + conffile, cmdid))
 
     print "Expected Number of Jobs in Template Matching: " + str(cmdid)
     pool = multiprocessing.Pool(10)
