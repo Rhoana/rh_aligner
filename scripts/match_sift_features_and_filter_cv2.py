@@ -57,6 +57,14 @@ def save_empty_matches_file(out_fname, image_url1, image_url2):
     with open(out_fname, 'w') as out:
         json.dump(out_data, out, sort_keys=True, indent=4)
 
+def dist_after_model(model, p1_l, p2_l):
+    '''Compute the distance after applying the model to the given points (used for debugging)'''
+    p1_l = np.array(p1_l)
+    p2_l = np.array(p2_l)
+    p1_l_new = model.apply(p1_l)
+    delta = p1_l_new - p2_l
+    return np.sqrt(np.sum(np.dot(delta, delta)))
+
 def match_single_sift_features_and_filter(tiles_file, features_file1, features_file2, out_fname, index_pair, conf_fname=None):
 
     params = utils.conf_from_file(conf_fname, 'MatchSiftFeaturesAndFilter')
@@ -147,7 +155,9 @@ def match_single_sift_features_and_filter(tiles_file, features_file1, features_f
         "url2" : ts2["mipmapLevels"]["0"]["imageUrl"],
         "correspondencePointPairs" : [
             { "p1" : { "w": np.array(ts1_transform.apply(p1)[:2]).tolist(), "l": np.array([p1[0], p1[1]]).tolist() }, 
-              "p2" : { "w": np.array(ts2_transform.apply(p2)[:2]).tolist(), "l": np.array([p2[0], p2[1]]).tolist() } } for p1, p2 in zip(filtered_matches[0], filtered_matches[1])
+              "p2" : { "w": np.array(ts2_transform.apply(p2)[:2]).tolist(), "l": np.array([p2[0], p2[1]]).tolist() },
+              "dist_after_ransac" : dist_after_model(model, p1, p2)
+            } for p1, p2 in zip(filtered_matches[0], filtered_matches[1])
         ],
         "model" : model_json
     }]
