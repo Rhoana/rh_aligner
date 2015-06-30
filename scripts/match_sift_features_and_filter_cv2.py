@@ -48,6 +48,21 @@ def get_tilespec_transformation(tilespec):
     return t
 
 
+def save_empty_matches_file(out_fname, image_url1, image_url2):
+    out_data = [{
+        "mipmapLevel" : 0,
+        "url1" : image_url1,
+        "url2" : image_url2, 
+        "correspondencePointPairs" : [],
+        "model" : []
+    }]
+
+    print "Saving matches into {}".format(out_fname)
+    with open(out_fname, 'w') as out:
+        json.dump(out_data, out, sort_keys=True, indent=4)
+ 
+
+
 def match_single_sift_features_and_filter(tiles_file, features_file1, features_file2, out_fname, index_pair, conf_fname=None):
 
     params = utils.conf_from_file(conf_fname, 'MatchSiftFeaturesAndFilter')
@@ -75,6 +90,12 @@ def match_single_sift_features_and_filter(tiles_file, features_file1, features_f
     print "Loaded {} features from file: {}".format(pts1.shape[0], features_file1)
     print "Loaded {} features from file: {}".format(pts2.shape[0], features_file2)
 
+    min_features_num = 5
+    if pts1.shape[0] < min_features_num or pts2.shape[0] < min_features_num:
+        print "Less than {} features (even before overlap) of one of the tiles, saving an empty match file"
+        save_empty_matches_file(out_fname, ts1["mipmapLevels"]["0"]["imageUrl"], ts2["mipmapLevels"]["0"]["imageUrl"])
+        return
+
     # Get the tilespec transformation
     print "Getting transformation"
     ts1_transform = get_tilespec_transformation(ts1)
@@ -87,6 +108,7 @@ def match_single_sift_features_and_filter(tiles_file, features_file1, features_f
     print "bbox2", bbox2.toStr()
     overlap_bbox = bbox1.intersect(bbox2).expand(offset=50)
     print "overlap_bbox", overlap_bbox.toStr()
+
     features_mask1 = overlap_bbox.contains(ts1_transform.apply(pts1))
     features_mask2 = overlap_bbox.contains(ts2_transform.apply(pts2))
 
@@ -97,6 +119,11 @@ def match_single_sift_features_and_filter(tiles_file, features_file1, features_f
     print "Found {} features in the overlap from file: {}".format(pts1.shape[0], features_file1)
     print "Found {} features in the overlap from file: {}".format(pts2.shape[0], features_file2)
 
+    min_features_num = 5
+    if pts1.shape[0] < min_features_num or pts2.shape[0] < min_features_num:
+        print "Less than {} features in the overlap of one of the tiles, saving an empty match file"
+        save_empty_matches_file(out_fname, ts1["mipmapLevels"]["0"]["imageUrl"], ts2["mipmapLevels"]["0"]["imageUrl"])
+        return
 
     # Match the features
     print "Matching sift features"
@@ -112,20 +139,21 @@ def match_single_sift_features_and_filter(tiles_file, features_file1, features_f
     model, filtered_matches = ransac.filter_matches(match_points, model_index, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, max_trust)
 
     model_json = []
-    if model is not None:
+    p1s = []
+    p2s = []
+    if model is None:
+        filtered_matches = [[], []]
+    else:
         model_json = model.to_modelspec()
 
     # save the output (matches)
-    p1s = [pts1[[m[0].queryIdx for m in matches]]][0]
-    p2s = [pts2[[m[0].trainIdx for m in matches]]][0]
-
     out_data = [{
         "mipmapLevel" : 0,
         "url1" : ts1["mipmapLevels"]["0"]["imageUrl"],
         "url2" : ts2["mipmapLevels"]["0"]["imageUrl"],
         "correspondencePointPairs" : [
             { "p1" : { "w": np.array(ts1_transform.apply(p1)[:2]).tolist(), "l": np.array([p1[0], p1[1]]).tolist() }, 
-              "p2" : { "w": np.array(ts2_transform.apply(p2)[:2]).tolist(), "l": np.array([p2[0], p2[1]]).tolist() } } for p1, p2 in zip(p1s, p2s)
+              "p2" : { "w": np.array(ts2_transform.apply(p2)[:2]).tolist(), "l": np.array([p2[0], p2[1]]).tolist() } } for p1, p2 in zip(filtered_matches[0], filtered_matches[1])
         ],
         "model" : model_json
     }]

@@ -39,6 +39,10 @@ def create_sift_features(tiles_fname, out_fname, index, conf_fname=None):
     # pts, descs = extractor.compute(img_gray, kp)
     sift = cv2.SIFT()
     pts, descs = sift.detectAndCompute(img_gray, None)
+    if descs is None:
+        descs = []
+        pts = []
+
     descs = np.array(descs, dtype=np.uint8)
 
     print "Found {} features".format(len(descs))
