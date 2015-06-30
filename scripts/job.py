@@ -16,13 +16,13 @@ USE_QSUB = False
 USE_SBATCH = True
 
 SBATCH_QUEUE = 'serial_requeue'
-#SBATCH_QUEUE = 'general'
-#SBATCH_QUEUE = 'holyseasgpu'
+# SBATCH_QUEUE = 'general'
+# SBATCH_QUEUE = 'holyseasgpu'
 
-#SBATCH_ACCOUNT = None
+# SBATCH_ACCOUNT = None
 SBATCH_ACCOUNT = 'lichtman_lab'
 
-#SBATCH_EXCLUDED = None
+# SBATCH_EXCLUDED = None
 SBATCH_EXCLUDED = 'nelson01,regal01,regal02,regal03,regal04,regal10,regal09,regal08,regal11,regal13,regal18,jenny02,hsph05,hsph06,holy2a13104,regal14'
 
 # Make sure the logs directory exists
@@ -31,8 +31,8 @@ if not os.path.exists(LOGS_DIR) or not os.path.isdir(os.path.dirname(LOGS_DIR)):
 
 
 
-#Multicore settings
-##MAX_CORES = 16
+# Multicore settings
+# #MAX_CORES = 16
 MAX_CPUS_PER_NODE = 60
 MAX_MEMORY_MB = 128000
 MIN_TIME = 600
@@ -101,47 +101,43 @@ class Job(object):
             if not os.path.isdir(os.path.dirname(f)):
                 os.mkdir(os.path.dirname(f))
         if self.get_done():
-           return 0
-        print "RUN", self.name
-        print " ".join(self.command())
+            return 0
+        print("RUN", self.name)
+        print(" ".join(self.command()))
 
         work_queue = SBATCH_QUEUE
         # if self.get_threads_num() > 1:
         #     work_queue = "general"
 
+        account_str = ""
+        if SBATCH_ACCOUNT is not None:
+            account_str = "--account={}".format(SBATCH_ACCOUNT)
+
         if RUN_LOCAL:
             subprocess.check_call(self.command())
         elif USE_SBATCH:
             command_list = ["sbatch",
-                "-J", self.name,                   # Job name
-                "-p", work_queue,            # Work queue (partition) = general / unrestricted / interactive / serial_requeue
-                "--no-requeue",
-                #"--exclude=holy2b05105,hp1301,hp0403",           # Exclude some bad nodes - holy2b05105 did not have scratch2 mapped.
-                ##"--ntasks", str(self.processors),        # Number of processes
-                "--ntasks", str(1),        # Number of processes
-                "--cpus-per-task", str(self.get_threads_num()),        # Number of threads
-                "-t", str(self.time),              # Time in munites 1440 = 24 hours
-                "--mem-per-cpu", str(self.memory), # Max memory in MB (strict - attempts to allocate more memory will fail)
-                "--open-mode=append",              # Append to log files
-                "-o", LOGS_DIR + "/out." + self.name,     # Standard out file
-                "-e", LOGS_DIR + "/error." + self.name]   # Error out file
-
-            if SBATCH_ACCOUNT is not None:
-                command_list.append("--account={}".format(SBATCH_ACCOUNT))
+                            "-J", self.name,                   # Job name
+                            "-p", work_queue,            # Work queue (partition) = general / unrestricted / interactive / serial_requeue
+                            "--no-requeue",
+                            "--ntasks", str(1),        # Number of processes
+                            "--cpus-per-task", str(self.get_threads_num()),        # Number of threads
+                            "-t", str(self.time),              # Time in munites 1440 = 24 hours
+                            "--mem-per-cpu", str(self.memory),  # Max memory in MB (strict - attempts to allocate more memory will fail)
+                            account_str,
+                            "--open-mode=append",              # Append to log files
+                            "-o", LOGS_DIR + "/out." + self.name,     # Standard out file
+                            "-e", LOGS_DIR + "/error." + self.name]   # Error out file
 
             if SBATCH_EXCLUDED is not None:
                 command_list.append("--exclude")
                 command_list.append(SBATCH_EXCLUDED)
-            
+
             if len(self.dependencies) > 0:
-                #print command_list
-                #print self.dependency_strings()
                 command_list = command_list + self.dependency_strings()
 
-            print command_list
-
             process = subprocess.Popen(command_list,
-                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                                       stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
             if MEASURE_PERFORMANCE:
                 sbatch_out, sbatch_err = process.communicate("#!/bin/bash\nperf stat -o " + LOGS_DIR + "/perf.{0} {1}".format(self.name, " ".join(self.command())))
@@ -150,7 +146,6 @@ class Job(object):
 
             if len(sbatch_err) == 0:
                 self.jobid = sbatch_out.split()[3]
-                #print 'jobid={0}'.format(self.jobid)
 
         return 1
 
@@ -224,28 +219,28 @@ class Job(object):
                 job_id = job_split[0]
                 job_name = job_split[1]
                 job_status = ' '.join(job_split[2:])
-                
+
                 if job_name in submitted_job_blocks:
                     if job_status in ['PENDING', 'RUNNING', 'COMPLETED']:
                         if job_name in pending_running_complete_job_blocks:
-                            print 'Found duplicate job: ' + job_name
+                            print('Found duplicate job: ' + job_name)
                             dup_job_id, dup_job_status = pending_running_complete_job_blocks[job_name]
-                            print job_id, job_status, dup_job_id, dup_job_status
+                            print((job_id, job_status, dup_job_id, dup_job_status))
 
                             job_to_kill = None
                             if job_status == 'PENDING':
                                 job_to_kill = job_id
                             elif dup_job_status == 'PENDING':
                                 job_to_kill = dup_job_id
-                                pending_running_complete_job_blocks[job_name] = (job_id, job_status)    
+                                pending_running_complete_job_blocks[job_name] = (job_id, job_status)
 
                             if job_to_kill is not None:
-                                print 'Canceling job ' + job_to_kill
+                                print('Canceling job ' + job_to_kill)
                                 try:
                                     scancel_output = subprocess.check_output(['scancel', '{0}'.format(job_to_kill)])
-                                    print scancel_output
+                                    print(scancel_output)
                                 except:
-                                    print "Error canceling job:", sys.exc_info()[0]
+                                    print("Error canceling job:", sys.exc_info()[0])
                         else:
                             pending_running_complete_job_blocks[job_name] = (job_id, job_status)
                             if job_status == 'PENDING':
@@ -275,12 +270,10 @@ class Job(object):
                         job_block_list = submitted_job_blocks[job_name]
                         timed_out_jobs.update(job_block_list)
                     else:
-                        print "Unexpected status: {0}".format(job_status)
+                        print("Unexpected status: {0}".format(job_status))
                         other_status += 1
                 elif job_name not in ['batch', 'true', 'prolog']:
                     non_matching += 1
-
-            #print 'Found {0} running job blocks.'.format(len(pending_running_complete_job_blocks))
 
             # Find running jobs
             pending_running_complete_jobs = {}
@@ -289,8 +282,6 @@ class Job(object):
                 job_block_list = submitted_job_blocks[job_block_name]
                 for job in job_block_list:
                     pending_running_complete_jobs[job.name] = (job_id, job_status)
-
-            #print '== {0} running jobs.'.format(len(pending_running_complete_jobs))
 
             # Make a list of runnable jobs
             run_count = 0
@@ -301,7 +292,7 @@ class Job(object):
                     # if the job is now available to run, and was previously timed out, then increase its time
                     if j in timed_out_jobs:
                         j.time *= 2
-                        print "Extending the time of job: {0} to {1} minutes".format(j.name, j.time)
+                        print("Extending the time of job: {0} to {1} minutes".format(j.name, j.time))
                     runnable_jobs.append(j)
                     run_count += 1
 
@@ -320,7 +311,6 @@ class Job(object):
                 time.sleep(60)
             else:
                 all_jobs_complete = True
-
 
     @classmethod
     def keep_running(cls):
@@ -355,7 +345,7 @@ class Job(object):
                 job_name = job_split[1]
                 job_status = job_split[2]
                 node = job_split[3]
-                
+
                 if job_name in all_job_names:
                     if job_status in ['PENDING', 'RUNNING', 'COMPLETED']:
                         if job_name in pending_running_complete_jobs:
@@ -456,8 +446,6 @@ class JobBlock(object):
                 if other_job_block == self:
                     # print "Cannot add: job is conflicted with another dependency:\n{0} to block {1}".format(job.command, self.block_num)
                     return False
-
-
         return True
 
     def add_job(self, job):
@@ -471,8 +459,6 @@ class JobBlock(object):
             if d in JobBlock.jobs_to_job_block.keys():
                 other_job_block = JobBlock.jobs_to_job_block[d]
                 self.job_block_dependencies.add(other_job_block)
-
-
 
     def is_pending(self):
         return self.pending
@@ -516,24 +502,22 @@ class JobBlock(object):
         #     work_queue = "general"
 
         account_str = ""
+        if SBATCH_ACCOUNT is not None:
+            account_str = "--account={}".format(SBATCH_ACCOUNT)
 
         if USE_SBATCH:
             command_list = ["sbatch",
-                "-J", block_name,                   # Job name
-                "-p", work_queue,            # Work queue (partition) = general / unrestricted / interactive / serial_requeue
-                "--no-requeue",
-                #"--exclude=holy2b05105,hp1301,hp0403",           # Exclude some bad nodes - holy2b05105 did not have scratch2 mapped.
-                "--ntasks", str(self.jobs_count),        # Number of processes
-                "--cpus-per-task", str(self.required_threads),        # Number of threads
-#                "-n", str(required_cores),        # Number of processors
-                "-t", str(self.required_full_time),              # Time in munites 1440 = 24 hours
-                "--mem", str(self.required_memory), # Max memory in MB (strict - attempts to allocate more memory will fail)
-                "--open-mode=append",              # Append to log files
-                "-o", LOGS_DIR + "/out." + block_name,     # Standard out file
-                "-e", LOGS_DIR + "/error." + block_name]   # Error out file
-
-            if SBATCH_ACCOUNT is not None:
-                command_list.append("--account={}".format(SBATCH_ACCOUNT))
+                            "-J", block_name,                   # Job name
+                            "-p", work_queue,            # Work queue (partition) = general / unrestricted / interactive / serial_requeue
+                            "--no-requeue",
+                            "--ntasks", str(self.jobs_count),        # Number of processes
+                            "--cpus-per-task", str(self.required_threads),        # Number of threads
+                            "-t", str(self.required_full_time),              # Time in munites 1440 = 24 hours
+                            "--mem", str(self.required_memory),  # Max memory in MB (strict - attempts to allocate more memory will fail)
+                            account_str,
+                            "--open-mode=append",              # Append to log files
+                            "-o", LOGS_DIR + "/out." + block_name,     # Standard out file
+                            "-e", LOGS_DIR + "/error." + block_name]   # Error out file
 
             if SBATCH_EXCLUDED is not None:
                 command_list.append("--exclude")
@@ -610,8 +594,8 @@ class JobBlock(object):
             print 'jobid={0}'.format(new_jobid)
             for j in self.job_block_list:
                 j.jobid = new_jobid
-        else:
-            sys.stderr.write('Submission error: {0}\n'.format(submit_err))
+
+        die because you need to check process.exit_code we think
 
         submitted_job_blocks[block_name] = self.job_block_list
         return submitted_job_blocks
@@ -621,7 +605,6 @@ class JobBlock(object):
     #     print "Running all job blocks ({0} blocks)".format(len(cls.all_job_blocks))
     #     for job_block in cls.all_job_blocks:
     #         job_block.submit_block()
-
 
 
 class JobBlockOrganizer(object):
@@ -651,5 +634,4 @@ class JobBlockOrganizer(object):
         for threads in self.job_blocks_per_thread_lists.keys():
             for job_block in self.job_blocks_per_thread_lists[threads]:
                 submitted_job_blocks.update(job_block.submit_block())
-        #JobBlock.run_all_job_blocks()
         return submitted_job_blocks

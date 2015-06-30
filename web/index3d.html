@@ -1,0 +1,28 @@
+<html>
+<head>
+  <title>OpenSeaDragon Connectome tiles viewer</title>
+  <script src="tiles3d/osd.js"></script>
+  <script src="openseadragon-bin-1.1.1/openseadragon.min.js"></script>
+</head>
+<body>
+
+<h1>OpenSeaDragon Connectome tiles viewer</h1>
+
+<div id="openseadragon1" style="width: 1000px; height: 500px;" class="openseadragon"></div>
+<script>
+OpenSeadragon({
+            id: "openseadragon1",
+            prefixUrl: "openseadragon-bin-1.1.1/images/",
+            showNavigator:      false,
+            blendTime:          0,
+            wrapHorizontal:     false,
+            wrapVertical:     false,
+            preserveViewport:   true,
+            tileSources:   createTileSource()
+});
+</script>
+
+
+</body>
+</html>
+

@@ -1,0 +1,37 @@
+{
+    "RANSAC_args" : {
+        "model_index" : 1,
+        "iterations" : 500,
+        "max_epsilon" : 500,
+        "min_inlier_ratio" : 0,
+        "min_num_inlier" : 7,
+        "max_trust" : 3
+    },
+    "PMCC_args" : {
+        "min_correlation" : 0.2,
+        "maximal_curvature_ratio" : 10,
+        "maximal_ROD" : 0.9
+    },
+    "prelim_matching_args" : {
+        "ROD_cutoff" : 0.92,
+        "filterrate_cutoff" : 0.25,
+        "numfiltered_cutoff" : 50,
+        "trytime" : 10
+    },
+    "template_matching_args" : {
+        "hexspacing" : 1500,
+        "scaling" : 0.2,
+        "templatesize" : 200
+    },
+    "driver_args" : {
+        "slicemin" : 1,
+        "slicemax" : 10,
+        "numforwardback" : 3,
+        "numconcurrent" : 10,
+        "datadir" : "/data/SCS_2015-4-27_C1w7_alignment/",
+        "imgdir" : "/data/images/SCS_2015-4-27_C1w7/",
+        "workdir" : "/data/raahilsha/scs_workdir/",
+        "outdir" : "/data/raahilsha/scs_finaloutput/",
+        "conffile" : "/home/raahilsha/3d_alignment_conf.json"
+    }
+}

@@ -5,14 +5,13 @@ import argparse
 from subprocess import call
 import utils
 
-
 def normalize_coordinates(tile_fnames_or_dir, output_dir, jar_file):
 
     all_files = []
 
     for file_or_dir in tile_fnames_or_dir:
         if not os.path.exists(file_or_dir):
-            print "{0} does not exist (file/directory), skipping".format(file_or_dir)
+            print("{0} does not exist (file/directory), skipping".format(file_or_dir))
             continue
 
         if os.path.isdir(file_or_dir):
@@ -38,7 +37,7 @@ def normalize_coordinates(tile_fnames_or_dir, output_dir, jar_file):
 
     list_file_url = utils.path2url(list_file)
 
-    java_cmd = 'java -Xmx3g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.NormalizeCoordinates --targetDir {1} {2}'.format(\
+    java_cmd = 'java -Xmx3g -XX:ParallelGCThreads=1 -Djava.awt.headless=true -cp "{0}" org.janelia.alignment.NormalizeCoordinates --targetDir {1} {2}'.format(
         jar_file, output_dir, list_file_url)
     utils.execute_shell_command(java_cmd)
 
@@ -48,7 +47,7 @@ def main():
     parser = argparse.ArgumentParser(description='Given a list of tilespec file names, normalizes all the tilepecs to a single coordinate system starting from (0,0).')
     parser.add_argument('tile_files_or_dirs', metavar='tile_files_or_dirs', type=str, nargs='+',
                         help='a list of json files that need to be normalized or a directories of json files')
-    parser.add_argument('-o', '--output_dir', type=str, 
+    parser.add_argument('-o', '--output_dir', type=str,
                         help='an output directory (default: ./after_norm)',
                         default='./after_norm')
     parser.add_argument('-j', '--jar_file', type=str,
@@ -63,4 +62,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
