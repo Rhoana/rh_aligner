@@ -36,7 +36,7 @@ def main():
                 commands.append(("python /home/raahilsha/slice_to_slice_comparison.py " + str(slice1) + " " + str(slice2) + " " + datadir + " " + workdir + " " + conffile, cmdid))
 
     print "Expected Number of Jobs in Prelim Matching: " + str(cmdid)
-    pool = multiprocessing.Pool(10)
+    pool = multiprocessing.Pool(conf["driver_args"]["numconcurrent"])
     res = pool.map(prelimmatchingworker, commands)
     print "Preliminary MFOV Matching Done"
 
@@ -50,7 +50,7 @@ def main():
                 commands.append(("python /home/raahilsha/match_images_between_slices.py " + str(slice1) + " " + str(slice2) + " " + conffile, cmdid))
 
     print "Expected Number of Jobs in Template Matching: " + str(cmdid)
-    pool = multiprocessing.Pool(10)
+    pool = multiprocessing.Pool(conf["driver_args"]["numconcurrent"])
     res = pool.map(prelimmatchingworker, commands)
     print "Image Template Matching Done"
 
