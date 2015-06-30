@@ -13,8 +13,7 @@ import glob
 import matplotlib.pyplot as plt
 from matplotlib import collections  as mc
 
-def main():
-    script, jsonfile = sys.argv
+def main(jsonfile):
     with open(jsonfile) as data_file1:
             data1 = json.load(data_file1)
 
@@ -55,9 +54,12 @@ def main():
     plt.scatter(new_points1[:, 0], new_points1[:, 1])
     plt.gca().autoscale()
     plt.axis('equal')
-    plt.show()
-    # plt.hist(linelens)
-    # plt.show()
+    plt.title(jsonfile)
+    return model.get_matrix()
 
 if __name__ == '__main__':
-    main()
+    transforms = [main(arg) for arg in sys.argv[1:]]
+    if len(transforms) == 2:
+        RT1, RT2 = transforms
+        print "Composed transform, last column should be [0, 0, 1].T:\n", np.dot(RT1, RT2)
+    plt.show()
