@@ -1,63 +1,21 @@
 {
-    "General" : {
-        "useLocalSmoothnessFilter": ""
-    },
     "ComputeSiftFeatures" : {
         "initialSigma" : 1.6,
         "steps" : 3,
         "minOctaveSize" : 64,
-        "maxOctaveSize" : 1024,
-        "fdSize" : 8,
-        "fdBins" : 8
+        "maxOctaveSize" : 1024
     },
-    "MatchSiftFeatures" : {
+    "MatchSiftFeaturesAndFilter" : {
         "rod" : 0.92,
-        "layerScale" : 0.1
+        "maxEpsilon" : 10.0,
+        "minInlierRatio" : 0.01,
+        "minNumInliers" : 7,
+        "modelIndex" : 1
     },
-    "FilterRansac" : {
-        "layerScale" : 0.1,
-        "modelIndex" : 3,
-        "maxEpsilon" : 200.0,
-        "minInlierRatio" : 0.0,
-        "minNumInliers" : 12,
-        "identityTolerance" : 5.0,
-        "maxNumFailures" : 3
-    },
-    "MatchLayersByMaxPMCC" : {
-        "layerScale" : 0.1,
-        "searchRadius" : 200,
-        "blockRadius" : -1,
-        "minR": 0.6,
-        "maxCurvatureR": 10.0,
-        "rodR": 0.9,
-        "localModelIndex": 1,
-        "localRegionSigma": 200.0,
-        "maxLocalEpsilon": 100.0,
-        "maxLocalTrust": 3,
-        "resolutionSpringMesh": 16,
-        "stiffnessSpringMesh": 0.1,
-        "dampSpringMesh": 0.9,
-        "maxStretchSpringMesh": 2000.0,
-        "useLocalSmoothnessFilter": ""
-    },
-    "FilterLocalSmoothness" : {
-        "layerScale" : 0.1,
-        "localModelIndex": 1,
-        "localRegionSigma": 200.0,
-        "maxLocalEpsilon": 100.0,
-        "maxLocalTrust": 3,
-        "cropNSigma": 6
-    },
-    "OptimizeLayersElastic" : {
-        "layerScale" : 0.1,
-        "modelIndex" : 1,
-        "resolutionSpringMesh": 16,
-        "stiffnessSpringMesh": 0.1,
-        "dampSpringMesh": 0.9,
-        "maxStretchSpringMesh": 2000.0,
-        "maxEpsilon" : 200.0,
-        "maxIterationsSpringMesh" : 1000,
-        "maxPlateauwidthSpringMesh" : 200,
-        "useLegacyOptimizer" : ""
+    "Optimize2Dmfovs" : {
+        "maxIterations" : 900,
+        "stepSize" : 0.1,
+        "damping" : 0.01,
+        "maxEpsilon" : 5
     }
 }

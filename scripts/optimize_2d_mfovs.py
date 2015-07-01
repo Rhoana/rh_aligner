@@ -1,6 +1,8 @@
 import sys
 import os.path
 import os
+import argparse
+import utils
 
 from collections import defaultdict
 import json
@@ -21,14 +23,84 @@ def find_rotation(p1, p2, stepsize):
     return np.array([[np.cos(angle), -np.sin(angle)],
                      [np.sin(angle),  np.cos(angle)]])
 
-if __name__ == "__main__":
+def create_new_tilespec(old_ts_fname, rotations, translations, centers, out_fname):
+    print("Optimization done, saving tilespec at: {}".format(out_fname))
+    with open(old_ts_fname, 'r') as f:
+        tilespecs = json.load(f)
+
+    # Iterate over the tiles in the original tilespec
+    for ts in tilespecs:
+        img_url = ts["mipmapLevels"]["0"]["imageUrl"]
+        # print "Transforming {}".format(img_url)
+        if img_url not in rotations.keys():
+            print "Flagging out tile {}, as no rotation was found".format(img_url)
+            continue
+        # Get 4 points of the old bounding box [top_left, top_right, bottom_left, bottom_right]
+        old_bbox = [float(d) for d in ts["bbox"]]
+        old_bbox_points = [
+            np.array([ np.array([old_bbox[0]]), np.array([old_bbox[2]]) ]),
+            np.array([ np.array([old_bbox[1]]), np.array([old_bbox[2]]) ]),
+            np.array([ np.array([old_bbox[0]]), np.array([old_bbox[3]]) ]),
+            np.array([ np.array([old_bbox[1]]), np.array([old_bbox[3]]) ]) ]
+        # print "old_bbox:", old_bbox_points
+        # convert the transformation according to the rotations data
+        # compute new bbox with rotations (Rot * (pt - center) + center + trans)
+        trans = np.array(translations[img_url]) # an array of 2 elements
+        rot_matrix = np.matrix(rotations[img_url]).T # a 2x2 matrix
+        center = np.array(centers[img_url]) # an array of 2 elements
+        transformed_points = [np.dot(rot_matrix, old_point - center) + center + trans for old_point in old_bbox_points]
+        # print "transformed_bbox:", transformed_points
+        min_xy = np.min(transformed_points, axis = 0).flatten()
+        max_xy = np.max(transformed_points, axis = 0).flatten()
+        new_bbox = [ min_xy[0], max_xy[0], min_xy[1], max_xy[1] ]
+        # print "new_bbox", new_bbox
+        # compute the global transformation of the tile
+        # the translation part is just taking (0, 0) and moving it to the first transformed_point
+        delta = np.asarray(transformed_points[0].T)[0]
+
+        x, y = np.asarray((old_bbox_points[1] - old_bbox_points[0]).T)[0]
+        new_x, new_y = np.asarray(transformed_points[1].T)[0]
+        k = (y * (new_x - delta[0]) - x * (new_y - delta[1])) / (x**2 + y**2)
+        h1 = (new_x - delta[0] - k*y)/x
+        new_transformation = "{} {} {}".format(np.arccos(h1), delta[0], delta[1])
+        # print "new_transformation:", new_transformation
+
+        # Verify the result - for debugging (needs to be the same as the new bounding box)
+        # new_matrix = np.array([ [h1, k, delta[0]],
+        #                         [-k, h1, delta[1]],
+        #                         [0.0, 0.0, 1.0]])
+        # tile_points = [np.asarray((old_bbox_points[i] - old_bbox_points[0]).T)[0] for i in range(4)]
+        # tile_points = [np.append(tile_point, [1.0], 0) for tile_point in tile_points]
+        # after_trans = [np.dot(new_matrix, tile_point) for tile_point in tile_points]
+        # print "tile 4 coordinates after_trans", after_trans
+
+        # Set the transformation in the tilespec
+        ts["transforms"] = [{
+                "className" : "mpicbg.trakem2.transform.RigidModel2D",
+                "dataString" : new_transformation
+            }]
+
+        ts["bbox"] = new_bbox
+
+    # Save the new tilespecs
+    with open(out_fname, 'w') as outjson:
+        json.dump(tilespecs, outjson, sort_keys=True, indent=4)
+        print('Wrote tilespec to {0}'.format(out_fname))
+
+
+def optimize_2d_mfovs(tiles_fname, match_list_file, out_fname, conf_fname=None):
     # all matched pairs between point sets
     all_matches = {}
     # all points from a given tile
     all_pts = defaultdict(list)
 
-    match_files = glob.glob(os.path.join(sys.argv[1], '*sift_matches*.json'))
-    print match_files
+    # load the list of files
+    with open(match_list_file, 'r') as list_file:
+        match_files = list_file.readlines()
+    match_files = [fname.replace('\n','').replace('file://','') for fname in match_files]
+    # print match_files
+
+    # load the matches
     pbar = progressbar.ProgressBar()
     for f in pbar(match_files):
         data = json.load(open(f))
@@ -47,11 +119,14 @@ if __name__ == "__main__":
     # a unique index for each url
     url_idx = {url: idx for idx, url in enumerate(all_pts)}
 
-    maxiter = 1000
-    epsilon = 5
-    stepsize = 0.1
+    params = utils.conf_from_file(conf_fname, 'Optimize2Dmfovs')
+    if params is None:
+        params = {}
+    maxiter = params.get("maxIterations", 1000)
+    epsilon = params.get("maxEpsilon", 5)
+    stepsize = params.get("stepSize", 0.1)
+    damping = params.get("damping", 0.01)  # in units of matches per pair
     prev_meanmed = np.inf
-    damping = 0.01  # in units of matches per pair
 
     T = defaultdict(lambda: np.zeros((2, 1)))
     R = defaultdict(lambda: np.eye(2))
@@ -116,6 +191,7 @@ if __name__ == "__main__":
 
         # don't update Rotations on last iteration
         if stepsize < 1e-30:
+            print("Step size is small enough, finishing optimization")
             break
 
         # don't update Rotations on last iteration
@@ -144,8 +220,30 @@ if __name__ == "__main__":
     R = {k:v.tolist() for k, v in R.iteritems()}
     T = {k:v.tolist() for k, v in T.iteritems()}
     centers = {k:v.tolist() for k, v in centers.iteritems()}
-    json.dump({"Rotations": R,
-               "Translations": T,
-               "centers": centers},
-              open(sys.argv[2], "wb"),
-              indent=4)
+    #json.dump({"Rotations": R,
+    #           "Translations": T,
+    #           "centers": centers},
+    #          open(sys.argv[2], "wb"),
+    #          indent=4)
+    create_new_tilespec(tiles_fname, R, T, centers, out_fname)
+
+if __name__ == '__main__':
+    # Command line parser
+    parser = argparse.ArgumentParser(description='Iterates over a directory that contains matched points in json files, \
+        optimizes these matches into a per-tile transformation, and saves a tilespec json file with these transformations.')
+    parser.add_argument('tiles_fname', metavar='tiles_json', type=str,
+                        help='a tile_spec file that contains the images to create sift features for, in json format')
+    parser.add_argument('match_files_list', metavar='match_files_list', type=str,
+                        help="a txt file containg a list of all the match files")
+    parser.add_argument('-o', '--output_file', type=str,
+                        help='an output tile_spec file, that will include the rotations for all tiles (default: ./output.json)',
+                        default='./output.json')
+    parser.add_argument('-c', '--conf_file_name', type=str,
+                        help='the configuration file with the parameters for each step of the alignment process in json format (uses default parameters, if not supplied)',
+                        default=None)
+
+
+    args = parser.parse_args()
+
+    optimize_2d_mfovs(args.tiles_fname, args.match_files_list, args.output_file, conf_fname=args.conf_file_name)
+

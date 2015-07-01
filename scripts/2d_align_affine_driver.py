@@ -13,6 +13,7 @@ import argparse
 import json
 import itertools
 from bounding_box import BoundingBox
+import time
 
 from filter_tiles import filter_tiles
 from create_sift_features_cv2 import create_sift_features
@@ -20,7 +21,7 @@ from create_surf_features_cv2 import create_surf_features
 #from match_sift_features import match_sift_features
 from match_sift_features_and_filter_cv2 import match_single_sift_features_and_filter
 from json_concat import json_concat
-from optimize_montage_transform import optimize_montage_transform
+from optimize_2d_mfovs import optimize_2d_mfovs
 from utils import write_list_to_file
 
 
@@ -38,16 +39,9 @@ parser.add_argument('tiles_fname', metavar='tiles_json', type=str,
 parser.add_argument('-w', '--workspace_dir', type=str, 
                     help='a directory where the output files of the different stages will be kept (default: current directory)',
                     default='.')
-parser.add_argument('-f', '--fixed_tiles', type=str, nargs='+',
-                    help='a space separated list of fixed tile indices (default: 0)',
-                    default="0")
-parser.add_argument('-j', '--jar_file', type=str, 
-                    help='the jar file that includes the render (default: ../target/render-0.0.1-SNAPSHOT.jar)',
-                    default='../target/render-0.0.1-SNAPSHOT.jar')
-# the default bounding box is as big as the image can be
-parser.add_argument('-b', '--bounding_box', type=str, 
-                    help='the bounding box of the part of image that needs to be aligned format: "from_x to_x from_y to_y" (default: all tiles)',
-                    default='{0} {1} {2} {3}'.format((-sys.maxint - 1), sys.maxint, (-sys.maxint - 1), sys.maxint))
+parser.add_argument('-o', '--output_file_name', type=str, 
+                    help='the file that includes the output to be rendered in json format (default: output.json)',
+                    default='output.json')
 parser.add_argument('-c', '--conf_file_name', type=str, 
                     help='the configuration file with the parameters for each step of the alignment process in json format (uses default parameters, if )',
                     default=None)
@@ -74,6 +68,8 @@ tilespecs = load_tilespecs(args.tiles_fname)
 all_features = {}
 all_matched_features = []
 
+start_time = time.time()
+
 for i, ts in enumerate(tilespecs):
     imgurl = ts["mipmapLevels"]["0"]["imageUrl"]
     tile_fname = os.path.basename(imgurl).split('.')[0]
@@ -85,6 +81,8 @@ for i, ts in enumerate(tilespecs):
     all_features[imgurl] = features_json
 
 
+print 'Features computation took {0:1.4f} seconds'.format(time.time() - start_time)
+
 # read every pair of overlapping tiles, and match their sift features
 
 # TODO: add all tiles to a kd-tree so it will be faster to find overlap between tiles
@@ -94,6 +92,7 @@ for i, ts in enumerate(tilespecs):
 # Nested loop:
 #    for each tile_i in range[0..N):
 #        for each tile_j in range[tile_i..N)]
+start_time = time.time()
 indices = []
 for pair in itertools.combinations(xrange(len(tilespecs)), 2):
     idx1 = pair[0]
@@ -116,14 +115,18 @@ for pair in itertools.combinations(xrange(len(tilespecs)), 2):
             match_single_sift_features_and_filter(args.tiles_fname, all_features[imageUrl1], all_features[imageUrl2], match_json, index_pair, conf_fname=args.conf_file_name)
         all_matched_features.append(match_json)
 
+print 'features matching took {0:1.4f} seconds'.format(time.time() - start_time)
+
 # Create a single file that lists all tilespecs and a single file that lists all pmcc matches (the os doesn't support a very long list)
 matches_list_file = os.path.join(args.workspace_dir, "all_matched_sifts_files.txt")
 write_list_to_file(matches_list_file, all_matched_features)
 
 # optimize the 2d layer montage
-optmon_fname = os.path.join(args.workspace_dir, "{0}_optimized_montage.json".format(tiles_fname_prefix))
-if not os.path.exists(optmon_fname):
-    optimize_montage_transform(matches_list_file, args.tiles_fname, args.fixed_tiles, optmon_fname, args.jar_file, args.conf_file_name, args.threads_num)
+if not os.path.exists(args.output_file_name):
+    print "Optimizing section in tilespec: {}".format(args.tiles_fname)
+    start_time = time.time()
+    optimize_2d_mfovs(args.tiles_fname, matches_list_file, args.output_file_name, args.conf_file_name)
+    print '2D Optimization took {0:1.4f} seconds'.format(time.time() - start_time)
 
 
 
