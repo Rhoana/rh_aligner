@@ -1,28 +1,22 @@
 # Setup
-import models
 import ransac
-import os
 import numpy as np
-import h5py
 import json
-import math
 import sys
-from scipy.spatial import distance
-import time
-import glob
 import matplotlib.pyplot as plt
-from matplotlib import collections  as mc
+from matplotlib import collections as mc
+
 
 def main(jsonfile):
     with open(jsonfile) as data_file1:
-            data1 = json.load(data_file1)
+        data1 = json.load(data_file1)
 
     pms = data1['pointmatches']
     points1 = np.array([p['point1'] for p in pms])
     points2 = np.array([p['point2'] for p in pms])
 
     assert points1.shape[1] == 2
-    
+
     centroid1 = points1.mean(axis=0, keepdims=True)
     centroid2 = points2.mean(axis=0, keepdims=True)
 
@@ -34,7 +28,7 @@ def main(jsonfile):
     max_trust = 3
     pointmatchesr = (points1, points2)
     model, filtered_matches = ransac.filter_matches(pointmatchesr, model_index, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, max_trust)
-    R = model.get_matrix()[0:2,0:2]
+    R = model.get_matrix()[0:2, 0:2]
     '''
     h = np.matrix(np.zeros((2,2)))
     for i in range(0, len(point1s)):

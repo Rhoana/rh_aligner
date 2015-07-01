@@ -193,7 +193,7 @@ def getboundingbox(imgindlist, data):
 
 def getclosestindtopoint(point, slicenumber, data):
     indmatches = getimgindsfrompoint(point, slicenumber, data)
-    if (len(indmatches) == 0):
+    if len(indmatches) == 0:
         return None
     distances = []
     for i in range(0, len(indmatches)):
@@ -286,20 +286,20 @@ def gettemplatefromimgandpoint(img1resized, templatesize, centerpoint):
     xend = centerpoint[0] + templatesize / 2
     yend = centerpoint[1] + templatesize / 2
 
-    if (xstart < 0):
+    if xstart < 0:
         xend = 1 + xstart
         xstart = 1
         notonmesh = True
-    if (ystart < 0):
+    if ystart < 0:
         yend = 1 + ystart
         ystart = 1
         notonmesh = True
-    if (xend >= imgwidth):
+    if xend >= imgwidth:
         diff = xend - imgwidth
         xstart -= diff + 1
         xend -= diff + 1
         notonmesh = True
-    if (yend >= imgwidth):
+    if yend >= imgwidth:
         diff = yend - imgwidth
         ystart -= diff + 1
         yend -= diff + 1
@@ -365,7 +365,6 @@ def main():
     with open("tilespecs_after_rotations/W01_Sec" + slicestring2 + ".json") as data_file2:
         data2 = json.load(data_file2)
 
-
     os.chdir(workdir)
     with open("Prelim_Slice" + str(slice1) + "vs" + str(slice2) + ".json") as data_matches:
         mfovmatches = json.load(data_matches)
@@ -410,7 +409,7 @@ def main():
         mfov1string = ("%06d" % img1mfov)
         num1string = ("%03d" % img1num)
         img1url = imgdir + slice1stringpath + "/" + mfov1string + "/" + slice1string + "_" + mfov1string + "_" + num1string
-        
+
         img1 = cv2.imread(glob.glob(img1url + "*.bmp")[0], 0)
         img1resized = cv2.resize(img1, (0, 0), fx=scaling, fy=scaling)
         imgoffset1 = getimagetransform(slice1, img1mfov, img1num, data1)
