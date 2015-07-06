@@ -15,7 +15,11 @@ def main(jsonfile):
     points1 = np.array([p['point1'] for p in pms])
     points2 = np.array([p['point2'] for p in pms])
 
-    assert points1.shape[1] == 2
+    try:
+        if points1.shape[1] != 2:
+            return
+    except:
+        return
 
     centroid1 = points1.mean(axis=0, keepdims=True)
     centroid2 = points2.mean(axis=0, keepdims=True)
@@ -27,8 +31,11 @@ def main(jsonfile):
     min_num_inlier = 7
     max_trust = 3
     pointmatchesr = (points1, points2)
-    model, filtered_matches = ransac.filter_matches(pointmatchesr, model_index, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, max_trust)
-    R = model.get_matrix()[0:2, 0:2]
+    try:
+        model, filtered_matches = ransac.filter_matches(pointmatchesr, model_index, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, max_trust)
+        R = model.get_matrix()[0:2, 0:2]
+    except:
+        return
     '''
     h = np.matrix(np.zeros((2,2)))
     for i in range(0, len(point1s)):

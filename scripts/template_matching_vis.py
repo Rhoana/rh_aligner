@@ -6,8 +6,7 @@ import matplotlib.pyplot as plt
 from pylab import axis
 
 
-def main():
-    script, jsonfile = sys.argv
+def main(jsonfile):
     with open(jsonfile) as data_file1:
         data1 = json.load(data_file1)
 
@@ -15,6 +14,8 @@ def main():
     pointmatches = []
     for i in range(0, len(pms)):
         pointmatches.append((np.array(pms[i]['point1']), np.array(pms[i]['point2'])))
+    if (len(pointmatches) == 0):
+        return
 
     point1s = map(list, zip(*pointmatches))[0]
     point1s = map(lambda x: np.matrix(x).T, point1s)
@@ -28,7 +29,7 @@ def main():
         h = h + sumpart
     U, S, Vt = np.linalg.svd(h)
     R = Vt.T.dot(U.T)
-    plt.figure(1)
+    plt.figure()
     for i in range(0, len(pointmatches)):
         point1, point2 = pointmatches[i]
         point1 = np.matrix(point1 - centroid1).dot(R.T).tolist()[0]
@@ -36,7 +37,7 @@ def main():
         plt.plot([point1[0], point2[0]], [point1[1], point2[1]])
         plt.scatter(point1[0], point1[1])
         axis('equal')
-    plt.show()
 
 if __name__ == '__main__':
-    main()
+    transforms = [main(arg) for arg in sys.argv[1:]]
+    plt.show()

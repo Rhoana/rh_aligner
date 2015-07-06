@@ -25,7 +25,7 @@ def main():
     imgdir = conf["driver_args"]["imgdir"]
     outdir = conf["driver_args"]["outdir"]
     conffile = conf["driver_args"]["conffile"]
-
+    '''
     # Preliminary MFOV Matching
     commands = []
     cmdid = 0
@@ -39,7 +39,7 @@ def main():
     pool = multiprocessing.Pool(conf["driver_args"]["numconcurrent"])
     res = pool.map(prelimmatchingworker, commands)
     print "Preliminary MFOV Matching Done"
-
+    '''
     # Image template Matching
     commands = []
     cmdid = 0

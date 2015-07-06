@@ -55,24 +55,22 @@ def analyzeimg(slicenumber, mfovnumber, num, data):
     descs = f['descs'][:]
     octas = f['pts']['octaves'][:]
     jsonindex = (mfovnumber - 1) * 61 + num - 1
-    xtransform = float(data[jsonindex]["transforms"][0]["dataString"].encode("ascii").split(" ")[0])
-    ytransform = float(data[jsonindex]["transforms"][0]["dataString"].encode("ascii").split(" ")[1])
 
-    xlocs = []
-    ylocs = []
-    if len(resps) != 0:
-        xlocs = f['pts']['locations'][:, 0] + xtransform
-        ylocs = f['pts']['locations'][:, 1] + ytransform
+    allps = np.array(f['pts']['locations'])
+    if (len(allps) == 0):
+        return (np.array([]).reshape((0, 2)), [], [])
+    newmodel = models.Transforms.from_tilespec(data[jsonindex]["transforms"][0])
+    newallps = newmodel.apply(allps)
 
     allpoints = []
     allresps = []
     alldescs = []
-    for pointindex in range(0, len(xlocs)):
+    for pointindex in range(0, len(newallps)):
         currentocta = int(octas[pointindex]) & 255
         if currentocta > 128:
             currentocta -= 255
         if currentocta == 4 or currentocta == 5:
-            allpoints.append(np.array([xlocs[pointindex], ylocs[pointindex]]))
+            allpoints.append(newallps[pointindex])
             allresps.append(resps[pointindex])
             alldescs.append(descs[pointindex])
     points = np.array(allpoints).reshape((len(allpoints), 2))

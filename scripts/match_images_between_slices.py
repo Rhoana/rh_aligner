@@ -26,24 +26,20 @@ def analyzeimg(slicenumber, mfovnumber, num, data):
     descs = f['descs'][:]
     octas = f['pts']['octaves'][:]
     jsonindex = (mfovnumber - 1) * 61 + num - 1
-    xtransform = float(data[jsonindex]["transforms"][0]["dataString"].encode("ascii").split(" ")[0])
-    ytransform = float(data[jsonindex]["transforms"][0]["dataString"].encode("ascii").split(" ")[1])
 
-    xlocs = []
-    ylocs = []
-    if len(resps) != 0:
-        xlocs = f['pts']['locations'][:, 0] + xtransform
-        ylocs = f['pts']['locations'][:, 1] + ytransform
+    allps = np.array(f['pts']['locations'])
+    newmodel = models.Transforms.from_tilespec(data[jsonindex]["transforms"][0])
+    newallps = newmodel.apply(allps)
 
     allpoints = []
     allresps = []
     alldescs = []
-    for pointindex in range(0, len(xlocs)):
+    for pointindex in range(0, len(newallps)):
         currentocta = int(octas[pointindex]) & 255
         if currentocta > 128:
             currentocta -= 255
         if currentocta == 4 or currentocta == 5:
-            allpoints.append(np.array([xlocs[pointindex], ylocs[pointindex]]))
+            allpoints.append(newallps[pointindex])
             allresps.append(resps[pointindex])
             alldescs.append(descs[pointindex])
     points = np.array(allpoints).reshape((len(allpoints), 2))
@@ -51,10 +47,13 @@ def analyzeimg(slicenumber, mfovnumber, num, data):
 
 
 def getimagetransform(slicenumber, mfovnumber, num, data):
+    return getimagetopleft(slicenumber, mfovnumber, num, data)
+    '''
     jsonindex = (mfovnumber - 1) * 61 + num - 1
     xtransform = float(data[jsonindex]["transforms"][0]["dataString"].encode("ascii").split(" ")[0])
     ytransform = float(data[jsonindex]["transforms"][0]["dataString"].encode("ascii").split(" ")[1])
     return [xtransform, ytransform]
+    '''
 
 
 def getimagetopleft(slicenumber, mfovnumber, num, data):
@@ -193,7 +192,7 @@ def getboundingbox(imgindlist, data):
 
 def getclosestindtopoint(point, slicenumber, data):
     indmatches = getimgindsfrompoint(point, slicenumber, data)
-    if len(indmatches) == 0:
+    if (len(indmatches) == 0):
         return None
     distances = []
     for i in range(0, len(indmatches)):
@@ -236,7 +235,7 @@ def getimgsfrominds(imginds, slice):
     imgarr = []
     for i in range(0, len(imginds)):
         slicestring = ("%03d" % slice)
-        slicestringpath = ("%03d" % slice) + "_S" + str(slice) + "R1"
+        slicestringpath = ("%03d" % slice)
         (imgmfov, imgnum) = getnumsfromindex(imginds[i])
         mfovstring = ("%06d" % imgmfov)
         numstring = ("%03d" % imgnum)
@@ -252,7 +251,7 @@ def getimgsfromindsandpoint(imginds, slicenumber, point, data):
         (imgmfov, imgnum) = getnumsfromindex(imginds[i])
         if imghittest(point, slicenumber, imgmfov, imgnum, data):
             slicestring = ("%03d" % slicenumber)
-            slicestringpath = ("%03d" % slicenumber) + "_S" + str(slicenumber) + "R1"
+            slicestringpath = ("%03d" % slicenumber)
             mfovstring = ("%06d" % imgmfov)
             numstring = ("%03d" % imgnum)
             imgurl = imgdir + slicestringpath + "/" + mfovstring + "/" + slicestring + "_" + mfovstring + "_" + numstring
@@ -286,20 +285,20 @@ def gettemplatefromimgandpoint(img1resized, templatesize, centerpoint):
     xend = centerpoint[0] + templatesize / 2
     yend = centerpoint[1] + templatesize / 2
 
-    if xstart < 0:
+    if (xstart < 0):
         xend = 1 + xstart
         xstart = 1
         notonmesh = True
-    if ystart < 0:
+    if (ystart < 0):
         yend = 1 + ystart
         ystart = 1
         notonmesh = True
-    if xend >= imgwidth:
+    if (xend >= imgwidth):
         diff = xend - imgwidth
         xstart -= diff + 1
         xend -= diff + 1
         notonmesh = True
-    if yend >= imgwidth:
+    if (yend >= imgwidth):
         diff = yend - imgwidth
         ystart -= diff + 1
         yend -= diff + 1
@@ -405,7 +404,7 @@ def main():
         (img1ind, img2inds) = imgmatches[findindwithinmatches(imgmatches, img1ind)]
         (img1mfov, img1num) = getnumsfromindex(img1ind)
         slice1string = ("%03d" % slice1)
-        slice1stringpath = ("%03d" % slice1) + "_S" + str(slice1) + "R1"
+        slice1stringpath = ("%03d" % slice1)
         mfov1string = ("%06d" % img1mfov)
         num1string = ("%03d" % img1num)
         img1url = imgdir + slice1stringpath + "/" + mfov1string + "/" + slice1string + "_" + mfov1string + "_" + num1string
@@ -451,6 +450,20 @@ def main():
                 img1centerpoint = np.array([starty + h / 2, startx + w / 2]) / scaling + imgoffset1
                 img2centerpoint = np.array([reasony + newh / 2, reasonx + neww / 2]) / scaling + imgoffset2
                 pointmatches.append((img1centerpoint, img2centerpoint, notonmesh))
+
+                temp1finalsizex = rotatedandcroppedtemp1.shape[0]
+                temp1finalsizey = rotatedandcroppedtemp1.shape[1]
+                imgout = np.zeros((1230,630), np.uint8)
+                pikoo = np.array([startx + w / 2, starty + h / 2])
+                # cv2.circle(img1resized, (int(pikoo[0]), int(pikoo[1])), 15, (0,0,255), -1)
+                imgout[0:545,0:626] = img1resized
+                # cv2.circle(img2resized, (int(reasony + temp1finalsize / 2), int(reasonx + temp1finalsize / 2)), 15, (0,0,255), -1)
+                imgout[545:1090,0:626] = img2resized
+                imgout[1090:(1090 + temp1finalsizex),0:temp1finalsizey] = rotatedandcroppedtemp1
+                img2cutout = img2resized[reasonx:(reasonx + temp1finalsizex), reasony:(reasony + temp1finalsizey)]
+                imgout[1090:(1090 + temp1finalsizey), (temp1finalsizey + 10):(temp1finalsizex + 10 + temp1finalsizex)] = img2cutout
+                finalimgout = imgout[1090:(1090 + temp1finalsizex), 0:300]
+                cv2.imwrite("/home/raahilsha/billy/ImageComparison#" + str(i) + ".png",finalimgout)
 
     os.chdir(outdir)
     jsonfile = {}
