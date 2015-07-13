@@ -24,14 +24,14 @@
         "templatesize" : 200
     },
     "driver_args" : {
-        "slicemin" : 1,
-        "slicemax" : 10,
+        "slicemin" : 90,
+        "slicemax" : 95,
         "numforwardback" : 3,
         "numconcurrent" : 10,
-        "datadir" : "/data/SCS_2015-4-27_C1w7_alignment/",
-        "imgdir" : "/data/images/SCS_2015-4-27_C1w7/",
-        "workdir" : "/data/raahilsha/scs_workdir/",
-        "outdir" : "/data/raahilsha/scs_finaloutput/",
+        "datadir" : "/data/jpeg2k_test_sections_alignment/",
+        "imgdir" : "/data/jpeg2k_test_sections/",
+        "workdir" : "/data/raahilsha/2ktest_workdir/",
+        "outdir" : "/data/raahilsha/2ktest_finaloutput/",
         "conffile" : "/home/raahilsha/3d_alignment_conf.json"
     }
 }

@@ -447,10 +447,12 @@ def main():
                 reasonx, reasony = reason
                 # img1topleft = np.array([startx, starty]) / scaling + imgoffset1
                 # img2topleft = np.array(reason) / scaling + imgoffset2
-                img1centerpoint = np.array([starty + h / 2, startx + w / 2]) / scaling + imgoffset1
-                img2centerpoint = np.array([reasony + newh / 2, reasonx + neww / 2]) / scaling + imgoffset2
+                img1model = models.Transforms.from_tilespec(data[img1ind]["transforms"][0])
+                img2model = models.Transforms.from_tilespec(data[img2ind]["transforms"][0])
+                img1centerpoint = img1model.apply(np.array([starty + h / 2, startx + w / 2]) / scaling) # + imgoffset1
+                img2centerpoint = img2model.apply(np.array([reasony + newh / 2, reasonx + neww / 2]) / scaling) # + imgoffset2
                 pointmatches.append((img1centerpoint, img2centerpoint, notonmesh))
-
+                '''
                 temp1finalsizex = rotatedandcroppedtemp1.shape[0]
                 temp1finalsizey = rotatedandcroppedtemp1.shape[1]
                 imgout = np.zeros((1230,630), np.uint8)
@@ -464,7 +466,7 @@ def main():
                 imgout[1090:(1090 + temp1finalsizey), (temp1finalsizey + 10):(temp1finalsizex + 10 + temp1finalsizex)] = img2cutout
                 finalimgout = imgout[1090:(1090 + temp1finalsizex), 0:300]
                 cv2.imwrite("/home/raahilsha/billy/ImageComparison#" + str(i) + ".png",finalimgout)
-
+                '''
     os.chdir(outdir)
     jsonfile = {}
     jsonfile['tilespec1'] = "file://" + os.getcwd() + "/tilespecs_after_rotations/W01_Sec" + ("%03d" % slice1) + ".json"

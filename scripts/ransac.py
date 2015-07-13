@@ -11,11 +11,6 @@ def ransac(matches, target_model_type, iterations, epsilon, min_inlier_ratio, mi
     best_inlier_mask = None
     best_model_mean_dists = 0
     proposed_model = Transforms.create(target_model_type)
-
-    if proposed_model.MIN_MATCHES_NUM > matches.shape[1]:
-        print "RANSAC cannot find a good model because the number of initial matches ({}) is too small.".format(matches.shape[1])
-        return None, None, None
-        
     for i in xrange(iterations):
         # choose a minimal number of matches randomly
         min_matches_idxs = np.random.choice(xrange(len(matches[0])), size=proposed_model.MIN_MATCHES_NUM, replace=False)
@@ -70,7 +65,7 @@ def filter_after_ransac(candidates, model, max_trust, min_num_inliers):
             break
 
         # get the meidan error (after transforming the points)
-        pts_after_transform = new_model.apply(inliers)
+        pts_after_transform = new_model.apply_special(inliers)
         dists = np.sqrt(np.sum((pts_after_transform - to_image_candidates) ** 2, axis=1))
         median = np.median(dists)
         # print "dists mean", np.mean(dists)

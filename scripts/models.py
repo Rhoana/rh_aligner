@@ -14,7 +14,7 @@ class AbstractModel(object):
         and then computing the corresponding distance to the matched point in y.
         If the distance is less than epsilon, the match is considered good.
         """
-        X2 = self.apply(X)
+        X2 = self.apply_special(X)
         # dists_sqr = np.sum((y - X2) ** 2, axis=1)
         dists = np.sqrt(np.sum((y - X2) ** 2, axis=1))
         # print "dists", dists
@@ -31,6 +31,9 @@ class AbstractModel(object):
         return accepted_ratio, good_dists_mask, 0
 
     def apply(self, p):
+        raise RuntimeError, "Not implemented, but probably should be"
+ 
+    def apply_special(self, p):
         raise RuntimeError, "Not implemented, but probably should be"
 
 
@@ -81,6 +84,12 @@ class TranslationModel(AbstractAffineModel):
         elif len(p.shape) == 2: # A list of 2D points
             return np.vstack([p_i + self.delta for p_i in p])
         raise RuntimeError, "Invalid points input"
+
+    def apply_special(self, p):
+        toret = []
+        for p_i in p:
+             toret.append(p_i + self.delta)
+        return np.array(toret)
 
     def to_str(self):
         return "T={}".format(self.delta)
@@ -139,6 +148,13 @@ class RigidModel(AbstractAffineModel):
                               self.sin_val * p_i[0] + self.cos_val * p_i[1]]) + self.delta
                 for p_i in p])
         raise RuntimeError, "Invalid points input"
+
+    def apply_special(self, p):
+        toret = []
+        for p_i in p:
+            toret.append(np.array([self.cos_val * p_i[0] - self.sin_val * p_i[1],
+                                  self.sin_val * p_i[0] + self.cos_val * p_i[1]]) + self.delta)
+        return np.array(toret)
 
     def to_str(self):
         return "R={}, T={}".format(np.arccos(self.cos_val), self.delta)

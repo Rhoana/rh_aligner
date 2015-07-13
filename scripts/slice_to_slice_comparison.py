@@ -45,12 +45,24 @@ def thirdlargest(nums):
     return thirdlarge
 
 
+def getnumsfromindex(ind):
+    return (ind / 61 + 1, ind % 61 + 1)
+
+
+def getindexfromnums((mfovnum, imgnum)):
+    return (mfovnum - 1) * 61 + imgnum - 1
+
+
 def analyzeimg(slicenumber, mfovnumber, num, data):
     slicestring = ("%03d" % slicenumber)
     numstring = ("%03d" % num)
     mfovstring = ("%06d" % mfovnumber)
-    imgname = "2d_work_dir/W01_Sec" + slicestring + "/W01_Sec" + slicestring + "_sifts_" + slicestring + "_" + mfovstring + "_" + numstring + "*"
-    f = h5py.File(glob.glob(imgname)[0], 'r')
+    indnum = getindexfromnums((mfovnumber, num))
+    # imgname = "2d_work_dir/W01_Sec" + slicestring + "/W01_Sec" + slicestring + "_sifts_" + slicestring + "_" + mfovstring + "_" + numstring + "*"
+    # f = h5py.File(glob.glob(imgname)[0], 'r')
+    imgurl = data[indnum]["mipmapLevels"]["0"]["imageUrl"]
+    imgnamewithext = "2d_work_dir/W01_Sec" + slicestring + "/W01_Sec" + slicestring + "_sifts_" + imgurl.rsplit('/', 1)[1].split(".")[0] + ".hdf5"
+    f = h5py.File(imgnamewithext, 'r')
     resps = f['pts']['responses'][:]
     descs = f['descs'][:]
     octas = f['pts']['octaves'][:]
@@ -60,7 +72,7 @@ def analyzeimg(slicenumber, mfovnumber, num, data):
     if (len(allps) == 0):
         return (np.array([]).reshape((0, 2)), [], [])
     newmodel = models.Transforms.from_tilespec(data[jsonindex]["transforms"][0])
-    newallps = newmodel.apply(allps)
+    newallps = newmodel.apply_special(allps)
 
     allpoints = []
     allresps = []
@@ -234,20 +246,22 @@ def analyze2slices(slice1, slice2, data1, data2, nummfovs1, nummfovs2, conf):
 
 
 def main():
-    script, slice1, slice2, datadir, outdir, conffile = sys.argv
+    script, slice1, slice2, conffile = sys.argv
     starttime = time.clock()
+    with open(conffile) as conf_file:
+        conf = json.load(conf_file)
+    datadir = conf["driver_args"]["datadir"]
+    outdir = conf["driver_args"]["workdir"]
     slice1 = int(slice1)
     slice2 = int(slice2)
     slicestring1 = ("%03d" % slice1)
     slicestring2 = ("%03d" % slice2)
 
     os.chdir(datadir)
-    with open("tilespecs_after_rotations/W01_Sec" + slicestring1 + ".json") as data_file1:
+    with open("tilespecs/W01_Sec" + slicestring1 + ".json") as data_file1:
         data1 = json.load(data_file1)
-    with open("tilespecs_after_rotations/W01_Sec" + slicestring2 + ".json") as data_file2:
+    with open("tilespecs/W01_Sec" + slicestring2 + ".json") as data_file2:
         data2 = json.load(data_file2)
-    with open(conffile) as conf_file:
-        conf = json.load(conf_file)
     nummfovs1 = len(data1) / 61
     nummfovs2 = len(data2) / 61
 
