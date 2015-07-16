@@ -10,6 +10,7 @@ from scipy.spatial import distance
 import cv2
 import time
 import glob
+import models
 # os.chdir("/data/SCS_2015-4-27_C1w7_alignment")
 # os.chdir("/data/jpeg2k_test_sections_alignment")
 datadir, imgdir, workdir, outdir = os.getcwd(), os.getcwd(), os.getcwd(), os.getcwd()
@@ -359,9 +360,9 @@ def main():
     outdir = conf["driver_args"]["workdir"]
 
     os.chdir(datadir)
-    with open("tilespecs_after_rotations/W01_Sec" + slicestring1 + ".json") as data_file1:
+    with open("tilespecs/W01_Sec" + slicestring1 + ".json") as data_file1:
         data1 = json.load(data_file1)
-    with open("tilespecs_after_rotations/W01_Sec" + slicestring2 + ".json") as data_file2:
+    with open("tilespecs/W01_Sec" + slicestring2 + ".json") as data_file2:
         data2 = json.load(data_file2)
 
     os.chdir(workdir)
@@ -373,8 +374,8 @@ def main():
     if len(mfovmatches["matches"]) == 0:
         os.chdir(outdir)
         jsonfile = {}
-        jsonfile['tilespec1'] = "file://" + os.getcwd() + "/tilespecs_after_rotations/W01_Sec" + ("%03d" % slice1) + ".json"
-        jsonfile['tilespec2'] = "file://" + os.getcwd() + "/tilespecs_after_rotations/W01_Sec" + ("%03d" % slice2) + ".json"
+        jsonfile['tilespec1'] = "file://" + os.getcwd() + "/tilespecs/W01_Sec" + ("%03d" % slice1) + ".json"
+        jsonfile['tilespec2'] = "file://" + os.getcwd() + "/tilespecs/W01_Sec" + ("%03d" % slice2) + ".json"
         jsonfile['runtime'] = 0
         bb = getboundingbox(range(0, len(data1)), data1)
         hexgr = generatehexagonalgrid(bb, conf["template_matching_args"]["hexspacing"])
@@ -447,8 +448,8 @@ def main():
                 reasonx, reasony = reason
                 # img1topleft = np.array([startx, starty]) / scaling + imgoffset1
                 # img2topleft = np.array(reason) / scaling + imgoffset2
-                img1model = models.Transforms.from_tilespec(data[img1ind]["transforms"][0])
-                img2model = models.Transforms.from_tilespec(data[img2ind]["transforms"][0])
+                img1model = models.Transforms.from_tilespec(data1[img1ind]["transforms"][0])
+                img2model = models.Transforms.from_tilespec(data2[img2ind]["transforms"][0])
                 img1centerpoint = img1model.apply(np.array([starty + h / 2, startx + w / 2]) / scaling) # + imgoffset1
                 img2centerpoint = img2model.apply(np.array([reasony + newh / 2, reasonx + neww / 2]) / scaling) # + imgoffset2
                 pointmatches.append((img1centerpoint, img2centerpoint, notonmesh))
@@ -469,8 +470,8 @@ def main():
                 '''
     os.chdir(outdir)
     jsonfile = {}
-    jsonfile['tilespec1'] = "file://" + os.getcwd() + "/tilespecs_after_rotations/W01_Sec" + ("%03d" % slice1) + ".json"
-    jsonfile['tilespec2'] = "file://" + os.getcwd() + "/tilespecs_after_rotations/W01_Sec" + ("%03d" % slice2) + ".json"
+    jsonfile['tilespec1'] = "file://" + os.getcwd() + "/tilespecs/W01_Sec" + ("%03d" % slice1) + ".json"
+    jsonfile['tilespec2'] = "file://" + os.getcwd() + "/tilespecs/W01_Sec" + ("%03d" % slice2) + ".json"
     jsonfile['runtime'] = time.clock() - starttime
     jsonfile['mesh'] = hexgr
 

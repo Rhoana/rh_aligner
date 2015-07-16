@@ -24,14 +24,14 @@
         "templatesize" : 200
     },
     "driver_args" : {
-        "slicemin" : 90,
-        "slicemax" : 95,
+        "slicemin" : 91,
+        "slicemax" : 94,
         "numforwardback" : 3,
         "numconcurrent" : 10,
-        "datadir" : "/data/jpeg2k_test_sections_alignment/",
-        "imgdir" : "/data/jpeg2k_test_sections/",
-        "workdir" : "/data/raahilsha/2ktest_workdir/",
-        "outdir" : "/data/raahilsha/2ktest_finaloutput/",
-        "conffile" : "/home/raahilsha/3d_alignment_conf.json"
+        "datadir" : "/n/regal/pfister_lab/raahilsha/test_data_dir/",
+        "imgdir" : "/n/regal/pfister_lab/raahilsha/test_img_dir/",
+        "workdir" : "/n/regal/pfister_lab/raahilsha/test_workdir/",
+        "outdir" : "/n/regal/pfister_lab/raahilsha/test_finaloutput/",
+        "conffile" : "/n/regal/pfister_lab/raahilsha/scripts/3d_alignment_conf.json"
     }
 }
