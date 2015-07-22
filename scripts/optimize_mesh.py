@@ -6,7 +6,7 @@ import numpy as np
 import cPickle
 from scipy.spatial import Delaunay
 import pylab
-from matplotlib import collections  as mc
+from matplotlib import collections as mc
 
 import pyximport
 pyximport.install()
@@ -16,6 +16,7 @@ FLOAT_TYPE = np.float64
 
 
 sys.setrecursionlimit(10000)  # for grad
+
 
 class Mesh(object):
     def __init__(self, points):
@@ -112,10 +113,74 @@ def align(pts1, pts2):
     # convert to form used for left-multiplying row vectors
     return R.T, T.T
 
+#def affine_align(pts1, pts2, regularization=0):
+#    # find R,T that bring pts1 to pts2
+#
+#    # convert to column vectors
+#    pts1 = pts1.T
+#    pts2 = pts2.T
+#    
+#    m1 = pts1.mean(axis=1, keepdims=True)
+#    m2 = pts2.mean(axis=1, keepdims=True)
+#    U, S, VT = np.linalg.svd(np.dot((pts1 - m1), (pts2 - m2).T) + np.dot(regularization, np.eye((pts1.shape[0], pts2.shape[0]))))
+#    R = np.dot(VT.T, U.T)
+#    T = - np.dot(R, m1) + m2
+#
+#    # convert to form used for left-multiplying row vectors
+#    return R.T, T.T
+
+
+def Haffine_from_points(fp, tp):
+    """Find H, affine transformation, s.t. tp is affine transformation of fp.
+       Taken from 'Programming Computer Vision with Python: Tools and algorithms for analyzing images'
+    """
+
+    assert(fp.shape == tp.shape)
+
+    fp = fp.T
+    tp = tp.T
+
+    fp = np.vstack([fp[0], fp[1], np.ones(len(fp[0]))])
+    tp = np.vstack([tp[0], tp[1], np.ones(len(tp[0]))])
+
+    # condition points
+    # --- from points ---
+    m = fp.mean(axis=1, keepdims=True)
+    maxstd = np.max(np.std(fp, axis=1)) + 1e-9
+    C1 = np.diag([1.0/maxstd, 1.0/maxstd, 1.0])
+    C1[0][2] = -m[0] / maxstd
+    C1[1][2] = -m[1] / maxstd
+    fp_cond = np.dot(C1, fp)
+
+    # --- to points ---
+    m = tp.mean(axis=1, keepdims=True)
+    C2 = C1.copy() # must use same scaling for both point sets
+    C2[0][2] = -m[0] / maxstd
+    C2[1][2] = -m[1] / maxstd
+    tp_cond = np.dot(C2, tp)
+
+    # conditioned points have mean zero, so translation is zero
+    A = np.concatenate((fp_cond[:2], tp_cond[:2]), axis=0)
+    U,S,V = np.linalg.svd(A.T)
+
+    # create B and C matrices as Hartley-Zisserman (2:nd ed) p 130.
+    tmp = V[:2].T
+    B = tmp[:2]
+    C = tmp[2:4]
+
+    tmp2 = np.concatenate((np.dot(C, np.linalg.pinv(B)), np.zeros((2, 1))), axis=1)
+    H = np.vstack((tmp2, [0, 0, 1]))
+
+    # decondition
+    H = np.dot(np.linalg.inv(C2), np.dot(H, C1))
+
+    return H / H[2][2]
+
+
 def optimize_meshes(meshes, links, conf_dict={}):
     # set default values
     cross_slice_weight = conf_dict.get("cross_slice_weight", 1.0)
-    cross_slice_winsor = conf_dict.get("cross_slice_winsor", 1000)
+    cross_slice_winsor = conf_dict.get("cross_slice_winsor", 20)
     intra_slice_weight = conf_dict.get("intra_slice_weight", 1.0)
     intra_slice_winsor = conf_dict.get("intra_slice_winsor", 200)
     intra_slice_weight = 3.0
@@ -124,6 +189,7 @@ def optimize_meshes(meshes, links, conf_dict={}):
     # block_step = conf_dict.get("block_step", 25)
     rigid_iterations = conf_dict.get("rigid_iterations", 5000)
     # min_iterations = conf_dict.get("min_iterations", 200)
+    #max_iterations = conf_dict.get("max_iterations", 500000)
     max_iterations = conf_dict.get("max_iterations", 5000)
     # mean_offset_threshold = conf_dict.get("mean_offset_threshold", 5)
     # num_threads = conf_dict.get("optimization_threads", 8)
@@ -136,84 +202,101 @@ def optimize_meshes(meshes, links, conf_dict={}):
     sorted_slices = sorted(meshes.keys())
     for active_ts in sorted_slices[1:]:
         print("Before: {}".format(mean_offsets(meshes, links, active_ts, plot=False)))
-        rot = 0
-        trans = 0
+        # rot = 0
+        # trans = 0
         count = 0
+        all_H = np.zeros((3,3))
         for (ts1, ts2), ((idx1, w1), (idx2, w2)) in links.iteritems():
             if active_ts in (ts1, ts2) and (ts1 <= active_ts) and (ts2 <= active_ts):
                 pts1 = np.einsum('ijk,ij->ik', meshes[ts1].pts[idx1], w1)
                 pts2 = np.einsum('ijk,ij->ik', meshes[ts2].pts[idx2], w2)
                 if ts1 == active_ts:
-                    R, T = align(pts1, pts2)
+                    H = Haffine_from_points(pts1, pts2)
                 else:
-                    R, T = align(pts2, pts1)
-                rot += R
-                trans += T
+                    H = Haffine_from_points(pts2, pts1)
+                all_H += H
                 count += 1
-        meshes[active_ts].pts = np.dot(meshes[active_ts].pts, rot / count) + (trans / count)
+        #meshes[active_ts].pts = np.dot(meshes[active_ts].pts, rot / count) + (trans / count)
+        # normalize the affine transformation
+        all_H = all_H * (1.0 / count)
+        # transform the points
+        print all_H[:2,:2]
+        print all_H[:2,2]
+        print all_H[:2]
+        rot = all_H[:2, :2]
+        trans = all_H[:2, 2]
+        meshes[active_ts].pts = np.dot(meshes[active_ts].pts, rot.T) + trans
+        # meshes[active_ts].pts = np.array([np.dot(all_H[:2], pt) for pt in meshes[active_ts].pts])
         print("After: {}\n".format(mean_offsets(meshes, links, active_ts, plot=False)))
 
+#    for active_ts in sorted_slices[1:]:
+#        print "\nPreopt", active_ts
+#        prev_cost = np.inf
+#        stepsize = 1e-7
+#        for iter in range(300):
+#            active_gradient = np.zeros_like(meshes[active_ts].pts)
+#            cost = mesh_derivs.internal_grad(meshes[active_ts].pts, active_gradient,
+#                                             *((structural_meshes[active_ts]) +
+#                                               (intra_slice_weight, intra_slice_winsor)))
+#            for (ts1, ts2), ((idx1, w1), (idx2, w2)) in links.iteritems():
+#                if active_ts in (ts1, ts2) and (ts1 <= active_ts) and (ts2 <= active_ts):
+#                    if ts1 == active_ts:
+#                        ts1_gradient = active_gradient
+#                        ts2_gradient = np.empty_like(meshes[ts2].pts)
+#                    else:
+#                        ts1_gradient = np.empty_like(meshes[ts1].pts)
+#                        ts2_gradient = active_gradient
+#
+#                    pts1 = np.einsum('ijk,ij->ik', meshes[ts1].pts[idx1], w1)
+#                    pts2 = np.einsum('ijk,ij->ik', meshes[ts2].pts[idx2], w2)
+#
+#                    D = mesh_derivs.external_grad(meshes[ts1].pts, meshes[ts2].pts,
+#                                                  ts1_gradient, ts2_gradient,
+#                                                  idx1, w1,
+#                                                  idx2, w2,
+#                                                  cross_slice_weight, cross_slice_winsor)
+#                    cost += D
+#
+#            if cost < prev_cost:
+#                prev_cost = cost
+#                stepsize *= 1.1
+#                g = linearize_grad(meshes[active_ts].pts, active_gradient)
+#                prev_pts = meshes[active_ts].pts.copy()
+#                meshes[active_ts].pts -= stepsize * g
+#            else:
+#                stepsize *= 0.5
+#                meshes[active_ts].pts = prev_pts
+#            print "    ", iter, cost, stepsize, active_ts, mean_offsets(meshes, links, active_ts)
+#    print("Preoptimization done")
+    print("After preopt: {}\n".format(mean_offsets(meshes, links, sorted_slices[-1], plot=False)))
 
-    for active_ts in sorted_slices[1:]:
-        print "\nPreopt", active_ts
-        prev_cost = np.inf
-        stepsize = 1e-7
-        for iter in range(300):
-            active_gradient = np.zeros_like(meshes[active_ts].pts)
-            cost = mesh_derivs.internal_grad(meshes[active_ts].pts, active_gradient,
-                                             *((structural_meshes[active_ts]) +
-                                               (intra_slice_weight, intra_slice_winsor)))
-            for (ts1, ts2), ((idx1, w1), (idx2, w2)) in links.iteritems():
-                if active_ts in (ts1, ts2) and (ts1 <= active_ts) and (ts2 <= active_ts):
-                    if ts1 == active_ts:
-                        ts1_gradient = active_gradient
-                        ts2_gradient = np.empty_like(meshes[ts2].pts)
-                    else:
-                        ts1_gradient = np.empty_like(meshes[ts1].pts)
-                        ts2_gradient = active_gradient
-
-                    pts1 = np.einsum('ijk,ij->ik', meshes[ts1].pts[idx1], w1)
-                    pts2 = np.einsum('ijk,ij->ik', meshes[ts2].pts[idx2], w2)
-
-                    D = mesh_derivs.external_grad(meshes[ts1].pts, meshes[ts2].pts,
-                                                  ts1_gradient, ts2_gradient,
-                                                  idx1, w1,
-                                                  idx2, w2,
-                                                  cross_slice_weight, cross_slice_winsor)
-                    cost += D
-
-            if cost < prev_cost:
-                prev_cost = cost
-                stepsize *= 1.1
-                g = linearize_grad(meshes[active_ts].pts, active_gradient)
-                prev_pts = meshes[active_ts].pts.copy()
-                meshes[active_ts].pts -= stepsize * g
-            else:
-                stepsize *= 0.5
-                meshes[active_ts].pts = prev_pts
-            print "    ", iter, cost, stepsize, active_ts, mean_offsets(meshes, links, active_ts)
-
-    stepsize = 0.0001
+    stepsize = 1e-8 #0.0001
     momentum = 0.5
     prev_cost = np.inf
     gradients_with_momentum = {ts: 0.0 for ts in meshes}
     old_pts = None
+
 
     for iter in range(max_iterations):
         cost = 0.0
 
         gradients = {ts: np.zeros_like(mesh.pts) for ts, mesh in meshes.iteritems()}
 
+        internal_cost = 0.0
+        external_cost = 0.0
         for ts in meshes:
-            cost += mesh_derivs.internal_grad(meshes[ts].pts, gradients[ts],
+            internal_cost += mesh_derivs.internal_grad(meshes[ts].pts, gradients[ts],
                                               *((structural_meshes[ts]) +
                                                 (intra_slice_weight, intra_slice_winsor)))
         for (ts1, ts2), ((idx1, w1), (idx2, w2)) in links.iteritems():
-            cost += mesh_derivs.external_grad(meshes[ts1].pts, meshes[ts2].pts,
+            external_cost += mesh_derivs.external_grad(meshes[ts1].pts, meshes[ts2].pts,
                                               gradients[ts1], gradients[ts2],
                                               idx1, w1,
                                               idx2, w2,
                                               cross_slice_weight, cross_slice_winsor)
+        if iter % 100 == 0:
+            print("Internal cost: {}, External cost: {}".format(internal_cost, external_cost)) 
+        cost = internal_cost + external_cost
 
         if cost < prev_cost and not np.isinf(cost):
             stepsize *= 1.1
@@ -225,16 +308,21 @@ def optimize_meshes(meshes, links, conf_dict={}):
             old_pts = {ts: m.pts.copy() for ts, m in meshes.iteritems()}
             for ts in meshes:
                 meshes[ts].pts -= stepsize * gradients_with_momentum[ts]
-            print("Good step: cost {}  stepsize {}".format(cost, stepsize))
+            # if iter % 500 == 0:
+            #     print("{} Good step: cost {}  stepsize {}".format(iter, cost, stepsize))
         else:  # we took a bad step: undo it, scale down stepsize, and start over
             for ts in meshes:
                 meshes[ts].pts = old_pts[ts]
             stepsize *= 0.5
             gradients_with_momentum = {ts: 0 for ts in meshes}
-            print("Bad step: stepsize {}".format(stepsize))
+            # if iter % 500 == 0:
+            #     print("{} Bad step: stepsize {}".format(iter, stepsize))
+        if iter % 100 == 0:
+            print("iter {}: C: {}, MO: {}, S: {}".format(iter, cost, mean_offsets(meshes, links, sorted_slices[-1], plot=False), stepsize))
 
         for ts in meshes:
             assert not np.any(~ np.isfinite(meshes[ts].pts))
+    print("last MO: {}\n".format(mean_offsets(meshes, links, sorted_slices[-1], plot=True)))
 
     # Prepare per-layer output
     out_positions = {}
