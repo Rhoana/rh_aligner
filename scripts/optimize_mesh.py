@@ -299,6 +299,7 @@ def optimize_meshes(meshes, links, conf_dict={}):
         cost = internal_cost + external_cost
 
         if cost < prev_cost and not np.isinf(cost):
+            prev_cost = cost
             stepsize *= 1.1
             if stepsize > 1.0:
                 stepsize = 1.0
