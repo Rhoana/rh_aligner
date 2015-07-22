@@ -214,8 +214,9 @@ def optimize_meshes(meshes, links, conf_dict={}):
                     H = Haffine_from_points(pts1, pts2)
                 else:
                     H = Haffine_from_points(pts2, pts1)
-                all_H += H
-                count += 1
+                # Average the affine transformation by the number of matches between the two sections
+                all_H += pts1.shape[0] * H
+                count += pts1.shape[0]
         #meshes[active_ts].pts = np.dot(meshes[active_ts].pts, rot / count) + (trans / count)
         # normalize the affine transformation
         all_H = all_H * (1.0 / count)
@@ -270,7 +271,7 @@ def optimize_meshes(meshes, links, conf_dict={}):
 #    print("Preoptimization done")
     print("After preopt: {}\n".format(mean_offsets(meshes, links, sorted_slices[-1], plot=False)))
 
-    stepsize = 1e-8 #0.0001
+    stepsize = 0.0001
     momentum = 0.5
     prev_cost = np.inf
     gradients_with_momentum = {ts: 0.0 for ts in meshes}
