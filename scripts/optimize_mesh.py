@@ -191,6 +191,7 @@ def optimize_meshes(meshes, links, conf_dict={}):
     max_iterations = conf_dict.get("max_iterations", 5000)
     # mean_offset_threshold = conf_dict.get("mean_offset_threshold", 5)
     # num_threads = conf_dict.get("optimization_threads", 8)
+    min_stepsize = conf_dict.get("min_stepsize", 1e-20)
 
     # Build internal structural mesh
     # (edge_indices, edge_lengths, face_indices, face_areas)
@@ -276,7 +277,11 @@ def optimize_meshes(meshes, links, conf_dict={}):
 
         for ts in meshes:
             assert not np.any(~ np.isfinite(meshes[ts].pts))
-    print("last MO: {}\n".format(mean_offsets(meshes, links, sorted_slices[-1], plot=True)))
+
+        # If stepsize is too small (won't make any difference), stop the iterations
+        if stepsize < min_stepsize:
+            break
+    print("last MO: {}\n".format(mean_offsets(meshes, links, sorted_slices[-1], plot=False)))
 
     # Prepare per-layer output
     out_positions = {}
