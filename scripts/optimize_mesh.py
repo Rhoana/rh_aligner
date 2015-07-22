@@ -187,9 +187,7 @@ def optimize_meshes(meshes, links, conf_dict={}):
 
     # block_size = conf_dict.get("block_size", 35)
     # block_step = conf_dict.get("block_step", 25)
-    rigid_iterations = conf_dict.get("rigid_iterations", 5000)
     # min_iterations = conf_dict.get("min_iterations", 200)
-    #max_iterations = conf_dict.get("max_iterations", 500000)
     max_iterations = conf_dict.get("max_iterations", 5000)
     # mean_offset_threshold = conf_dict.get("mean_offset_threshold", 5)
     # num_threads = conf_dict.get("optimization_threads", 8)
@@ -221,55 +219,13 @@ def optimize_meshes(meshes, links, conf_dict={}):
         # normalize the affine transformation
         all_H = all_H * (1.0 / count)
         # transform the points
-        print all_H[:2,:2]
-        print all_H[:2,2]
-        print all_H[:2]
         rot = all_H[:2, :2]
         trans = all_H[:2, 2]
         meshes[active_ts].pts = np.dot(meshes[active_ts].pts, rot.T) + trans
         # meshes[active_ts].pts = np.array([np.dot(all_H[:2], pt) for pt in meshes[active_ts].pts])
         print("After: {}\n".format(mean_offsets(meshes, links, active_ts, plot=False)))
 
-#    for active_ts in sorted_slices[1:]:
-#        print "\nPreopt", active_ts
-#        prev_cost = np.inf
-#        stepsize = 1e-7
-#        for iter in range(300):
-#            active_gradient = np.zeros_like(meshes[active_ts].pts)
-#            cost = mesh_derivs.internal_grad(meshes[active_ts].pts, active_gradient,
-#                                             *((structural_meshes[active_ts]) +
-#                                               (intra_slice_weight, intra_slice_winsor)))
-#            for (ts1, ts2), ((idx1, w1), (idx2, w2)) in links.iteritems():
-#                if active_ts in (ts1, ts2) and (ts1 <= active_ts) and (ts2 <= active_ts):
-#                    if ts1 == active_ts:
-#                        ts1_gradient = active_gradient
-#                        ts2_gradient = np.empty_like(meshes[ts2].pts)
-#                    else:
-#                        ts1_gradient = np.empty_like(meshes[ts1].pts)
-#                        ts2_gradient = active_gradient
-#
-#                    pts1 = np.einsum('ijk,ij->ik', meshes[ts1].pts[idx1], w1)
-#                    pts2 = np.einsum('ijk,ij->ik', meshes[ts2].pts[idx2], w2)
-#
-#                    D = mesh_derivs.external_grad(meshes[ts1].pts, meshes[ts2].pts,
-#                                                  ts1_gradient, ts2_gradient,
-#                                                  idx1, w1,
-#                                                  idx2, w2,
-#                                                  cross_slice_weight, cross_slice_winsor)
-#                    cost += D
-#
-#            if cost < prev_cost:
-#                prev_cost = cost
-#                stepsize *= 1.1
-#                g = linearize_grad(meshes[active_ts].pts, active_gradient)
-#                prev_pts = meshes[active_ts].pts.copy()
-#                meshes[active_ts].pts -= stepsize * g
-#            else:
-#                stepsize *= 0.5
-#                meshes[active_ts].pts = prev_pts
-#            print "    ", iter, cost, stepsize, active_ts, mean_offsets(meshes, links, active_ts)
-#    print("Preoptimization done")
-    print("After preopt: {}\n".format(mean_offsets(meshes, links, sorted_slices[-1], plot=False)))
+    print("After preopt MO: {}\n".format(mean_offsets(meshes, links, sorted_slices[-1], plot=False)))
 
     stepsize = 0.0001
     momentum = 0.5
@@ -283,21 +239,17 @@ def optimize_meshes(meshes, links, conf_dict={}):
 
         gradients = {ts: np.zeros_like(mesh.pts) for ts, mesh in meshes.iteritems()}
 
-        internal_cost = 0.0
-        external_cost = 0.0
+        # Compute the cost of the internal and external links
         for ts in meshes:
-            internal_cost += mesh_derivs.internal_grad(meshes[ts].pts, gradients[ts],
+            cost += mesh_derivs.internal_grad(meshes[ts].pts, gradients[ts],
                                               *((structural_meshes[ts]) +
                                                 (intra_slice_weight, intra_slice_winsor)))
         for (ts1, ts2), ((idx1, w1), (idx2, w2)) in links.iteritems():
-            external_cost += mesh_derivs.external_grad(meshes[ts1].pts, meshes[ts2].pts,
+            cost += mesh_derivs.external_grad(meshes[ts1].pts, meshes[ts2].pts,
                                               gradients[ts1], gradients[ts2],
                                               idx1, w1,
                                               idx2, w2,
                                               cross_slice_weight, cross_slice_winsor)
-        if iter % 100 == 0:
-            print("Internal cost: {}, External cost: {}".format(internal_cost, external_cost)) 
-        cost = internal_cost + external_cost
 
         if cost < prev_cost and not np.isinf(cost):
             prev_cost = cost
