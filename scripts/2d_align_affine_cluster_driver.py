@@ -22,34 +22,32 @@ from job import Job
 
 
 class CreateSiftFeatures(Job):
-    def __init__(self, tiles_fname, output_file, tile_index, jar_file, conf_fname=None, threads_num=1):
+    def __init__(self, tiles_fname, output_file, tile_index, conf_fname=None, threads_num=1):
         Job.__init__(self)
         self.already_done = False
         self.tiles_fname = '"{0}"'.format(tiles_fname)
         self.tile_index = '{0}'.format(tile_index)
         self.output_file = '-o "{0}"'.format(output_file)
-        self.jar_file = '-j "{0}"'.format(jar_file)
         if conf_fname is None:
             self.conf_fname = ''
         else:
             self.conf_fname = '-c "{0}"'.format(conf_fname)
         self.dependencies = []
-        self.threads = threads_num
-        self.threads_str = "-t {0}".format(threads_num)
-        self.memory = 6000
-        self.time = 300
-        self.is_java_job = True
+        # self.threads = threads_num
+        # self.threads_str = "-t {0}".format(threads_num)
+        self.memory = 400
+        self.time = 20
         self.output = output_file
         #self.already_done = os.path.exists(self.output_file)
 
     def command(self):
         return ['python -u',
-                os.path.join(os.environ['ALIGNER'], 'scripts', 'create_sift_features.py'),
-                self.output_file, self.jar_file, self.threads_str, self.conf_fname, self.tiles_fname, self.tile_index]
+                os.path.join(os.environ['ALIGNER'], 'scripts', 'create_sift_features_cv2.py'),
+                self.output_file, self.conf_fname, self.tiles_fname, self.tile_index]
 
 
 class MatchSiftFeaturesAndFilter(Job):
-    def __init__(self, dependencies, tiles_fname, features_fname1, features_fname2, corr_output_file, index_pair, jar_file, wait_time=None, conf_fname=None):
+    def __init__(self, dependencies, tiles_fname, features_fname1, features_fname2, corr_output_file, index_pair, wait_time=None, conf_fname=None):
         Job.__init__(self)
         self.already_done = False
         self.tiles_fname = '"{0}"'.format(tiles_fname)
@@ -57,7 +55,6 @@ class MatchSiftFeaturesAndFilter(Job):
         self.features_fname2 = '"{0}"'.format(features_fname2)
         self.index_pair = ':'.join([str(i) for i in index_pair])
         self.output_file = '-o "{0}"'.format(corr_output_file)
-        self.jar_file = '-j "{0}"'.format(jar_file)
         if conf_fname is None:
             self.conf_fname = ''
         else:
@@ -67,48 +64,45 @@ class MatchSiftFeaturesAndFilter(Job):
         else:
             self.wait_time = '-w {0}'.format(wait_time)
         self.dependencies = dependencies
-        self.memory = 4000
-        self.time = 300
-        self.is_java_job = True
+        self.memory = 400
+        self.time = 20
         self.output = corr_output_file
         #self.already_done = os.path.exists(self.output_file)
 
     def command(self):
         return ['python -u',
-                os.path.join(os.environ['ALIGNER'], 'scripts', 'match_sift_features_and_filter.py'),
-                self.output_file, self.jar_file, self.wait_time, self.conf_fname,
+                os.path.join(os.environ['ALIGNER'], 'scripts', 'match_sift_features_and_filter_cv2.py'),
+                self.output_file, self.wait_time, self.conf_fname,
                 self.tiles_fname, self.features_fname1, self.features_fname2, self.index_pair]
 
 
 class OptimizeMontageTransform(Job):
-    def __init__(self, dependencies, tiles_fname, matches_list_file, fixed_tiles, opt_output_file, jar_file, conf_fname=None, threads_num=1):
+    def __init__(self, dependencies, tiles_fname, matches_list_file, opt_output_file, conf_fname=None, threads_num=1):
         Job.__init__(self)
         self.already_done = False
         self.tiles_fname = '"{0}"'.format(tiles_fname)
         self.matches_list_file = '"{0}"'.format(matches_list_file)
         self.output_file = '-o "{0}"'.format(opt_output_file)
-        self.jar_file = '-j "{0}"'.format(jar_file)
         if conf_fname is None:
             self.conf_fname = ''
         else:
             self.conf_fname = '-c "{0}"'.format(conf_fname)
-        if fixed_tiles is None:
-            self.fixed_tiles = ''
-        else:
-            self.fixed_tiles = '-f {0}'.format(" ".join(str(f) for f in fixed_tiles))
+        # if fixed_tiles is None:
+        #     self.fixed_tiles = ''
+        # else:
+        #     self.fixed_tiles = '-f {0}'.format(" ".join(str(f) for f in fixed_tiles))
         self.dependencies = dependencies
-        self.threads = threads_num
-        self.threads_str = "-t {0}".format(threads_num)
+        # self.threads = threads_num
+        # self.threads_str = "-t {0}".format(threads_num)
         self.memory = 6000
-        self.time = 300
-        self.is_java_job = True
+        self.time = 600
         self.output = opt_output_file
         #self.already_done = os.path.exists(self.output_file)
 
     def command(self):
         return ['python -u',
-                os.path.join(os.environ['ALIGNER'], 'scripts', 'optimize_montage_transform.py'),
-                self.output_file, self.fixed_tiles, self.jar_file, self.conf_fname, self.threads_str, self.matches_list_file, self.tiles_fname]
+                os.path.join(os.environ['ALIGNER'], 'scripts', 'optimize_2d_mfovs.py'),
+                self.output_file, self.conf_fname, self.tiles_fname, self.matches_list_file]
 
 
 
@@ -121,18 +115,15 @@ if __name__ == '__main__':
 
 
     # Command line parser
-    parser = argparse.ArgumentParser(description='Aligns (2d-elastic montaging) a given set of images using the SLURM cluster commands.')
+    parser = argparse.ArgumentParser(description='Aligns (2d-elastic montaging) a given set of multibeam images using the SLURM cluster commands.')
     parser.add_argument('tiles_dir', metavar='tiles_dir', type=str, 
-                        help='a directory that contains a tile_spec files in json format')
+                        help='a directory that contains tile_spec files in json format')
     parser.add_argument('-w', '--workspace_dir', type=str, 
                         help='a directory where the output files of the different stages will be kept (default: ./temp)',
                         default='./temp')
     parser.add_argument('-o', '--output_dir', type=str, 
                         help='the directory where the output to be rendered in json format files will be stored (default: ./output)',
                         default='./output')
-    parser.add_argument('-j', '--jar_file', type=str, 
-                        help='the jar file that includes the render (default: ../target/render-0.0.1-SNAPSHOT.jar)',
-                        default='../target/render-0.0.1-SNAPSHOT.jar')
     parser.add_argument('-c', '--conf_file_name', type=str, 
                         help='the configuration file with the parameters for each step of the alignment process in json format (uses default parameters, if not supplied)',
                         default=None)
@@ -235,7 +226,7 @@ if __name__ == '__main__':
             sifts_json = os.path.join(layer_sifts_dir, "{0}_sifts_{1}.json".format(tiles_fname_prefix, tile_fname))
             if not os.path.exists(sifts_json):
                 print "Computing tile  sifts: {0}".format(tile_fname)
-                job_sift = CreateSiftFeatures(f, sifts_json, i, args.jar_file, conf_fname=args.conf_file_name, threads_num=2)
+                job_sift = CreateSiftFeatures(f, sifts_json, i, conf_fname=args.conf_file_name, threads_num=2)
                 jobs[slayer]['sifts'][imgurl] = job_sift
             layers_data[slayer]['sifts'][imgurl] = sifts_json
 
@@ -266,7 +257,7 @@ if __name__ == '__main__':
                         dependencies.append(jobs[slayer]['sifts'][imageUrl2])
                     job_match = MatchSiftFeaturesAndFilter(dependencies, layers_data[slayer]['ts'],
                         layers_data[slayer]['sifts'][imageUrl1], layers_data[slayer]['sifts'][imageUrl2], match_json,
-                        index_pair, args.jar_file, wait_time=30, conf_fname=args.conf_file_name)
+                        index_pair, wait_time=30, conf_fname=args.conf_file_name)
                     jobs[slayer]['matched_sifts'].append(job_match)
                 layers_data[slayer]['matched_sifts'].append(match_json)
 
@@ -283,8 +274,8 @@ if __name__ == '__main__':
             dependencies.extend(jobs[slayer]['sifts'].values())
             dependencies.extend(jobs[slayer]['matched_sifts'])
             job_opt_montage = OptimizeMontageTransform(dependencies, layers_data[slayer]['ts'],
-                matches_list_file, [ fixed_tile ], opt_montage_json,
-                args.jar_file, conf_fname=args.conf_file_name)
+                matches_list_file, opt_montage_json,
+                conf_fname=args.conf_file_name)
         layers_data[slayer]['optimized_montage'] = opt_montage_json
 
 
