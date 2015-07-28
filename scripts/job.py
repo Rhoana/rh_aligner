@@ -15,9 +15,9 @@ RUN_LOCAL = False
 USE_QSUB = False
 USE_SBATCH = True
 
-SBATCH_QUEUE = 'serial_requeue'
+#SBATCH_QUEUE = 'serial_requeue'
 # SBATCH_QUEUE = 'general'
-# SBATCH_QUEUE = 'holyseasgpu'
+SBATCH_QUEUE = 'holyseasgpu'
 
 # SBATCH_ACCOUNT = None
 SBATCH_ACCOUNT = 'lichtman_lab'
@@ -33,11 +33,12 @@ if not os.path.exists(LOGS_DIR) or not os.path.isdir(os.path.dirname(LOGS_DIR)):
 
 # Multicore settings
 # #MAX_CORES = 16
-MAX_CPUS_PER_NODE = 60
+MAX_CPUS_PER_NODE = 8
 MAX_MEMORY_MB = 128000
 MIN_TIME = 600
 MAX_JOBS_TO_SUBMIT = 100
 TIME_FACTOR = 4
+MAX_SUBMISSION_ATTEMPTS = 3
 
 
 class Job(object):
@@ -578,24 +579,34 @@ class JobBlock(object):
         # print "command_list: {0}".format(command_list)
         # print "full_command: {0}".format(full_command)
 
-        # Submit job
-        process = subprocess.Popen(command_list, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        submit_out, submit_err = process.communicate(full_command)
+        submission_attempts = 0
+        job_submitted = False
+        while not job_submitted and submission_attempts < MAX_SUBMISSION_ATTEMPTS:
+            submission_attempts += 1
+            # Submit job
+            process = subprocess.Popen(command_list, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            submit_out, submit_err = process.communicate(full_command)
 
-        # print submit_out
-        # print submit_err
+            # print submit_out
+            # print submit_err
 
-        # Process output
-        if len(submit_err) == 0:
-            if USE_SBATCH:
-                new_jobid = submit_out.split()[3]
-            elif USE_QSUB:
-                new_jobid = submit_out.split('.')[0]
-            print 'jobid={0}'.format(new_jobid)
-            for j in self.job_block_list:
-                j.jobid = new_jobid
+            # Process output
+            if len(submit_err) == 0:
+                if USE_SBATCH:
+                    new_jobid = submit_out.split()[3]
+                print 'jobid={0}'.format(new_jobid)
+                for j in self.job_block_list:
+                    j.jobid = new_jobid
+                job_submitted = True
 
-        die because you need to check process.exit_code we think
+            elif process.returncode != 0:
+                print("Error while submitting job: {}\n{}".format(command_list, full_command))
+                if submission_attempts == MAX_SUBMISSION_ATTEMPTS:
+                    print("Reached maximal submissions attempts, aborting driver")
+                    sys.exit(1)
+                else:
+                    print("Trying again...")
+                    continue
 
         submitted_job_blocks[block_name] = self.job_block_list
         return submitted_job_blocks
