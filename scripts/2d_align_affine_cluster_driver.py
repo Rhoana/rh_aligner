@@ -169,7 +169,7 @@ if __name__ == '__main__':
     
     fixed_tile = 0
 
-    for f in json_files.keys():
+    for f in sorted(json_files.keys()):
         tiles_fname_prefix = os.path.splitext(os.path.basename(f))[0]
 
         cur_tilespec = load_tilespecs(f)
@@ -196,9 +196,6 @@ if __name__ == '__main__':
 
         slayer = str(layer)
 
-        layer_sifts_dir = os.path.join(sifts_dir, slayer)
-        layer_matched_sifts_dir = os.path.join(matched_sifts_dir, slayer)
-
         if not (slayer in layers_data.keys()):
             layers_data[slayer] = {}
             jobs[slayer] = {}
@@ -209,6 +206,11 @@ if __name__ == '__main__':
             layers_data[slayer]['prefix'] = tiles_fname_prefix
             layers_data[slayer]['matched_sifts'] = []
 
+        layer_sifts_dir = os.path.join(sifts_dir, layers_data[slayer]['prefix'])
+        layer_matched_sifts_dir = os.path.join(matched_sifts_dir, layers_data[slayer]['prefix'])
+
+        if not os.path.exists(layer_matched_sifts_dir):
+            os.makedirs(layer_matched_sifts_dir)
 
         all_layers.append(layer)
 
@@ -222,8 +224,15 @@ if __name__ == '__main__':
             imgurl = ts["mipmapLevels"]["0"]["imageUrl"]
             tile_fname = os.path.basename(imgurl).split('.')[0]
 
+            tile_fname_sep = tile_fname.split('_') # eg: 002_000001_044_2015-03-06T1106521073289.bmp
+            cur_wafer_mfov = tile_fname_sep[1]
+            mfov_sifts_dir = os.path.join(layer_sifts_dir, cur_wafer_mfov)
+            if not os.path.exists(mfov_sifts_dir):
+                os.makedirs(mfov_sifts_dir)
+            
+
             # create the sift features of these tiles
-            sifts_json = os.path.join(layer_sifts_dir, "{0}_sifts_{1}.json".format(tiles_fname_prefix, tile_fname))
+            sifts_json = os.path.join(mfov_sifts_dir, "{0}_sifts_{1}.json".format(tiles_fname_prefix, tile_fname))
             if not os.path.exists(sifts_json):
                 print "Computing tile  sifts: {0}".format(tile_fname)
                 job_sift = CreateSiftFeatures(f, sifts_json, i, conf_fname=args.conf_file_name, threads_num=2)
