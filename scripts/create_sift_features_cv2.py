@@ -11,7 +11,6 @@ import cv2
 import json
 import numpy as np
 import h5py
-import glymur
 
 
 def create_sift_features(tiles_fname, out_fname, index, conf_fname=None):
@@ -24,6 +23,7 @@ def create_sift_features(tiles_fname, out_fname, index, conf_fname=None):
     image_path = tilespec["mipmapLevels"]["0"]["imageUrl"]
     image_path = image_path.replace("file://", "")
     if image_path.endswith(".jp2"):
+        import glymur
         img_gray = glymur.Jp2k(image_path)[:] # load in full resolution
     else:
         img_gray = cv2.imread(image_path, cv2.CV_LOAD_IMAGE_GRAYSCALE)
