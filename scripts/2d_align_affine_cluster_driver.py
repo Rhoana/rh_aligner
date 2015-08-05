@@ -232,7 +232,7 @@ if __name__ == '__main__':
             
 
             # create the sift features of these tiles
-            sifts_json = os.path.join(mfov_sifts_dir, "{0}_sifts_{1}.json".format(tiles_fname_prefix, tile_fname))
+            sifts_json = os.path.join(mfov_sifts_dir, "{0}_sifts_{1}.h5py".format(tiles_fname_prefix, tile_fname))
             if not os.path.exists(sifts_json):
                 print "Computing tile  sifts: {0}".format(tile_fname)
                 job_sift = CreateSiftFeatures(f, sifts_json, i, conf_fname=args.conf_file_name, threads_num=2)
