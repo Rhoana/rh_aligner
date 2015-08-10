@@ -1,4 +1,5 @@
 # Setup
+from __future__ import print_function
 import models
 import ransac
 import os
@@ -11,10 +12,13 @@ from scipy.spatial import distance
 import cv2
 import time
 import glob
+import argparse
+import utils
 # os.chdir("C:/Users/Raahil/Documents/Research2015_eclipse/Testing")
 # os.chdir("/data/SCS_2015-4-27_C1w7_alignment")
 # os.chdir("/data/jpeg2k_test_sections_alignment")
 
+TILES_PER_MFOV = 61
 
 def secondlargest(nums):
     largest = -1
@@ -46,32 +50,32 @@ def thirdlargest(nums):
 
 
 def getnumsfromindex(ind):
-    return (ind / 61 + 1, ind % 61 + 1)
+    return (ind / TILES_PER_MFOV + 1, ind % TILES_PER_MFOV + 1)
 
 
 def getindexfromnums((mfovnum, imgnum)):
-    return (mfovnum - 1) * 61 + imgnum - 1
+    return (mfovnum - 1) * TILES_PER_MFOV + imgnum - 1
 
 
-def analyzeimg(slicenumber, mfovnumber, num, data):
-    slicestring = ("%03d" % slicenumber)
-    numstring = ("%03d" % num)
-    mfovstring = ("%06d" % mfovnumber)
-    indnum = getindexfromnums((mfovnumber, num))
-    # imgname = "2d_work_dir/W01_Sec" + slicestring + "/W01_Sec" + slicestring + "_sifts_" + slicestring + "_" + mfovstring + "_" + numstring + "*"
-    # f = h5py.File(glob.glob(imgname)[0], 'r')
-    imgurl = data[indnum]["mipmapLevels"]["0"]["imageUrl"]
-    imgnamewithext = "2d_work_dir/W01_Sec" + slicestring + "/W01_Sec" + slicestring + "_sifts_" + imgurl.rsplit('/', 1)[1].split(".")[0] + ".hdf5"
-    f = h5py.File(imgnamewithext, 'r')
-    resps = f['pts']['responses'][:]
-    descs = f['descs'][:]
-    octas = f['pts']['octaves'][:]
-    jsonindex = (mfovnumber - 1) * 61 + num - 1
 
-    allps = np.array(f['pts']['locations'])
+def load_features(feature_file, tile_ts):
+    # Should have the same name as the following: [tilespec base filename]_[img filename].json/.hdf5
+    assert(os.path.basename(os.path.splitext(tile_ts["mipmapLevels"]["0"]["imageUrl"])[0]) in feature_file)
+
+    # print("Loading feature file {} of tile {}, with a transform {}".format(feature_file, tile_ts["mipmapLevels"]["0"]["imageUrl"], tile_ts["transforms"][0]))
+    # load the image features
+    with h5py.File(feature_file, 'r') as f:
+        resps = f['pts']['responses'][:]
+        descs = f['descs'][:]
+        octas = f['pts']['octaves'][:]
+        allps = np.array(f['pts']['locations'])
+
+    # If no relevant features are found, return an empty set
     if (len(allps) == 0):
         return (np.array([]).reshape((0, 2)), [], [])
-    newmodel = models.Transforms.from_tilespec(data[jsonindex]["transforms"][0])
+
+    # Apply the transformation to each point
+    newmodel = models.Transforms.from_tilespec(tile_ts["transforms"][0])
     newallps = newmodel.apply_special(allps)
 
     allpoints = []
@@ -89,12 +93,13 @@ def analyzeimg(slicenumber, mfovnumber, num, data):
     return (points, allresps, alldescs)
 
 
-def getcenter(slicenumber, mfovnumber, data):
+
+
+def getcenter(mfov_ts):
     xlocsum, ylocsum, nump = 0, 0, 0
-    for num in range(1, 62):
-        jsonindex = (mfovnumber - 1) * 61 + num - 1
-        xlocsum += data[jsonindex]["bbox"][0] + data[jsonindex]["bbox"][1]
-        ylocsum += data[jsonindex]["bbox"][2] + data[jsonindex]["bbox"][3]
+    for tile_ts in mfov_ts.values():
+        xlocsum += tile_ts["bbox"][0] + tile_ts["bbox"][1]
+        ylocsum += tile_ts["bbox"][2] + tile_ts["bbox"][3]
         nump += 2
     return [xlocsum / nump, ylocsum / nump]
 
@@ -109,25 +114,38 @@ def reorienttris(trilist, pointlist):
     return
 
 
-def analyzemfov(slicenumber, mfovnumber, maximgs, data):
+def analyzemfov(mfov_ts, features_dir):
+    """Returns all the relevant features of the tiles in a single mfov"""
     allpoints = np.array([]).reshape((0, 2))
     allresps = []
     alldescs = []
-    for i in range(1, maximgs + 1):
-        (tempoints, tempresps, tempdescs) = analyzeimg(slicenumber, mfovnumber, i, data)
+
+    mfov_num = int(mfov_ts.values()[0]["mfov"])
+    mfov_string = ("%06d" % mfov_num)
+    mfov_feature_files = sorted(glob.glob(os.path.join(os.path.join(features_dir, mfov_string), '*')))
+    if len(mfov_feature_files) < TILES_PER_MFOV:
+        print("Warning: number of feature files in directory: {} is smaller than {}".format(os.path.join(os.path.join(features_dir, mfov_string)), TILES_PER_MFOV), file=sys.stderr)
+
+    # load each features file, and concatenate all to single lists
+    for feature_file in mfov_feature_files:
+        # Get the correct tile tilespec from the section tilespec (convert to int to remove leading zeros)
+        tile_num = int(feature_file.split('sifts_')[1].split('_')[2])
+        (tempoints, tempresps, tempdescs) = load_features(feature_file, mfov_ts[tile_num])
+        # concatentate the results
         allpoints = np.append(allpoints, tempoints, axis=0)
         allresps += tempresps
         alldescs += tempdescs
+
     allpoints = np.array(allpoints)
     return (allpoints, allresps, alldescs)
 
 
-def generatematches_cv2(allpoints1, allpoints2, alldescs1, alldescs2, conf):
+def generatematches_cv2(allpoints1, allpoints2, alldescs1, alldescs2, actual_params):
     matcher = cv2.BFMatcher()
     matches = matcher.knnMatch(np.array(alldescs1), np.array(alldescs2), k=2)
     goodmatches = []
     for m, n in matches:
-        if m.distance / n.distance < conf["prelim_matching_args"]["ROD_cutoff"]:
+        if m.distance / n.distance < actual_params["ROD_cutoff"]:
             goodmatches.append([m])
     match_points = np.array([
         np.array([allpoints1[[m[0].queryIdx for m in goodmatches]]][0]),
@@ -135,7 +153,7 @@ def generatematches_cv2(allpoints1, allpoints2, alldescs1, alldescs2, conf):
     return match_points
 
 
-def generatematches_brute(allpoints1, allpoints2, alldescs1, alldescs2, conf):
+def generatematches_brute(allpoints1, allpoints2, alldescs1, alldescs2, actual_params):
     bestpoints1 = []
     bestpoints2 = []
     for pointrange in range(0, len(allpoints1)):
@@ -155,31 +173,40 @@ def generatematches_brute(allpoints1, allpoints2, alldescs1, alldescs2, conf):
                 bestcomparedpoint = allpoints2[num]
             elif bestdist < secondbestdistsofar:
                 secondbestdistsofar = bestdist
-        if bestdistsofar / secondbestdistsofar < conf["prelim_matching_args"]["ROD_cutoff"]:
+        if bestdistsofar / secondbestdistsofar < actual_params["ROD_cutoff"]:
             bestpoints1.append(selectedpoint)
             bestpoints2.append(bestcomparedpoint)
     match_points = np.array([bestpoints1, bestpoints2])
     return match_points
 
 
-def analyze2slicesmfovs(slice1, mfov1, slice2, mfov2, data1, data2, conf):
-    print str(slice1) + "-" + str(mfov1) + " vs. " + str(slice2) + "-" + str(mfov2)
-    (allpoints1, allresps1, alldescs1) = analyzemfov(slice1, mfov1, 61, data1)
-    (allpoints2, allresps2, alldescs2) = analyzemfov(slice2, mfov2, 61, data2)
-    match_points = generatematches_cv2(allpoints1, allpoints2, alldescs1, alldescs2, conf)
-    model_index = conf["RANSAC_args"]["model_index"]
-    iterations = conf["RANSAC_args"]["iterations"]
-    max_epsilon = conf["RANSAC_args"]["max_epsilon"]
-    min_inlier_ratio = conf["RANSAC_args"]["min_inlier_ratio"]
-    min_num_inlier = conf["RANSAC_args"]["min_num_inlier"]
-    max_trust = conf["RANSAC_args"]["max_trust"]
+def analyze2slicesmfovs(mfov1_ts, mfov2_ts, features_dir1, features_dir2, actual_params):
+    first_tile1 = mfov1_ts.values()[0]
+    first_tile2 = mfov2_ts.values()[0]
+    print("Sec{}_Mfov{} vs. Sec{}_Mfov{}".format(first_tile1["layer"], first_tile1["mfov"], first_tile2["layer"], first_tile2["mfov"]))
+    (allpoints1, allresps1, alldescs1) = analyzemfov(mfov1_ts, features_dir1)
+    (allpoints2, allresps2, alldescs2) = analyzemfov(mfov2_ts, features_dir2)
+    match_points = generatematches_cv2(allpoints1, allpoints2, alldescs1, alldescs2, actual_params)
+    model_index = actual_params["model_index"]
+    iterations = actual_params["iterations"]
+    max_epsilon = actual_params["max_epsilon"]
+    min_inlier_ratio = actual_params["min_inlier_ratio"]
+    min_num_inlier = actual_params["min_num_inlier"]
+    max_trust = actual_params["max_trust"]
     model, filtered_matches = ransac.filter_matches(match_points, model_index, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, max_trust)
     if filtered_matches is None:
         filtered_matches = np.zeros((0, 0))
+    if model is None:
+        print("Could not find a valid model between Sec{}_Mfov{} vs. Sec{}_Mfov{}".format(first_tile1["layer"], first_tile1["mfov"], first_tile2["layer"], first_tile2["mfov"]))
+    else:
+        print("Found a model {} (with {} matches) between Sec{}_Mfov{} vs. Sec{}_Mfov{}".format(model.to_str(), filtered_matches.shape[1], first_tile1["layer"], first_tile1["mfov"], first_tile2["layer"], first_tile2["mfov"]))
     return (model, filtered_matches.shape[1], float(filtered_matches.shape[1]) / match_points.shape[1], match_points.shape[1], len(allpoints1), len(allpoints2))
 
 
-def analyze2slices(slice1, slice2, data1, data2, nummfovs1, nummfovs2, conf):
+def analyze2slices(indexed_ts1, indexed_ts2, nummfovs1, nummfovs2, features_dir1, features_dir2, actual_params):
+
+    layer1 = indexed_ts1.values()[0].values()[0]["layer"]
+    layer2 = indexed_ts2.values()[0].values()[0]["layer"]
     toret = []
     modelarr = np.zeros((nummfovs1, nummfovs2), dtype=models.RigidModel)
     numfilterarr = np.zeros((nummfovs1, nummfovs2))
@@ -187,7 +214,7 @@ def analyze2slices(slice1, slice2, data1, data2, nummfovs1, nummfovs2, conf):
     besttransform = None
 
     randomchoices = []
-    trytimes = conf["prelim_matching_args"]["trytime"]
+    trytimes = actual_params["max_attempts"]
     timestorand = trytimes * max(nummfovs1, nummfovs2)
     timesrandtried = 0
     for i in range(0, nummfovs1):
@@ -201,32 +228,36 @@ def analyze2slices(slice1, slice2, data1, data2, nummfovs1, nummfovs2, conf):
         randomchoices.remove(mfovcomppicked)
         timesrandtried = timesrandtried + 1
 
-        (model, num_filtered, filter_rate, num_rod, num_m1, num_m2) = analyze2slicesmfovs(slice1, mfov1, slice2, mfov2, data1, data2, conf)
+        (model, num_filtered, filter_rate, num_rod, num_m1, num_m2) = analyze2slicesmfovs(indexed_ts1[mfov1], indexed_ts2[mfov2], features_dir1, features_dir2, actual_params)
         modelarr[mfov1 - 1, mfov2 - 1] = model
         numfilterarr[mfov1 - 1, mfov2 - 1] = num_filtered
         filterratearr[mfov1 - 1, mfov2 - 1] = filter_rate
-        if num_filtered > conf["prelim_matching_args"]["numfiltered_cutoff"] and filter_rate > conf["prelim_matching_args"]["filterrate_cutoff"]:
+        if num_filtered > actual_params["num_filtered_cutoff"] and filter_rate > actual_params["filter_rate_cutoff"]:
             besttransform = model.get_matrix()
             break
         if timesrandtried > timestorand:
+            print("Max attempts to find a preliminary transform reached, no model found between sections: {} and {}".format(layer1, layer2))
             return toret
-    print "Preliminary Transform Found"
+
     if besttransform is None:
+        print("Could not find a preliminary transform between sections: {} and {}".format(layer1, layer2))
         return toret
 
+    print("Found a preliminary transform between sections: {} and {}, with model: {}".format(layer1, layer2, besttransform))
+
     for i in range(0, nummfovs1):
-        mycenter = getcenter(slice1, i + 1, data1)
+        mycenter = getcenter(indexed_ts1[i + 1])
         mycentertrans = np.dot(besttransform, np.append(mycenter, [1]))[0:2]
         distances = np.zeros(nummfovs2)
         for j in range(0, nummfovs2):
-            distances[j] = np.linalg.norm(mycentertrans - getcenter(slice2, j + 1, data2))
+            distances[j] = np.linalg.norm(mycentertrans - getcenter(indexed_ts2[j + 1]))
         checkindices = distances.argsort()[0:7]
         for j in range(0, len(checkindices)):
-            (model, num_filtered, filter_rate, num_rod, num_m1, num_m2) = analyze2slicesmfovs(slice1, i + 1, slice2, checkindices[j] + 1, data1, data2, conf)
+            (model, num_filtered, filter_rate, num_rod, num_m1, num_m2) = analyze2slicesmfovs(indexed_ts1[i + 1], indexed_ts2[checkindices[j] + 1], features_dir1, features_dir2, actual_params)
             modelarr[i, checkindices[j]] = model
             numfilterarr[i, checkindices[j]] = num_filtered
             filterratearr[i, checkindices[j]] = filter_rate
-            if num_filtered > conf["prelim_matching_args"]["numfiltered_cutoff"] and filter_rate > conf["prelim_matching_args"]["filterrate_cutoff"]:
+            if num_filtered > actual_params["num_filtered_cutoff"] and filter_rate > actual_params["filter_rate_cutoff"]:
                 besttransform = model.get_matrix()
                 dictentry = {}
                 dictentry['mfov1'] = i + 1
@@ -244,36 +275,78 @@ def analyze2slices(slice1, slice2, data1, data2, nummfovs1, nummfovs2, conf):
                 break
     return toret
 
+def match_layers_sift_features(tiles_fname1, features_dir1, tiles_fname2, features_dir2, out_fname, conf_fname=None):
+    params = utils.conf_from_file(conf_fname, 'MatchLayersSiftFeaturesAndFilter')
+    if params is None:
+        params = {}
+    actual_params = {}
+    # Parameters for the matching
+    actual_params["max_attempts"] = params.get("max_attempts", 10)
+    actual_params["num_filtered_cutoff"] = params.get("num_filtered_cutoff", 50)
+    actual_params["filter_rate_cutoff"] = params.get("filter_rate_cutoff", 0.25)
+    actual_params["ROD_cutoff"] = params.get("ROD_cutoff", 0.92)
 
-def main():
-    script, slice1, slice2, conffile = sys.argv
+    # Parameters for the RANSAC
+    actual_params["model_index"] = params.get("model_index", 1)
+    actual_params["iterations"] = params.get("iterations", 500)
+    actual_params["max_epsilon"] = params.get("max_epsilon", 500.0)
+    actual_params["min_inlier_ratio"] = params.get("min_inlier_ratio", 0.01)
+    actual_params["min_num_inlier"] = params.get("min_num_inliers", 7)
+    actual_params["max_trust"] = params.get("max_trust", 3)
+
+    print("Matching layers: {} and {}".format(tiles_fname1, tiles_fname2))
+
     starttime = time.clock()
-    with open(conffile) as conf_file:
-        conf = json.load(conf_file)
-    datadir = conf["driver_args"]["datadir"]
-    outdir = conf["driver_args"]["workdir"]
-    slice1 = int(slice1)
-    slice2 = int(slice2)
-    slicestring1 = ("%03d" % slice1)
-    slicestring2 = ("%03d" % slice2)
 
-    os.chdir(datadir)
-    with open("tilespecs/W01_Sec" + slicestring1 + ".json") as data_file1:
-        data1 = json.load(data_file1)
-    with open("tilespecs/W01_Sec" + slicestring2 + ".json") as data_file2:
-        data2 = json.load(data_file2)
-    nummfovs1 = len(data1) / 61
-    nummfovs2 = len(data2) / 61
+    # Read the tilespecs
+    indexed_ts1 = utils.index_tilespec(utils.load_tilespecs(tiles_fname1))
+    indexed_ts2 = utils.index_tilespec(utils.load_tilespecs(tiles_fname2))
 
-    retval = analyze2slices(slice1, slice2, data1, data2, nummfovs1, nummfovs2, conf)
+    num_mfovs1 = len(indexed_ts1)
+    num_mfovs2 = len(indexed_ts2)
 
+    # Match the two sections
+    retval = analyze2slices(indexed_ts1, indexed_ts2, num_mfovs1, num_mfovs2, features_dir1, features_dir2, actual_params)
+
+    # Save the output
     jsonfile = {}
-    jsonfile['tilespec1'] = "file://" + os.getcwd() + "/tilespecs_after_rotations/W01_Sec" + ("%03d" % slice1) + ".json"
-    jsonfile['tilespec2'] = "file://" + os.getcwd() + "/tilespecs_after_rotations/W01_Sec" + ("%03d" % slice2) + ".json"
+    jsonfile['tilespec1'] = tiles_fname1
+    jsonfile['tilespec2'] = tiles_fname2
     jsonfile['matches'] = retval
     jsonfile['runtime'] = time.clock() - starttime
-    os.chdir(outdir)
-    json.dump(jsonfile, open("Prelim_Slice" + str(slice1) + "vs" + str(slice2) + ".json", 'w'), indent=4)
+    with open(out_fname, 'w') as out:
+        json.dump(jsonfile, out, indent=4)
+    print("Done.")
+
+
+def main():
+
+    print(sys.argv)
+    # Command line parser
+    parser = argparse.ArgumentParser(description='Iterates over the mfovs in 2 tilespecs of two sections, computing matches for each overlapping mfov.')
+    parser.add_argument('tiles_file1', metavar='tiles_file1', type=str,
+                        help='the first layer json file containing tilespecs')
+    parser.add_argument('features_dir1', metavar='features_dir1', type=str,
+                        help='the first layer features directory')
+    parser.add_argument('tiles_file2', metavar='tiles_file2', type=str,
+                        help='the second layer json file containing tilespecs')
+    parser.add_argument('features_dir2', metavar='features_dir2', type=str,
+                        help='the second layer features directory')
+    parser.add_argument('-o', '--output_file', type=str,
+                        help='an output correspondent_spec file, that will include the matches between the sections (default: ./matches.json)',
+                        default='./matches.json')
+    parser.add_argument('-c', '--conf_file_name', type=str,
+                        help='the configuration file with the parameters for each step of the alignment process in json format (uses default parameters, if not supplied)',
+                        default=None)
+
+
+    args = parser.parse_args()
+
+    match_layers_sift_features(args.tiles_file1, args.features_dir1,
+        args.tiles_file2, args.features_dir2, args.output_file,
+        conf_fname=args.conf_file_name)
+
+
 
 if __name__ == '__main__':
     main()

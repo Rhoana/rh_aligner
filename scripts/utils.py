@@ -108,3 +108,15 @@ def load_tilespecs(tile_file):
 
     return tilespecs
 
+def index_tilespec(tilespec):
+    """Given a section tilespec returns a dictionary of [mfov][tile_index] to the tile's tilespec"""
+    index = {}
+    for ts in tilespec:
+        #mfov = str(ts["mfov"])
+        mfov = ts["mfov"]
+        if mfov not in index.keys():
+            index[mfov] = {}
+        #index[mfov][str(ts["tile_index"])] = ts
+        index[mfov][ts["tile_index"]] = ts
+    return index
+

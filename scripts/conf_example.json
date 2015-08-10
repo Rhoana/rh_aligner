@@ -17,5 +17,33 @@
         "stepSize" : 0.1,
         "damping" : 0.01,
         "maxEpsilon" : 5
+    },
+    "MatchLayersSiftFeaturesAndFilter" : {
+        "ROD_cutoff" : 0.92,
+        "filter_rate_cutoff" : 0.25,
+        "num_filtered_cutoff" : 50,
+        "max_attempts" : 10,
+        "model_index" : 1,
+        "iterations" : 500,
+        "max_epsilon" : 500,
+        "min_inlier_ratio" : 0,
+        "min_num_inlier" : 7,
+        "max_trust" : 3
+    },
+    "MatchLayersBlockMatching" : {
+        "hex_spacing" : 1500,
+        "scaling" : 0.2,
+        "template_size" : 200,
+        "min_correlation" : 0.2,
+        "maximal_curvature_ratio" : 10,
+        "maximal_ROD" : 0.9
+    },
+    "OptimizeLayersElastic" : {
+       "cross_slice_weight" : 1.0,
+       "cross_slice_winsor" : 50,
+       "intra_slice_weight" : 1.0,
+       "intra_slice_winsor" : 50,
+       "max_iterations" : 5000,
+       "min_stepsize" : 1.0e-20
     }
 }
