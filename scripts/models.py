@@ -86,10 +86,7 @@ class TranslationModel(AbstractAffineModel):
         raise RuntimeError, "Invalid points input"
 
     def apply_special(self, p):
-        toret = []
-        for p_i in p:
-             toret.append(p_i + self.delta)
-        return np.array(toret)
+        return np.atleast_2d(p) + np.asarray(self.delta).reshape((-1, 2))
 
     def to_str(self):
         return "T={}".format(self.delta)
@@ -150,11 +147,10 @@ class RigidModel(AbstractAffineModel):
         raise RuntimeError, "Invalid points input"
 
     def apply_special(self, p):
-        toret = []
-        for p_i in p:
-            toret.append(np.array([self.cos_val * p_i[0] - self.sin_val * p_i[1],
-                                  self.sin_val * p_i[0] + self.cos_val * p_i[1]]) + self.delta)
-        return np.array(toret)
+        pts = np.atleast_2d(p)
+        return np.dot([[self.cos_val, -self.sin_val],
+                       [self.sin_val, self.cos_val]],
+                       pts.T).T + np.asarray(self.delta).reshape((1, 2))
 
     def to_str(self):
         return "R={}, T={}".format(np.arccos(self.cos_val), self.delta)

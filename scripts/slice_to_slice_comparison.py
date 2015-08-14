@@ -57,7 +57,7 @@ def getindexfromnums((mfovnum, imgnum)):
     return (mfovnum - 1) * TILES_PER_MFOV + imgnum - 1
 
 
-
+#@profile
 def load_features(feature_file, tile_ts):
     # Should have the same name as the following: [tilespec base filename]_[img filename].json/.hdf5
     assert(os.path.basename(os.path.splitext(tile_ts["mipmapLevels"]["0"]["imageUrl"])[0]) in feature_file)
@@ -78,20 +78,14 @@ def load_features(feature_file, tile_ts):
     newmodel = models.Transforms.from_tilespec(tile_ts["transforms"][0])
     newallps = newmodel.apply_special(allps)
 
-    allpoints = []
-    allresps = []
-    alldescs = []
-    for pointindex in range(0, len(newallps)):
-        currentocta = int(octas[pointindex]) & 255
-        if currentocta > 128:
-            currentocta -= 255
-        if currentocta == 4 or currentocta == 5:
-            allpoints.append(newallps[pointindex])
-            allresps.append(resps[pointindex])
-            alldescs.append(descs[pointindex])
-    points = np.array(allpoints).reshape((len(allpoints), 2))
-    return (points, allresps, alldescs)
-
+    currentocta = (octas.astype(int) & 0xff)
+    currentocta[currentocta > 127] -= 255
+    mask = (currentocta == 4) | (currentocta == 5)
+    points = newallps[mask, :]
+    resps = resps[mask]
+    descs = descs[mask]
+    return (points, resps, descs)
+    
 
 
 
@@ -113,7 +107,7 @@ def reorienttris(trilist, pointlist):
             trilist[num][0], trilist[num][1] = trilist[num][1], trilist[num][0]
     return
 
-
+#@profile
 def analyzemfov(mfov_ts, features_dir):
     """Returns all the relevant features of the tiles in a single mfov"""
     allpoints = np.array([]).reshape((0, 2))
@@ -133,13 +127,13 @@ def analyzemfov(mfov_ts, features_dir):
         (tempoints, tempresps, tempdescs) = load_features(feature_file, mfov_ts[tile_num])
         # concatentate the results
         allpoints = np.append(allpoints, tempoints, axis=0)
-        allresps += tempresps
-        alldescs += tempdescs
+        allresps.append(tempresps)
+        alldescs.append(tempdescs)
 
     allpoints = np.array(allpoints)
-    return (allpoints, allresps, alldescs)
+    return (allpoints, np.concatenate(allresps), np.vstack(alldescs))
 
-
+#@profile
 def generatematches_cv2(allpoints1, allpoints2, alldescs1, alldescs2, actual_params):
     matcher = cv2.BFMatcher()
     matches = matcher.knnMatch(np.array(alldescs1), np.array(alldescs2), k=2)
@@ -179,7 +173,7 @@ def generatematches_brute(allpoints1, allpoints2, alldescs1, alldescs2, actual_p
     match_points = np.array([bestpoints1, bestpoints2])
     return match_points
 
-
+#@profile
 def analyze2slicesmfovs(mfov1_ts, mfov2_ts, features_dir1, features_dir2, actual_params):
     first_tile1 = mfov1_ts.values()[0]
     first_tile2 = mfov2_ts.values()[0]
@@ -202,7 +196,7 @@ def analyze2slicesmfovs(mfov1_ts, mfov2_ts, features_dir1, features_dir2, actual
         print("Found a model {} (with {} matches) between Sec{}_Mfov{} vs. Sec{}_Mfov{}".format(model.to_str(), filtered_matches.shape[1], first_tile1["layer"], first_tile1["mfov"], first_tile2["layer"], first_tile2["mfov"]))
     return (model, filtered_matches.shape[1], float(filtered_matches.shape[1]) / match_points.shape[1], match_points.shape[1], len(allpoints1), len(allpoints2))
 
-
+#@profile
 def analyze2slices(indexed_ts1, indexed_ts2, nummfovs1, nummfovs2, features_dir1, features_dir2, actual_params):
 
     layer1 = indexed_ts1.values()[0].values()[0]["layer"]
@@ -275,6 +269,7 @@ def analyze2slices(indexed_ts1, indexed_ts2, nummfovs1, nummfovs2, features_dir1
                 break
     return toret
 
+#@profile
 def match_layers_sift_features(tiles_fname1, features_dir1, tiles_fname2, features_dir2, out_fname, conf_fname=None):
     params = utils.conf_from_file(conf_fname, 'MatchLayersSiftFeaturesAndFilter')
     if params is None:
