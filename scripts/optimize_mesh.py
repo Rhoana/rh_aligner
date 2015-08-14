@@ -21,11 +21,13 @@ sys.setrecursionlimit(10000)  # for grad
 class Mesh(object):
     def __init__(self, points):
         # load the mesh
+        self.orig_pts = np.array(points, dtype=FLOAT_TYPE).reshape((-1, 2)).copy()
         self.pts = np.array(points, dtype=FLOAT_TYPE).reshape((-1, 2)).copy()
         center = self.pts.mean(axis=0)
         self.pts -= center
         self.pts *= 1.1
         self.pts += center
+        self.orig_pts = self.pts.copy()
 
         print("# points in base mesh {}".format(self.pts.shape[0]))
 
@@ -94,10 +96,11 @@ def mean_offsets(meshes, links, stop_at_ts, plot=False):
             pylab.scatter(pts1[:, 0], pts1[:, 1])
             pylab.gca().autoscale()
         lens = np.sqrt(((pts1 - pts2) ** 2).sum(axis=1))
+        #print(np.mean(lens), np.min(lens), np.max(lens))
         means.append(np.median(lens))
     return np.mean(means)
 
-def align(pts1, pts2):
+def align_rigid(pts1, pts2):
     # find R,T that bring pts1 to pts2
 
     # convert to column vectors
@@ -112,22 +115,6 @@ def align(pts1, pts2):
 
     # convert to form used for left-multiplying row vectors
     return R.T, T.T
-
-#def affine_align(pts1, pts2, regularization=0):
-#    # find R,T that bring pts1 to pts2
-#
-#    # convert to column vectors
-#    pts1 = pts1.T
-#    pts2 = pts2.T
-#    
-#    m1 = pts1.mean(axis=1, keepdims=True)
-#    m2 = pts2.mean(axis=1, keepdims=True)
-#    U, S, VT = np.linalg.svd(np.dot((pts1 - m1), (pts2 - m2).T) + np.dot(regularization, np.eye((pts1.shape[0], pts2.shape[0]))))
-#    R = np.dot(VT.T, U.T)
-#    T = - np.dot(R, m1) + m2
-#
-#    # convert to form used for left-multiplying row vectors
-#    return R.T, T.T
 
 
 def Haffine_from_points(fp, tp):
@@ -174,10 +161,19 @@ def Haffine_from_points(fp, tp):
     # decondition
     H = np.dot(np.linalg.inv(C2), np.dot(H, C1))
 
-    return H / H[2][2]
+    m = H / H[2][2]
+    return m[:2,:2].T, m[:2, 2] # rotation part (transposed) and translation
 
+def get_transform_matrix(pts1, pts2, type):
+    if type == 1:
+        return align_rigid(pts1, pts2)
+    elif type == 3:
+        return Haffine_from_points(pts1, pts2)
+    else:
+        print("Unsupported transformation model type")
+        return None
 
-def optimize_meshes(meshes, links, conf_dict={}):
+def optimize_meshes_links(meshes, links, conf_dict={}):
     # set default values
     cross_slice_weight = conf_dict.get("cross_slice_weight", 1.0)
     cross_slice_winsor = conf_dict.get("cross_slice_winsor", 20)
@@ -192,6 +188,7 @@ def optimize_meshes(meshes, links, conf_dict={}):
     # mean_offset_threshold = conf_dict.get("mean_offset_threshold", 5)
     # num_threads = conf_dict.get("optimization_threads", 8)
     min_stepsize = conf_dict.get("min_stepsize", 1e-20)
+    assumed_model = conf_dict.get("assumed_model", 3) # 0 - Translation (not supported), 1 - Rigid, 2 - Similarity (not supported), 3 - Affine
 
     # Build internal structural mesh
     # (edge_indices, edge_lengths, face_indices, face_areas)
@@ -201,29 +198,31 @@ def optimize_meshes(meshes, links, conf_dict={}):
     sorted_slices = sorted(meshes.keys())
     for active_ts in sorted_slices[1:]:
         print("Before: {}".format(mean_offsets(meshes, links, active_ts, plot=False)))
-        # rot = 0
-        # trans = 0
+        rot = 0
+        tran = 0
         count = 0
-        all_H = np.zeros((3,3))
+        #all_H = np.zeros((3,3))
         for (ts1, ts2), ((idx1, w1), (idx2, w2)) in links.iteritems():
             if active_ts in (ts1, ts2) and (ts1 <= active_ts) and (ts2 <= active_ts):
                 pts1 = np.einsum('ijk,ij->ik', meshes[ts1].pts[idx1], w1)
                 pts2 = np.einsum('ijk,ij->ik', meshes[ts2].pts[idx2], w2)
                 if ts1 == active_ts:
-                    H = Haffine_from_points(pts1, pts2)
+                    cur_rot, cur_tran = get_transform_matrix(pts1, pts2, assumed_model)
                 else:
-                    H = Haffine_from_points(pts2, pts1)
+                    cur_rot, cur_tran = get_transform_matrix(pts2, pts1, assumed_model)
                 # Average the affine transformation by the number of matches between the two sections
-                all_H += pts1.shape[0] * H
+                rot += pts1.shape[0] * cur_rot
+                tran += pts1.shape[0] * cur_tran
                 count += pts1.shape[0]
+        if count == 0:
+            print("Error: no matches found for section {}.".format(active_ts))
+            sys.exit(1)
         #meshes[active_ts].pts = np.dot(meshes[active_ts].pts, rot / count) + (trans / count)
-        # normalize the affine transformation
-        all_H = all_H * (1.0 / count)
+        # normalize the transformation
+        rot = rot * (1.0 / count)
+        tran = tran * (1.0 / count)
         # transform the points
-        rot = all_H[:2, :2]
-        trans = all_H[:2, 2]
-        meshes[active_ts].pts = np.dot(meshes[active_ts].pts, rot.T) + trans
-        # meshes[active_ts].pts = np.array([np.dot(all_H[:2], pt) for pt in meshes[active_ts].pts])
+        meshes[active_ts].pts = np.dot(meshes[active_ts].pts, rot) + tran
         print("After: {}\n".format(mean_offsets(meshes, links, active_ts, plot=False)))
 
     print("After preopt MO: {}\n".format(mean_offsets(meshes, links, sorted_slices[-1], plot=False)))
@@ -286,34 +285,46 @@ def optimize_meshes(meshes, links, conf_dict={}):
     # Prepare per-layer output
     out_positions = {}
 
-    for tsfile, layerid in tsfile_to_layerid.iteritems():
-        if layerid in present_slices:
-            meshidx = mesh_pt_offsets[layerid]
-            out_positions[tsfile] = [(mesh.pts / mesh.layer_scale).tolist(),
-                                     (all_mesh_pts[meshidx, :] / mesh.layer_scale).tolist()]
-            if "DUMP_LOCATIONS" in os.environ:
-                cPickle.dump([tsfile, out_positions[tsfile]], open("newpos{}.pickle".format(meshidx), "w"))
-        else:
-            out_positions[tsfile] = [(mesh.pts / mesh.layer_scale).tolist(),
-                                     (mesh.pts / mesh.layer_scale).tolist()]
+    for i, ts in enumerate(meshes):
+        out_positions[ts] = [meshes[ts].orig_pts,
+                             meshes[ts].pts]
+        if "DUMP_LOCATIONS" in os.environ:
+            cPickle.dump([ts, out_positions[ts]], open("newpos{}.pickle".format(i), "w"))
+
+#    if tsfile_to_layerid is not None:
+#        for tsfile, layerid in tsfile_to_layerid.iteritems():
+#            if layerid in present_slices:
+#                meshidx = mesh_pt_offsets[layerid]
+#                out_positions[tsfile] = [(mesh.pts / mesh.layer_scale).tolist(),
+#                                         (all_mesh_pts[meshidx, :] / mesh.layer_scale).tolist()]
+#                if "DUMP_LOCATIONS" in os.environ:
+#                    cPickle.dump([tsfile, out_positions[tsfile]], open("newpos{}.pickle".format(meshidx), "w"))
+#            else:
+#                out_positions[tsfile] = [(mesh.pts / mesh.layer_scale).tolist(),
+#                                         (mesh.pts / mesh.layer_scale).tolist()]
 
     return out_positions
 
-
-if __name__ == '__main__':
+def optimize_meshes(match_files_list, conf_dict={}):
     meshes = {}
 
     # extract meshes
-    for match_file in sys.argv[1:-1]:
-        data = json.load(open(match_file))
+    for match_file in match_files_list:
+        data = None
+        with open(match_file, 'r') as f:
+            data = json.load(f)
         if not data["tilespec1"] in meshes:
             meshes[data["tilespec1"]] = Mesh(data["mesh"])
+        if not data["tilespec2"] in meshes:
+            meshes[data["tilespec2"]] = Mesh(data["mesh"])
 
     links = {}
     # extract links
-    for match_file in sys.argv[1:-1]:
+    for match_file in match_files_list:
         print match_file
-        data = json.load(open(match_file))
+        data = None
+        with open(match_file, 'r') as f:
+            data = json.load(f)
         ts1 = data["tilespec1"]
         ts2 = data["tilespec2"]
         pts1 = np.array([p["point1"] for p in data["pointmatches"]])
@@ -324,7 +335,10 @@ if __name__ == '__main__':
         if not data["tilespec1"] in meshes:
             meshes[data["tilespec1"]] = Mesh(data["mesh"])
 
-    new_positions = optimize_meshes(meshes, links)
+    return optimize_meshes_links(meshes, links, conf_dict)
+
+if __name__ == '__main__':
+    new_positions = optimize_meshes(sys.argv[1:-1])
 
     out_file = sys.argv[-1]
     json.dump(new_positions, open(out_file, "w"), indent=1)

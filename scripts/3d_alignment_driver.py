@@ -25,7 +25,7 @@ def main():
     imgdir = conf["driver_args"]["imgdir"]
     outdir = conf["driver_args"]["outdir"]
     conffile = conf["driver_args"]["conffile"]
-    '''
+    #'''
     # Preliminary MFOV Matching
     commands = []
     cmdid = 0
@@ -33,13 +33,14 @@ def main():
         for slice2 in range(slicemin, slicemax + 1):
             if abs(slice1 - slice2) <= numforwardback and slice1 != slice2:
                 cmdid += 1
-                commands.append(("python /home/raahilsha/slice_to_slice_comparison.py " + str(slice1) + " " + str(slice2) + " " + datadir + " " + workdir + " " + conffile, cmdid))
+                commands.append(("python /n/home10/adisuis/Fiji/FijiBento_multibeam/scripts/slice_to_slice_comparison.py " + str(slice1) + " " + str(slice2) + " " + datadir + " " + workdir + " " + conffile, cmdid))
 
     print "Expected Number of Jobs in Prelim Matching: " + str(cmdid)
+    print commands
     pool = multiprocessing.Pool(conf["driver_args"]["numconcurrent"])
     res = pool.map(prelimmatchingworker, commands)
     print "Preliminary MFOV Matching Done"
-    '''
+    #'''
     # Image template Matching
     commands = []
     cmdid = 0
@@ -47,9 +48,10 @@ def main():
         for slice2 in range(slicemin, slicemax + 1):
             if abs(slice1 - slice2) <= numforwardback and slice1 != slice2:
                 cmdid += 1
-                commands.append(("python /home/raahilsha/match_images_between_slices.py " + str(slice1) + " " + str(slice2) + " " + conffile, cmdid))
+                commands.append(("python /n/home10/adisuis/Fiji/FijiBento_multibeam/scripts/match_images_between_slices.py " + str(slice1) + " " + str(slice2) + " " + conffile, cmdid))
 
     print "Expected Number of Jobs in Template Matching: " + str(cmdid)
+    print commands
     pool = multiprocessing.Pool(conf["driver_args"]["numconcurrent"])
     res = pool.map(prelimmatchingworker, commands)
     print "Image Template Matching Done"
