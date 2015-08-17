@@ -113,11 +113,19 @@ def get_closest_index_to_point(point, centers):
     return closest_index
 
 
-def pickrandomnearcenter(choicelist, tilespecs1, tilespecs2):
+def getcenterprecompute(num, precomplist):
+    return precomplist[num - 1]
+
+
+def getdistprecompute(num, precomplist):
+    return precomplist[num - 1]
+
+@profile
+def pickrandomnearcenter(choicelist, tilespecs1, tilespecs2, precompcenters1, precompdists1, avgx, avgy, avgx2, avgy2):
     choices1 = [i[0] for i in choicelist]
-    centers1 = [getcenter(tilespecs1[i]) for i in choices1]
-    (avgx, avgy) = getslicecenter(tilespecs1)
-    dists1 = [1 / distance.euclidean((avgx, avgy), i) for i in centers1]
+    centers1 = [getcenterprecompute(i, precompcenters1) for i in choices1]
+    # (avgx, avgy) = getslicecenter(tilespecs1)
+    dists1 = [getdistprecompute(i, precompdists1) for i in choices1]
     dists1sum = np.sum(dists1)
     dists1 = [i / dists1sum for i in dists1]
     choice1 = np.random.choice(choices1, p = dists1)
@@ -129,7 +137,7 @@ def pickrandomnearcenter(choicelist, tilespecs1, tilespecs2):
 
     choices2 = [i[1] for i in possiblechoicesprelim]
     centers2 = [getcenter(tilespecs2[i]) for i in choices2]
-    (avgx2, avgy2) = getslicecenter(tilespecs2)
+    # (avgx2, avgy2) = getslicecenter(tilespecs2)
     dists2 = [1 / distance.euclidean((avgx2, avgy2), i) for i in centers2]
     dists2sum = np.sum(dists2)
     dists2 = [i / dists2sum for i in dists2]
@@ -253,10 +261,14 @@ def analyze2slices(indexed_ts1, indexed_ts2, nummfovs1, nummfovs2, features_dir1
     for i in range(0, nummfovs1):
         for j in range(0, nummfovs2):
             randomchoices.append((i + 1, j + 1))
+    precompcenters1 = [getcenter(indexed_ts1[i]) for i in range(1, nummfovs1 + 1)]
+    (avgx, avgy) = getslicecenter(indexed_ts1)
+    (avgx2, avgy2) = getslicecenter(indexed_ts2)
+    precompdists1 = [1 / distance.euclidean((avgx, avgy), i) for i in precompcenters1]
 
     while (besttransform is None) and (len(randomchoices) > 0):
         # randind = random.randint(1, len(randomchoices)) - 1
-        randind = pickrandomnearcenter(randomchoices, indexed_ts1, indexed_ts2)
+        randind = pickrandomnearcenter(randomchoices, indexed_ts1, indexed_ts2, precompcenters1, precompdists1, avgx, avgy, avgx2, avgy2)
         mfovcomppicked = randomchoices[randind]
         mfov1, mfov2 = mfovcomppicked
         randomchoices.remove(mfovcomppicked)
