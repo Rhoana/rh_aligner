@@ -20,6 +20,7 @@ import utils
 
 TILES_PER_MFOV = 61
 
+
 def secondlargest(nums):
     largest = -1
     secondlarge = -2
@@ -57,7 +58,7 @@ def getindexfromnums((mfovnum, imgnum)):
     return (mfovnum - 1) * TILES_PER_MFOV + imgnum - 1
 
 
-#@profile
+@profile
 def load_features(feature_file, tile_ts):
     # Should have the same name as the following: [tilespec base filename]_[img filename].json/.hdf5
     assert(os.path.basename(os.path.splitext(tile_ts["mipmapLevels"]["0"]["imageUrl"])[0]) in feature_file)
@@ -85,8 +86,6 @@ def load_features(feature_file, tile_ts):
     resps = resps[mask]
     descs = descs[mask]
     return (points, resps, descs)
-    
-
 
 
 def getcenter(mfov_ts):
@@ -98,6 +97,47 @@ def getcenter(mfov_ts):
     return [xlocsum / nump, ylocsum / nump]
 
 
+def getslicecenter(tilespecs):
+    xlocsum, ylocsum, nump = 0, 0, 0
+    for i in tilespecs:
+        mfov_ts = tilespecs[i]
+        for tile_ts in mfov_ts.values():
+            xlocsum += tile_ts["bbox"][0] + tile_ts["bbox"][1]
+            ylocsum += tile_ts["bbox"][2] + tile_ts["bbox"][3]
+            nump += 2
+    return [xlocsum / nump, ylocsum / nump]
+
+
+def get_closest_index_to_point(point, centers):
+    closest_index = np.argmin([distance.euclidean(point, center) for center in centers])
+    return closest_index
+
+
+def pickrandomnearcenter(choicelist, tilespecs1, tilespecs2):
+    choices1 = [i[0] for i in choicelist]
+    centers1 = [getcenter(tilespecs1[i]) for i in choices1]
+    (avgx, avgy) = getslicecenter(tilespecs1)
+    dists1 = [1 / distance.euclidean((avgx, avgy), i) for i in centers1]
+    dists1sum = np.sum(dists1)
+    dists1 = [i / dists1sum for i in dists1]
+    choice1 = np.random.choice(choices1, p = dists1)
+
+    possiblechoicesprelim = []
+    for i in choicelist:
+        if i[0] == choice1:
+            possiblechoicesprelim.append(i)
+
+    choices2 = [i[1] for i in possiblechoicesprelim]
+    centers2 = [getcenter(tilespecs2[i]) for i in choices2]
+    (avgx2, avgy2) = getslicecenter(tilespecs2)
+    dists2 = [1 / distance.euclidean((avgx2, avgy2), i) for i in centers2]
+    dists2sum = np.sum(dists2)
+    dists2 = [i / dists2sum for i in dists2]
+    choice2 = np.random.choice(choices2, p = dists2)
+    finalchoice = (choice1, choice2)
+    return [i for i in range(len(choicelist)) if choicelist[i] == finalchoice][0]
+
+
 def reorienttris(trilist, pointlist):
     for num in range(0, trilist.shape[0]):
         v0 = np.array(pointlist[trilist[num][0]])
@@ -107,7 +147,7 @@ def reorienttris(trilist, pointlist):
             trilist[num][0], trilist[num][1] = trilist[num][1], trilist[num][0]
     return
 
-#@profile
+@profile
 def analyzemfov(mfov_ts, features_dir):
     """Returns all the relevant features of the tiles in a single mfov"""
     allpoints = np.array([]).reshape((0, 2))
@@ -125,15 +165,15 @@ def analyzemfov(mfov_ts, features_dir):
         # Get the correct tile tilespec from the section tilespec (convert to int to remove leading zeros)
         tile_num = int(feature_file.split('sifts_')[1].split('_')[2])
         (tempoints, tempresps, tempdescs) = load_features(feature_file, mfov_ts[tile_num])
-        # concatentate the results
-        allpoints = np.append(allpoints, tempoints, axis=0)
-        allresps.append(tempresps)
-        alldescs.append(tempdescs)
-
+        if type(tempdescs) is not list:
+            # concatentate the results
+            allpoints = np.append(allpoints, tempoints, axis=0)
+            allresps.append(tempresps)
+            alldescs.append(tempdescs)
     allpoints = np.array(allpoints)
     return (allpoints, np.concatenate(allresps), np.vstack(alldescs))
 
-#@profile
+
 def generatematches_cv2(allpoints1, allpoints2, alldescs1, alldescs2, actual_params):
     matcher = cv2.BFMatcher()
     matches = matcher.knnMatch(np.array(alldescs1), np.array(alldescs2), k=2)
@@ -173,7 +213,7 @@ def generatematches_brute(allpoints1, allpoints2, alldescs1, alldescs2, actual_p
     match_points = np.array([bestpoints1, bestpoints2])
     return match_points
 
-#@profile
+@profile
 def analyze2slicesmfovs(mfov1_ts, mfov2_ts, features_dir1, features_dir2, actual_params):
     first_tile1 = mfov1_ts.values()[0]
     first_tile2 = mfov2_ts.values()[0]
@@ -196,9 +236,8 @@ def analyze2slicesmfovs(mfov1_ts, mfov2_ts, features_dir1, features_dir2, actual
         print("Found a model {} (with {} matches) between Sec{}_Mfov{} vs. Sec{}_Mfov{}".format(model.to_str(), filtered_matches.shape[1], first_tile1["layer"], first_tile1["mfov"], first_tile2["layer"], first_tile2["mfov"]))
     return (model, filtered_matches.shape[1], float(filtered_matches.shape[1]) / match_points.shape[1], match_points.shape[1], len(allpoints1), len(allpoints2))
 
-#@profile
+@profile
 def analyze2slices(indexed_ts1, indexed_ts2, nummfovs1, nummfovs2, features_dir1, features_dir2, actual_params):
-
     layer1 = indexed_ts1.values()[0].values()[0]["layer"]
     layer2 = indexed_ts2.values()[0].values()[0]["layer"]
     toret = []
@@ -216,7 +255,8 @@ def analyze2slices(indexed_ts1, indexed_ts2, nummfovs1, nummfovs2, features_dir1
             randomchoices.append((i + 1, j + 1))
 
     while (besttransform is None) and (len(randomchoices) > 0):
-        randind = random.randint(1, len(randomchoices)) - 1
+        # randind = random.randint(1, len(randomchoices)) - 1
+        randind = pickrandomnearcenter(randomchoices, indexed_ts1, indexed_ts2)
         mfovcomppicked = randomchoices[randind]
         mfov1, mfov2 = mfovcomppicked
         randomchoices.remove(mfovcomppicked)
@@ -269,7 +309,7 @@ def analyze2slices(indexed_ts1, indexed_ts2, nummfovs1, nummfovs2, features_dir1
                 break
     return toret
 
-#@profile
+
 def match_layers_sift_features(tiles_fname1, features_dir1, tiles_fname2, features_dir2, out_fname, conf_fname=None):
     params = utils.conf_from_file(conf_fname, 'MatchLayersSiftFeaturesAndFilter')
     if params is None:
@@ -315,7 +355,6 @@ def match_layers_sift_features(tiles_fname1, features_dir1, tiles_fname2, featur
 
 
 def main():
-
     print(sys.argv)
     # Command line parser
     parser = argparse.ArgumentParser(description='Iterates over the mfovs in 2 tilespecs of two sections, computing matches for each overlapping mfov.')
@@ -334,13 +373,11 @@ def main():
                         help='the configuration file with the parameters for each step of the alignment process in json format (uses default parameters, if not supplied)',
                         default=None)
 
-
     args = parser.parse_args()
 
     match_layers_sift_features(args.tiles_file1, args.features_dir1,
-        args.tiles_file2, args.features_dir2, args.output_file,
-        conf_fname=args.conf_file_name)
-
+                               args.tiles_file2, args.features_dir2, args.output_file,
+                               conf_fname=args.conf_file_name)
 
 
 if __name__ == '__main__':
