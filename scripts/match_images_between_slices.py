@@ -8,6 +8,7 @@ import json
 import math
 import sys
 from scipy.spatial import distance
+from scipy import spatial
 import cv2
 import time
 import glob
@@ -82,8 +83,11 @@ def get_tile_centers_from_json(ts):
         tiles_centers.append(np.array([center_x, center_y]))
     return tiles_centers
 
-def get_closest_index_to_point(point, centers):
-    closest_index = np.argmin([distance.euclidean(point, center) for center in centers])
+@profile
+def get_closest_index_to_point(point, centerstree):
+    # closest_index = np.argmin([distance.euclidean(point, center) for center in centers])
+    # tree = spatial.KDTree(centerstree)
+    distanc, closest_index = centerstree.query(point)
     return closest_index
     
 
@@ -127,6 +131,7 @@ def is_point_in_img(tile_ts, point):
         return True
     return False
 
+@profile
 def get_images_from_indices_and_point(ts, img_indices, point):
     """Returns all the images at the given img_indices that are overlapping with the given point"""
     img_arr = []
@@ -198,7 +203,7 @@ def generatehexagonalgrid(boundingbox, spacing):
 
 # <codecell>
 
-
+@profile
 def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, out_fname, conf_fname=None):
 
     params = utils.conf_from_file(conf_fname, 'MatchLayersBlockMatching')
@@ -206,7 +211,7 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
         params = {}
 
     # Parameters for the matching
-    hex_spacing = params.get("hex_spacing", 1500)
+    hex_spacing = params.get("hexspacing", 500)
     scaling = params.get("scaling", 0.2)
     template_size = params.get("template_size", 200)
 
@@ -242,6 +247,7 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
 
     # Get the tiles centers for each section
     tile_centers1 = get_tile_centers_from_json(ts1)
+    tile_centers1tree = spatial.KDTree(tile_centers1)
     tile_centers2 = get_tile_centers_from_json(ts2)
     mfov_centers1 = get_mfov_centers_from_json(indexed_ts1)
 
@@ -301,7 +307,7 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
         if i % 1000 == 0 and i > 0:
             print(i)
         # Find the tile image where the point from the hexagonal is in the first section
-        img1_ind = get_closest_index_to_point(hexgr[i], tile_centers1)
+        img1_ind = get_closest_index_to_point(hexgr[i], tile_centers1tree)
         if img1_ind is None:
             continue
         if not is_point_in_img(ts1[img1_ind], hexgr[i]):

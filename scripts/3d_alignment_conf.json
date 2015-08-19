@@ -19,7 +19,7 @@
         "trytime" : 10
     },
     "template_matching_args" : {
-        "hexspacing" : 1500,
+        "hexspacing" : 500,
         "scaling" : 0.2,
         "templatesize" : 200
     },
