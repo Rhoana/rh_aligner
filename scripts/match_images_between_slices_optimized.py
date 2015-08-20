@@ -12,6 +12,8 @@ import cv2
 import argparse
 import utils
 from bounding_box import BoundingBox
+import models
+import PMCC_filter_example
 import pyximport
 pyximport.install()
 import cv_wrap_module
@@ -223,7 +225,7 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
     cv_wrap_module.setNumThreads(1)
 
     # Parameters for the matching
-    hex_spacing = params.get("hexspacing", 2500)
+    hex_spacing = params.get("hexspacing", 1500)
     scaling = params.get("scaling", 0.2)
     template_size = params.get("template_size", 200)
     template_size *= scaling
@@ -312,6 +314,58 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
 
     # Do PMCC matching based on the preliminary dictionary
     point_matches = []
+
+    for img1_ind in prelimdict.keys():
+        # Read the first image
+        img1_url = ts1[img1_ind]["mipmapLevels"]["0"]["imageUrl"]
+        img1_url = img1_url.replace("file://", "")
+        img1 = cv2.imread(img1_url, 0)
+        img1_resized = cv2.resize(img1, (0, 0), fx=scaling, fy=scaling)
+        img1_offset = get_image_top_left(ts1, img1_ind)
+        expected_transform = find_best_mfov_transformation(ts1[img1_ind]["mfov"], best_transformations, mfov_centers1)
+
+        # Loop over all expected img2 indices
+        img2_inds = prelimdict[img1_ind].keys()
+        img2s = get_images_from_indices_and_point(ts2, img2_inds, expected_new_center)
+
+        for (img2, img2_ind) in img2s:
+            # Resize and find information on the second image
+            img2_resized = cv2.resize(img2, (0, 0), fx=scaling/1, fy=scaling/1)
+            img2_offset = get_image_top_left(ts2, img2_ind)
+
+            for i in prelimdict[img1_ind][img2_ind]:
+                # Get the template for the first Image
+                img1_template = get_template_from_img_and_point(img1_resized, template_size, (np.array(hexgr[i]) - img1_offset) * scaling)
+                if (img1_template is None):
+                    continue
+
+                # Find the template coordinates and rotate the template to match preliminary transformation
+                chosen_template, startx, starty, not_on_mesh = img1_template
+                w, h = chosen_template.shape
+                center_point1 = np.array([startx + w / 2, starty + h / 2]) / scaling + img1_offset
+                expected_new_center = np.dot(expected_transform, np.append(center_point1, [1]))[0:2]
+                ro, col = chosen_template.shape
+                rad2deg = -180 / math.pi
+                # TODO - assumes only rigid transformation, should be more general
+                angle_of_rot = rad2deg * math.atan2(expected_transform[1][0], expected_transform[0][0])
+                rotation_matrix = cv2.getRotationMatrix2D((h / 2, w / 2), angle_of_rot, 1)
+                rotated_temp1 = cv2.warpAffine(chosen_template, rotation_matrix, (col, ro))
+                xaa = int(w / 2.9)
+                rotated_and_cropped_temp1 = rotated_temp1[(w / 2 - xaa):(w / 2 + xaa), (h / 2 - xaa):(h / 2 + xaa)]
+                neww, newh = rotated_and_cropped_temp1.shape
+                # TODO - assumes a single transformation, but there might be more
+                img1_model = models.Transforms.from_tilespec(ts1[img1_ind]["transforms"][0])
+                img1_center_point = img1_model.apply(np.array([starty + h / 2, startx + w / 2]) / scaling) # + imgoffset1
+
+                # Do template matching
+                result, reason = PMCC_filter_example.PMCC_match(img2_resized, rotated_and_cropped_temp1, min_correlation=min_corr, maximal_curvature_ratio=max_curvature, maximal_ROD=max_rod)
+                if result is not None:
+                    reasonx, reasony = reason
+                    # TODO - assumes a single transformation, but there might be more
+                    img2_model = models.Transforms.from_tilespec(ts2[img2_ind]["transforms"][0])
+                    img2_center_point = img2_model.apply(np.array([reasony + newh / 2, reasonx + neww / 2]) / scaling) # + imgoffset2
+                    point_matches.append((img1_center_point, img2_center_point, not_on_mesh))
+
 
     # Save the output
     print("Saving output file")
