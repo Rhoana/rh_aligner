@@ -14,9 +14,10 @@ import utils
 from bounding_box import BoundingBox
 import models
 import PMCC_filter_example
+import multiprocessing as mp
 import pyximport
-import cv_wrap_module
 pyximport.install()
+import cv_wrap_module
 datadir, imgdir, workdir, outdir = os.getcwd(), os.getcwd(), os.getcwd(), os.getcwd()
 
 
@@ -119,6 +120,17 @@ def get_images_from_indices_and_point(ts, img_indices, point):
     return img_arr
 
 
+def get_images_from_indices(ts, img_indices):
+    """Returns all the images at the given img_indices that are overlapping with the given point"""
+    img_arr = []
+    for img_ind in img_indices:
+        img_url = ts[img_ind]["mipmapLevels"]["0"]["imageUrl"]
+        img_url = img_url.replace("file://", "")
+        img = cv2.imread(img_url, 0)
+        img_arr.append((img, img_ind))
+    return img_arr
+
+
 def get_images_indices_from_indices_and_point(ts, img_indices, point):
     """Returns all the images at the given img_indices that are overlapping with the given point"""
     img_arr = []
@@ -216,6 +228,52 @@ def generatehexagonalgrid(boundingbox, spacing):
     return pointsret
 
 
+def perform_pmcc(img2, img2_ind, ts1, ts2, scaling, template_size, img1_offset, img1_resized, img1_ind, expected_transform, prelimdict, min_corr, max_curvature, max_rod):
+    # Resize and find information on the second image
+    img2_resized = cv2.resize(img2, (0, 0), fx=scaling/1, fy=scaling/1)
+    # img2_offset = get_image_top_left(ts2, img2_ind) - UNUSED
+    point_matches = []
+
+    for i in prelimdict[img1_ind][img2_ind]:
+        # Get the template for the first Image
+        img1_template = get_template_from_img_and_point(img1_resized, template_size, (np.array(i) - img1_offset) * scaling)
+        if (img1_template is None):
+            continue
+
+        # Find the template coordinates and rotate the template to match preliminary transformation
+        chosen_template, startx, starty, not_on_mesh = img1_template
+        w, h = chosen_template.shape
+        # center_point1 = np.array([startx + w / 2, starty + h / 2]) / scaling + img1_offset - UNUSED
+        # expected_new_center = np.dot(expected_transform, np.append(center_point1, [1]))[0:2] - UNUSED
+        ro, col = chosen_template.shape
+        rad2deg = -180 / math.pi
+        # TODO - assumes only rigid transformation, should be more general
+        angle_of_rot = rad2deg * math.atan2(expected_transform[1][0], expected_transform[0][0])
+        rotation_matrix = cv2.getRotationMatrix2D((h / 2, w / 2), angle_of_rot, 1)
+        rotated_temp1 = cv2.warpAffine(chosen_template, rotation_matrix, (col, ro))
+        xaa = int(w / 2.9)
+        rotated_and_cropped_temp1 = rotated_temp1[(w / 2 - xaa):(w / 2 + xaa), (h / 2 - xaa):(h / 2 + xaa)]
+        neww, newh = rotated_and_cropped_temp1.shape
+        # TODO - assumes a single transformation, but there might be more
+        img1_model = models.Transforms.from_tilespec(ts1[img1_ind]["transforms"][0])
+        img1_center_point = img1_model.apply(np.array([starty + h / 2, startx + w / 2]) / scaling)  # + imgoffset1
+
+        # Do template matching
+        result, reason = PMCC_filter_example.PMCC_match(img2_resized, rotated_and_cropped_temp1, min_correlation=min_corr, maximal_curvature_ratio=max_curvature, maximal_ROD=max_rod)
+        if result is not None:
+            reasonx, reasony = reason
+            # TODO - assumes a single transformation, but there might be more
+            img2_model = models.Transforms.from_tilespec(ts2[img2_ind]["transforms"][0])
+            img2_center_point = img2_model.apply(np.array([reasony + newh / 2, reasonx + neww / 2]) / scaling)  # + imgoffset2
+            point_matches.append((img1_center_point, img2_center_point, not_on_mesh))
+    return point_matches
+
+
+def perform_pmcc_unwrapper(arg):
+    img2, img2_ind, ts1, ts2, scaling, template_size, img1_offset, img1_resized, img1_ind, expected_transform, prelimdict, min_corr, max_curvature, max_rod = arg
+    return perform_pmcc(img2, img2_ind, ts1, ts2, scaling, template_size, img1_offset, img1_resized, img1_ind, expected_transform, prelimdict, min_corr, max_curvature, max_rod)
+
+
 def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, out_fname, conf_fname=None):
     starttime = time.clock()
     print("Loading tilespecs, parameters, and other preliminary information")
@@ -279,8 +337,6 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
     print("Starting finding preliminary matches for each point")
     prelimdict = {}
     for i in range(len(hexgr)):
-        if i % 1000 == 0 and i > 0:
-            print(i)
         # Find the tile image where the point from the hexagonal is in the first section
         img1_ind = get_closest_index_to_point(hexgr[i], tile_centers1tree)
         if img1_ind is None:
@@ -314,9 +370,10 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
                 newdi[img2_ind].append(hexgr[i])
                 prelimdict[img1_ind] = newdi
 
-    # Do PMCC matching based on the preliminary dictionary
+    # Generate arguments for PMCC matchingf
+    print("Generating PMCC Matching Arguments")
+    commandlist = []
     point_matches = []
-
     for img1_ind in prelimdict.keys():
         # Read the first image
         img1_url = ts1[img1_ind]["mipmapLevels"]["0"]["imageUrl"]
@@ -328,45 +385,16 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
 
         # Loop over all expected img2 indices
         img2_inds = prelimdict[img1_ind].keys()
-        img2s = get_images_from_indices_and_point(ts2, img2_inds, expected_new_center)
+        img2s = get_images_from_indices(ts2, img2_inds)
 
         for (img2, img2_ind) in img2s:
-            # Resize and find information on the second image
-            img2_resized = cv2.resize(img2, (0, 0), fx=scaling/1, fy=scaling/1)
-            img2_offset = get_image_top_left(ts2, img2_ind)
-
-            for i in prelimdict[img1_ind][img2_ind]:
-                # Get the template for the first Image
-                img1_template = get_template_from_img_and_point(img1_resized, template_size, (np.array(hexgr[i]) - img1_offset) * scaling)
-                if (img1_template is None):
-                    continue
-
-                # Find the template coordinates and rotate the template to match preliminary transformation
-                chosen_template, startx, starty, not_on_mesh = img1_template
-                w, h = chosen_template.shape
-                center_point1 = np.array([startx + w / 2, starty + h / 2]) / scaling + img1_offset
-                expected_new_center = np.dot(expected_transform, np.append(center_point1, [1]))[0:2]
-                ro, col = chosen_template.shape
-                rad2deg = -180 / math.pi
-                # TODO - assumes only rigid transformation, should be more general
-                angle_of_rot = rad2deg * math.atan2(expected_transform[1][0], expected_transform[0][0])
-                rotation_matrix = cv2.getRotationMatrix2D((h / 2, w / 2), angle_of_rot, 1)
-                rotated_temp1 = cv2.warpAffine(chosen_template, rotation_matrix, (col, ro))
-                xaa = int(w / 2.9)
-                rotated_and_cropped_temp1 = rotated_temp1[(w / 2 - xaa):(w / 2 + xaa), (h / 2 - xaa):(h / 2 + xaa)]
-                neww, newh = rotated_and_cropped_temp1.shape
-                # TODO - assumes a single transformation, but there might be more
-                img1_model = models.Transforms.from_tilespec(ts1[img1_ind]["transforms"][0])
-                img1_center_point = img1_model.apply(np.array([starty + h / 2, startx + w / 2]) / scaling)  # + imgoffset1
-
-                # Do template matching
-                result, reason = PMCC_filter_example.PMCC_match(img2_resized, rotated_and_cropped_temp1, min_correlation=min_corr, maximal_curvature_ratio=max_curvature, maximal_ROD=max_rod)
-                if result is not None:
-                    reasonx, reasony = reason
-                    # TODO - assumes a single transformation, but there might be more
-                    img2_model = models.Transforms.from_tilespec(ts2[img2_ind]["transforms"][0])
-                    img2_center_point = img2_model.apply(np.array([reasony + newh / 2, reasonx + neww / 2]) / scaling)  # + imgoffset2
-                    point_matches.append((img1_center_point, img2_center_point, not_on_mesh))
+            commandlist.append((img2, img2_ind, ts1, ts2, scaling, template_size, img1_offset, img1_resized, img1_ind, expected_transform, prelimdict, min_corr, max_curvature, max_rod))
+    
+    # Execute PMCC Matching
+    print("Performing PMCC Matching")
+    pool = mp.Pool(processes=4)
+    results = pool.map(perform_pmcc_unwrapper, commandlist)
+    point_matches = [item for sublist in results for item in sublist]
 
     # Save the output
     print("Saving output file")
