@@ -120,7 +120,7 @@ def getcenterprecompute(num, precomplist):
 def getdistprecompute(num, precomplist):
     return precomplist[num - 1]
 
-@profile
+
 def pickrandomnearcenter(choicelist, tilespecs1, tilespecs2, precompcenters1, precompdists1, avgx, avgy, avgx2, avgy2):
     choices1 = [i[0] for i in choicelist]
     centers1 = [getcenterprecompute(i, precompcenters1) for i in choices1]
@@ -128,7 +128,7 @@ def pickrandomnearcenter(choicelist, tilespecs1, tilespecs2, precompcenters1, pr
     dists1 = [getdistprecompute(i, precompdists1) for i in choices1]
     dists1sum = np.sum(dists1)
     dists1 = [i / dists1sum for i in dists1]
-    choice1 = np.random.choice(choices1, p = dists1)
+    choice1 = np.random.choice(choices1, p=dists1)
 
     possiblechoicesprelim = []
     for i in choicelist:
@@ -141,7 +141,7 @@ def pickrandomnearcenter(choicelist, tilespecs1, tilespecs2, precompcenters1, pr
     dists2 = [1 / distance.euclidean((avgx2, avgy2), i) for i in centers2]
     dists2sum = np.sum(dists2)
     dists2 = [i / dists2sum for i in dists2]
-    choice2 = np.random.choice(choices2, p = dists2)
+    choice2 = np.random.choice(choices2, p=dists2)
     finalchoice = (choice1, choice2)
     return [i for i in range(len(choicelist)) if choicelist[i] == finalchoice][0]
 
@@ -155,7 +155,7 @@ def reorienttris(trilist, pointlist):
             trilist[num][0], trilist[num][1] = trilist[num][1], trilist[num][0]
     return
 
-@profile
+
 def analyzemfov(mfov_ts, features_dir):
     """Returns all the relevant features of the tiles in a single mfov"""
     allpoints = np.array([]).reshape((0, 2))
@@ -221,7 +221,7 @@ def generatematches_brute(allpoints1, allpoints2, alldescs1, alldescs2, actual_p
     match_points = np.array([bestpoints1, bestpoints2])
     return match_points
 
-@profile
+
 def analyze2slicesmfovs(mfov1_ts, mfov2_ts, features_dir1, features_dir2, actual_params):
     first_tile1 = mfov1_ts.values()[0]
     first_tile2 = mfov2_ts.values()[0]
@@ -244,7 +244,7 @@ def analyze2slicesmfovs(mfov1_ts, mfov2_ts, features_dir1, features_dir2, actual
         print("Found a model {} (with {} matches) between Sec{}_Mfov{} vs. Sec{}_Mfov{}".format(model.to_str(), filtered_matches.shape[1], first_tile1["layer"], first_tile1["mfov"], first_tile2["layer"], first_tile2["mfov"]))
     return (model, filtered_matches.shape[1], float(filtered_matches.shape[1]) / match_points.shape[1], match_points.shape[1], len(allpoints1), len(allpoints2))
 
-@profile
+
 def analyze2slices(indexed_ts1, indexed_ts2, nummfovs1, nummfovs2, features_dir1, features_dir2, actual_params):
     layer1 = indexed_ts1.values()[0].values()[0]["layer"]
     layer2 = indexed_ts2.values()[0].values()[0]["layer"]

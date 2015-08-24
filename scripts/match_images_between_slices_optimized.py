@@ -388,7 +388,7 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
     point_matches = []
     for img1_ind in prelimdict.keys():
         commandlist.append((ts1, ts2, template_size, scaling, img1_ind, best_transformations, mfov_centers1, prelimdict, min_corr, max_curvature, max_rod))
-    
+
     # Execute PMCC Matching
     print("Performing PMCC Matching")
     pool = mp.Pool(processes=4)

@@ -21,11 +21,11 @@ from bounding_box import BoundingBox
 datadir, imgdir, workdir, outdir = os.getcwd(), os.getcwd(), os.getcwd(), os.getcwd()
 
 
-
 def get_image_top_left(ts, tile_index):
     xloc = ts[tile_index]["bbox"][0]
     yloc = ts[tile_index]["bbox"][2]
     return [xloc, yloc]
+
 
 def get_mfov_centers_from_json(indexed_ts):
     mfov_centers = {}
@@ -41,7 +41,6 @@ def get_mfov_centers_from_json(indexed_ts):
         mfov_centers[mfov] = np.array([(min_x / 2.0 + max_x / 2.0, min_y / 2.0 + max_y / 2.0)])
     return mfov_centers
 
-    
 
 def get_best_transformations(pre_mfov_matches):
     """Returns a dictionary that maps an mfov number to a matrix that best describes the transformation to the other section.
@@ -50,6 +49,7 @@ def get_best_transformations(pre_mfov_matches):
     for m in pre_mfov_matches["matches"]:
         transforms[m["mfov1"]] = m["transformation"]["matrix"]
     return transforms
+
 
 def find_best_mfov_transformation(mfov, best_transformations, mfov_centers):
     """Returns a matrix that represnets the best transformation for a given mfov to the other section"""
@@ -64,18 +64,17 @@ def find_best_mfov_transformation(mfov, best_transformations, mfov_centers):
     # ** missing mfov matches occur and the "best transformation" can change when the centers are updated
     # best_transformations[mfov] = best_transformations[trans_keys[closest_mfov_index]]
     return best_transformations[trans_keys[closest_mfov_index]]
-    
-    
+
 
 def get_tile_centers_from_json(ts):
-#    indexed_tile_centers = {}
-#    for mfov_key in indexed_ts.keys():
-#        indexed_tile_centers[mfov_key] = {}
-#        for tile_key in indexed_ts[mfov_key].keys():
-#            center_x = (data[i]["bbox"][0] + data[i]["bbox"][1]) / 2
-#            center_y = (data[i]["bbox"][2] + data[i]["bbox"][3]) / 2
-#            indexed_tile_centers[mfov_key][tile_key] = [center_x, center_y]
-#    return indexed_tile_centers
+    # indexed_tile_centers = {}
+    # for mfov_key in indexed_ts.keys():
+    #     indexed_tile_centers[mfov_key] = {}
+    #     for tile_key in indexed_ts[mfov_key].keys():
+    #         center_x = (data[i]["bbox"][0] + data[i]["bbox"][1]) / 2
+    #         center_y = (data[i]["bbox"][2] + data[i]["bbox"][3]) / 2
+    #         indexed_tile_centers[mfov_key][tile_key] = [center_x, center_y]
+    # return indexed_tile_centers
     tiles_centers = []
     for tile in ts:
         center_x = (tile["bbox"][0] + tile["bbox"][1]) / 2.0
@@ -89,7 +88,7 @@ def get_closest_index_to_point(point, centerstree):
     # tree = spatial.KDTree(centerstree)
     distanc, closest_index = centerstree.query(point)
     return closest_index
-    
+
 
 def get_img_matches(ts1, tile_centers1, ts2, tile_centers2, best_transformations, mfov_centers1):
     """For each tile in section1 find the closest 10 tiles in the second image (after applying the preliminary transformation)"""
@@ -106,8 +105,8 @@ def get_img_matches(ts1, tile_centers1, ts2, tile_centers2, best_transformations
         distances_to_sec2_mfovs = [np.linalg.norm(expected_new_center - tile_center) for tile_center in tile_centers2]
         closest_indices = np.array(distances_to_sec2_mfovs).argsort()[0:10]
         img_matches.append(closest_indices)
-        
-        
+
+
 #    for mfovnum in range(1, nummfovs1 + 1):
 #        for imgnum in range(1, 62):
 #            jsonindex = (mfovnum - 1) * 61 + imgnum - 1
@@ -120,6 +119,7 @@ def get_img_matches(ts1, tile_centers1, ts2, tile_centers2, best_transformations
 #            checkindices = np.array(distances).argsort()[0:10]
 #            img_matches.append((jsonindex, checkindices))
     return img_matches
+
 
 def is_point_in_img(tile_ts, point):
     """Returns True if the given point lies inside the image as denoted by the given tile_tilespec"""
@@ -142,7 +142,6 @@ def get_images_from_indices_and_point(ts, img_indices, point):
             img = cv2.imread(img_url, 0)
             img_arr.append((img, img_ind))
     return img_arr
-
 
 
 def get_template_from_img_and_point(img1resized, template_size, centerpoint):
@@ -199,9 +198,6 @@ def generatehexagonalgrid(boundingbox, spacing):
                 continue
             pointsret.append([int(xpos), int(ypos)])
     return pointsret
-
-
-# <codecell>
 
 
 def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, out_fname, conf_fname=None):
@@ -272,8 +268,6 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
             json.dump(out_jsonfile, out, indent=4)
         return
 
-
-
 #    global datadir
 #    global imgdir
 #    global workdir
@@ -326,10 +320,10 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
 
         # Find the template coordinates
         chosen_template, startx, starty, not_on_mesh = img1_template
-        #print("img1_template starts at: {}, {} and original point should have been {}".format(startx, starty, np.array(hexgr[i]) - img1_offset))
+        # print("img1_template starts at: {}, {} and original point should have been {}".format(startx, starty, np.array(hexgr[i]) - img1_offset))
         w, h = chosen_template.shape
         center_point1 = np.array([startx + w / 2, starty + h / 2]) / scaling + img1_offset
-        #print("center_point1", center_point1)
+        # print("center_point1", center_point1)
         expected_new_center = np.dot(expected_transform, np.append(center_point1, [1]))[0:2]
 
         ro, col = chosen_template.shape
@@ -344,16 +338,16 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
 
         # TODO - assumes a single transformation, but there might be more
         img1_model = models.Transforms.from_tilespec(ts1[img1_ind]["transforms"][0])
-        img1_center_point = img1_model.apply(np.array([starty + h / 2, startx + w / 2]) / scaling) # + imgoffset1
+        img1_center_point = img1_model.apply(np.array([starty + h / 2, startx + w / 2]) / scaling)  # + imgoffset1
 
         # Get the images from section 2 around the expected matching location
-        #(img1ind, img2inds) = imgmatches[findindwithinmatches(imgmatches, img1ind)]
+        # (img1ind, img2inds) = imgmatches[findindwithinmatches(imgmatches, img1ind)]
         img2_inds = img_matches[img1_ind]
         img2s = get_images_from_indices_and_point(ts2, img2_inds, expected_new_center)
         actual_matches_num += 1
         for (img2, img2_ind) in img2s:
             img2_resized = cv2.resize(img2, (0, 0), fx=scaling/1, fy=scaling/1)
-            #imgoffset2 = get_image_top_left(slice2, img2mfov, img2num, data2)
+            # imgoffset2 = get_image_top_left(slice2, img2mfov, img2num, data2)
             img2_offset = get_image_top_left(ts2, img2_ind)
 
             # template1topleft = np.array([startx, starty]) / scaling + imgoffset1
@@ -364,7 +358,7 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
                 # img2topleft = np.array(reason) / scaling + imgoffset2
                 # TODO - assumes a single transformation, but there might be more
                 img2_model = models.Transforms.from_tilespec(ts2[img2_ind]["transforms"][0])
-                img2_center_point = img2_model.apply(np.array([reasony + newh / 2, reasonx + neww / 2]) / scaling) # + imgoffset2
+                img2_center_point = img2_model.apply(np.array([reasony + newh / 2, reasonx + neww / 2]) / scaling)  # + imgoffset2
                 point_matches.append((img1_center_point, img2_center_point, not_on_mesh))
                 if debug_save_matches:
                     debug_out_fname1 = os.path.join(debug_dir, "debug_match_sec1{}-{}_sec2{}-{}_image1.png".format(hexgr[i][0], hexgr[i][1], reasonx, reasony))
@@ -412,7 +406,6 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
 
 
 def main():
-
     print(sys.argv)
     # Command line parser
     parser = argparse.ArgumentParser(description='Given two tilespecs of two sections, and a preliminary matches list, generates a grid the image, and performs block matching (with PMCC filtering).')
@@ -429,12 +422,11 @@ def main():
                         help='the configuration file with the parameters for each step of the alignment process in json format (uses default parameters, if not supplied)',
                         default=None)
 
-
     args = parser.parse_args()
 
     match_layers_pmcc_matching(args.tiles_file1, args.tiles_file2,
-        args.pre_matches_file, args.output_file,
-        conf_fname=args.conf_file_name)
+                               args.pre_matches_file, args.output_file,
+                               conf_fname=args.conf_file_name)
 
 if __name__ == '__main__':
     main()
