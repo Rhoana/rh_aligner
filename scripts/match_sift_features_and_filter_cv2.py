@@ -1,17 +1,13 @@
-import sys
-import os
-import glob
 import argparse
 from bounding_box import BoundingBox
 import json
-import itertools
 import utils
 import cv2
 import h5py
 import numpy as np
-import copy
 from models import Transforms
 import ransac
+import multiprocessing as mp
 
 # common functions
 
@@ -21,10 +17,11 @@ def load_features_hdf5(features_file):
     with h5py.File(features_file, 'r') as m:
         imageUrl = str(m["imageUrl"][...])
         locations = m["pts/locations"][...]
-        responses = None#m["pts/responses"][...]
-        scales = None#m["pts/scales"][...]
+        responses = None  # m["pts/responses"][...]
+        scales = None  # m["pts/scales"][...]
         descs = m["descs"][...]
     return imageUrl, locations, responses, scales, descs
+
 
 def match_features(descs1, descs2, rod):
     matcher = cv2.BFMatcher()
@@ -32,11 +29,12 @@ def match_features(descs1, descs2, rod):
 
     # Apply ratio test
     good = []
-    for m,n in matches:
+    for m, n in matches:
         if m.distance < rod*n.distance:
             good.append([m])
 
     return good
+
 
 def get_tilespec_transformation(tilespec):
     transforms = tilespec["transforms"]
@@ -44,46 +42,31 @@ def get_tilespec_transformation(tilespec):
     t = Transforms.from_tilespec(transforms[0])
     return t
 
+
 def save_empty_matches_file(out_fname, image_url1, image_url2):
     out_data = [{
-        "mipmapLevel" : 0,
-        "url1" : image_url1,
-        "url2" : image_url2, 
-        "correspondencePointPairs" : [],
-        "model" : []
+        "mipmapLevel": 0,
+        "url1": image_url1,
+        "url2": image_url2,
+        "correspondencePointPairs": [],
+        "model": []
     }]
 
     print "Saving matches into {}".format(out_fname)
     with open(out_fname, 'w') as out:
         json.dump(out_data, out, sort_keys=True, indent=4)
 
+
 def dist_after_model(model, p1_l, p2_l):
-    '''Compute the distance after applying the model to the given points (used for debugging)'''
+    '''Compute the distance after applying the model to the
+       given points (used for debugging)'''
     p1_l = np.array(p1_l)
     p2_l = np.array(p2_l)
     p1_l_new = model.apply(p1_l)
     delta = p1_l_new - p2_l
     return np.sqrt(np.sum(np.dot(delta, delta)))
 
-def match_single_sift_features_and_filter(tiles_file, features_file1, features_file2, out_fname, index_pair, conf_fname=None):
-
-    params = utils.conf_from_file(conf_fname, 'MatchSiftFeaturesAndFilter')
-    if params is None:
-        params = {}
-    rod = params.get("rod", 0.92)
-    iterations = params.get("iterations", 1000)
-    max_epsilon = params.get("maxEpsilon", 100.0)
-    min_inlier_ratio = params.get("minInlierRatio", 0.01)
-    min_num_inlier = params.get("minNumInliers", 7)
-    model_index = params.get("modelIndex", 1)
-    max_trust = params.get("maxTrust", 3)
-
-    print "Matching sift features of tilespecs file: {}, indices: {}".format(tiles_file, index_pair)
-    # load tilespecs files
-    tilespecs = utils.load_tilespecs(tiles_file)
-    ts1 = tilespecs[index_pair[0]]
-    ts2 = tilespecs[index_pair[1]]
-
+def match_single_pair(ts1, ts2, features_file1, features_file2, out_fname, rod, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, model_index, max_trust):
     # load feature files
     print "Loading sift features"
     _, pts1, _, _, descs1 = load_features_hdf5(features_file1)
@@ -141,8 +124,6 @@ def match_single_sift_features_and_filter(tiles_file, features_file1, features_f
     model, filtered_matches = ransac.filter_matches(match_points, model_index, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, max_trust)
 
     model_json = []
-    p1s = []
-    p2s = []
     if model is None:
         filtered_matches = [[], []]
     else:
@@ -150,22 +131,85 @@ def match_single_sift_features_and_filter(tiles_file, features_file1, features_f
 
     # save the output (matches)
     out_data = [{
-        "mipmapLevel" : 0,
-        "url1" : ts1["mipmapLevels"]["0"]["imageUrl"],
-        "url2" : ts2["mipmapLevels"]["0"]["imageUrl"],
-        "correspondencePointPairs" : [
-            { "p1" : { "w": np.array(ts1_transform.apply(p1)[:2]).tolist(), "l": np.array([p1[0], p1[1]]).tolist() }, 
-              "p2" : { "w": np.array(ts2_transform.apply(p2)[:2]).tolist(), "l": np.array([p2[0], p2[1]]).tolist() },
-              "dist_after_ransac" : dist_after_model(model, p1, p2)
+        "mipmapLevel": 0,
+        "url1": ts1["mipmapLevels"]["0"]["imageUrl"],
+        "url2": ts2["mipmapLevels"]["0"]["imageUrl"],
+        "correspondencePointPairs": [
+            { "p1": { "w": np.array(ts1_transform.apply(p1)[:2]).tolist(), "l": np.array([p1[0], p1[1]]).tolist() },
+              "p2": { "w": np.array(ts2_transform.apply(p2)[:2]).tolist(), "l": np.array([p2[0], p2[1]]).tolist() },
+              "dist_after_ransac": dist_after_model(model, p1, p2)
             } for p1, p2 in zip(filtered_matches[0], filtered_matches[1])
         ],
-        "model" : model_json
+        "model": model_json
     }]
-
 
     print "Saving matches into {}".format(out_fname)
     with open(out_fname, 'w') as out:
         json.dump(out_data, out, sort_keys=True, indent=4)
+
+
+
+def match_single_sift_features_and_filter(tiles_file, features_file1, features_file2, out_fname, index_pair, conf_fname=None):
+
+    params = utils.conf_from_file(conf_fname, 'MatchSiftFeaturesAndFilter')
+    if params is None:
+        params = {}
+    rod = params.get("rod", 0.92)
+    iterations = params.get("iterations", 1000)
+    max_epsilon = params.get("maxEpsilon", 100.0)
+    min_inlier_ratio = params.get("minInlierRatio", 0.01)
+    min_num_inlier = params.get("minNumInliers", 7)
+    model_index = params.get("modelIndex", 1)
+    max_trust = params.get("maxTrust", 3)
+
+    print "Matching sift features of tilespecs file: {}, indices: {}".format(tiles_file, index_pair)
+    # load tilespecs files
+    tilespecs = utils.load_tilespecs(tiles_file)
+    ts1 = tilespecs[index_pair[0]]
+    ts2 = tilespecs[index_pair[1]]
+
+    match_single_pair(ts1, ts2, features_file1, features_file2, out_fname, rod, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, model_index, max_trust)
+
+
+def match_multiple_sift_features_and_filter(tiles_file, features_files_lst1, features_files_lst2, out_fnames, index_pairs, conf_fname=None, processes_num=1):
+
+    params = utils.conf_from_file(conf_fname, 'MatchSiftFeaturesAndFilter')
+    if params is None:
+        params = {}
+    rod = params.get("rod", 0.92)
+    iterations = params.get("iterations", 1000)
+    max_epsilon = params.get("maxEpsilon", 100.0)
+    min_inlier_ratio = params.get("minInlierRatio", 0.01)
+    min_num_inlier = params.get("minNumInliers", 7)
+    model_index = params.get("modelIndex", 1)
+    max_trust = params.get("maxTrust", 3)
+
+    assert(len(index_pairs) == len(features_files_lst1))
+    assert(len(index_pairs) == len(features_files_lst2))
+    assert(len(index_pairs) == len(out_fnames))
+
+    print("Creating a pool of {} processes".format(processes_num))
+    pool = mp.Pool(processes=processes_num)
+
+    tilespecs = utils.load_tilespecs(tiles_file)
+    pool_results = []
+    for i, index_pair in enumerate(index_pairs):
+        features_file1 = features_files_lst1[i]
+        features_file2 = features_files_lst2[i]
+        out_fname = out_fnames[i]
+
+        print "Matching sift features of tilespecs file: {}, indices: {}".format(tiles_file, index_pair)
+        # load tilespecs files
+        ts1 = tilespecs[index_pair[0]]
+        ts2 = tilespecs[index_pair[1]]
+
+        res = pool.apply_async(match_single_pair, (ts1, ts2, features_file1, features_file2, out_fname, rod, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, model_index, max_trust))
+        pool_results.append(res)
+
+    pool.close()
+    pool.join()
+
+
 
 
 def main():
@@ -174,31 +218,52 @@ def main():
     parser.add_argument('tiles_file', metavar='tiles_file', type=str,
                         help='the json file of tilespecs')
     parser.add_argument('features_file1', metavar='features_file1', type=str,
-                        help='a file that contains the features json file of the first tile')
+                        help='a file that contains the features json file of the first tile (if a single pair is matched) or a list of features json files (if multiple pairs are matched)')
     parser.add_argument('features_file2', metavar='features_file2', type=str,
-                        help='a file that contains the features json file of the second tile')
-    parser.add_argument('index_pair', metavar='index_pair', type=str,
+                        help='a file that contains the features json file of the second tile (if a single pair is matched) or a list of features json files (if multiple pairs are matched)')
+    parser.add_argument('--index_pairs', metavar='index_pairs', type=str, nargs='+',
                         help='a colon separated indices of the tiles in the tilespec file that correspond to the feature files that need to be matched')
-    parser.add_argument('-o', '--output_file', type=str, 
-                        help='an output file name where the correspondent_spec file will be (default: ./matched_sifts.json)',
+    parser.add_argument('-o', '--output_file', type=str,
+                        help='an output file name where the correspondent_spec file will be (if a single pair is matched, default: ./matched_sifts.json) or a list of output files (if multiple pairs are matched, default: ./matched_siftsX.json)',
                         default='./matched_sifts.json')
-    parser.add_argument('-c', '--conf_file_name', type=str, 
+    parser.add_argument('-c', '--conf_file_name', type=str,
                         help='the configuration file with the parameters for each step of the alignment process in json format (uses default parameters, if not supplied)',
                         default=None)
-    parser.add_argument('-w', '--wait_time', type=int, 
+    parser.add_argument('-w', '--wait_time', type=int,
                         help='the time to wait since the last modification date of the features_file (default: None)',
                         default=0)
+    parser.add_argument('-t', '--threads_num', type=int,
+                        help='the number of threads (processes) to use (default: 1)',
+                        default=1)
 
     args = parser.parse_args()
+    print("args:", args)
 
-    index_pair = [int(i) for i in args.index_pair.split(':')]
 
-    utils.wait_after_file(args.features_file1, args.wait_time)
-    utils.wait_after_file(args.features_file2, args.wait_time)
+    if len(args.index_pairs) == 1:
+        utils.wait_after_file(args.features_file1, args.wait_time)
+        utils.wait_after_file(args.features_file2, args.wait_time)
+        index_pair = [int(i) for i in args.index_pair.split(':')]
+        match_single_sift_features_and_filter(args.tiles_file, args.features_file1, args.features_file2,
+                                              args.output_file, index_pair, conf_fname=args.conf_file_name)
+    else: # More than one pair
 
-    match_single_sift_features_and_filter(args.tiles_file, args.features_file1, args.features_file2,
-        args.output_file, index_pair, conf_fname=args.conf_file_name)
+        with open(args.features_file1, 'r') as f_fnames:
+            features_files_lst1 = [fname.strip() for fname in f_fnames.readlines()]
+        with open(args.features_file2, 'r') as f_fnames:
+            features_files_lst2 = [fname.strip() for fname in f_fnames.readlines()]
+        for feature_file in zip(features_files_lst1, features_files_lst2):
+            utils.wait_after_file(feature_file[0], args.wait_time)
+            utils.wait_after_file(feature_file[1], args.wait_time)
+        with open(args.output_file, 'r') as f_fnames:
+            output_files_lst = [fname.strip() for fname in f_fnames.readlines()]
 
+        index_pairs = [[int(i) for i in index_pair.split(':')] for index_pair in args.index_pairs]
+        match_multiple_sift_features_and_filter(args.tiles_file, features_files_lst1, features_files_lst2,
+                                                output_files_lst, index_pairs, conf_fname=args.conf_file_name,
+                                                processes_num=args.threads_num)
+
+    print("Done.")
 
 if __name__ == '__main__':
     main()

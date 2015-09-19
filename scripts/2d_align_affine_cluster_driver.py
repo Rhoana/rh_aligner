@@ -35,7 +35,7 @@ class CreateSiftFeatures(Job):
         self.dependencies = []
         # self.threads = threads_num
         # self.threads_str = "-t {0}".format(threads_num)
-        self.memory = 400
+        self.memory = 6000
         self.time = 20
         self.output = output_file
         #self.already_done = os.path.exists(self.output_file)
@@ -74,6 +74,67 @@ class MatchSiftFeaturesAndFilter(Job):
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'match_sift_features_and_filter_cv2.py'),
                 self.output_file, self.wait_time, self.conf_fname,
                 self.tiles_fname, self.features_fname1, self.features_fname2, self.index_pair]
+
+class MatchMultipleSiftFeaturesAndFilter(Job):
+    def __init__(self, matches_work_dir, tiles_fname, temp_files_prefix, threads_num=1, wait_time=None, conf_fname=None):
+        Job.__init__(self)
+        self.already_done = False
+        self.dependencies = []
+        self.features_fnames1_list = []
+        self.features_fnames2_list = []
+        self.output_files_list = []
+        self.index_pairs_list = []
+        self.tiles_fname = '"{0}"'.format(tiles_fname)
+        if conf_fname is None:
+            self.conf_fname = ''
+        else:
+            self.conf_fname = '-c "{0}"'.format(conf_fname)
+        if wait_time is None:
+            self.wait_time = ''
+        else:
+            self.wait_time = '-w {0}'.format(wait_time)
+        self.memory = 8000
+        self.time = 100
+        self.threads = threads_num
+        self.threads_str = "-t {0}".format(threads_num)
+        self.matches_work_dir = matches_work_dir
+        self.temp_files_prefix = temp_files_prefix
+
+    def add_job(self, dependencies, features_fname1, features_fname2, corr_output_file, index_pair):
+        self.features_fnames1_list.append(features_fname1)
+        self.features_fnames2_list.append(features_fname2)
+        self.output_files_list.append(corr_output_file)
+        self.index_pairs_list.append(index_pair)
+        self.dependencies.extend(dependencies)
+        self.output.append(corr_output_file)
+
+
+    def prepare_files(self):
+        if len(self.features_fnames1_list) > 0:
+            tmp_file_features1 = os.path.join(self.matches_work_dir, "{}_features_lst1.txt".format(self.temp_files_prefix))
+            tmp_file_features2 = os.path.join(self.matches_work_dir, "{}_features_lst2.txt".format(self.temp_files_prefix))
+            tmp_output_files = os.path.join(self.matches_work_dir, "{}_outputs_lst.txt".format(self.temp_files_prefix))
+            with open(tmp_file_features1, 'w') as f:
+                for item in self.features_fnames1_list:
+                    f.write("{}\n".format(item))
+            with open(tmp_file_features2, 'w') as f:
+                for item in self.features_fnames2_list:
+                    f.write("{}\n".format(item))
+            with open(tmp_output_files, 'w') as f:
+                for item in self.output_files_list:
+                    f.write("{}\n".format(item))
+            self.features_fnames1 = '"{0}"'.format(tmp_file_features1)
+            self.features_fnames2 = '"{0}"'.format(tmp_file_features2)
+            self.index_pairs = '--index_pairs {}'.format(' '.join([':'.join([str(i) for i in index_pair]) for index_pair in self.index_pairs_list]))
+            self.output_files = '-o "{0}"'.format(tmp_output_files)
+
+    def command(self):
+        self.prepare_files()
+        return ['python -u',
+                os.path.join(os.environ['ALIGNER'], 'scripts', 'match_sift_features_and_filter_cv2.py'),
+                self.output_files, self.wait_time, self.conf_fname, self.threads_str,
+                self.tiles_fname, self.features_fnames1, self.features_fnames2, self.index_pairs]
+
 
 
 class OptimizeMontageTransform(Job):
@@ -200,17 +261,19 @@ if __name__ == '__main__':
             layers_data[slayer] = {}
             jobs[slayer] = {}
             jobs[slayer]['sifts'] = {}
-            jobs[slayer]['matched_sifts'] = []
+            jobs[slayer]['matched_sifts'] = {}
+            jobs[slayer]['matched_sifts']['intra'] = {}
+            jobs[slayer]['matched_sifts']['inter'] = None
             layers_data[slayer]['ts'] = f
             layers_data[slayer]['sifts'] = {}
             layers_data[slayer]['prefix'] = tiles_fname_prefix
             layers_data[slayer]['matched_sifts'] = []
 
         layer_sifts_dir = os.path.join(sifts_dir, layers_data[slayer]['prefix'])
-        layer_matched_sifts_dir = os.path.join(matched_sifts_dir, layers_data[slayer]['prefix'])
-
-        if not os.path.exists(layer_matched_sifts_dir):
-            os.makedirs(layer_matched_sifts_dir)
+        layer_matched_sifts_intra_dir = os.path.join(matched_sifts_dir, os.path.join(layers_data[slayer]['prefix'], 'intra'))
+        layer_matched_sifts_inter_dir = os.path.join(matched_sifts_dir, os.path.join(layers_data[slayer]['prefix'], 'inter'))
+        create_dir(layer_matched_sifts_intra_dir)
+        create_dir(layer_matched_sifts_inter_dir)
 
         all_layers.append(layer)
 
@@ -218,6 +281,8 @@ if __name__ == '__main__':
         job_sift = None
         job_match = None
         job_opt_montage = None
+
+        mfovs = set()
 
         # create the sift features of these tiles
         for i, ts in enumerate(cur_tilespec):
@@ -227,10 +292,10 @@ if __name__ == '__main__':
             tile_fname_sep = tile_fname.split('_') # eg: 002_000001_044_2015-03-06T1106521073289.bmp
             cur_wafer_mfov = tile_fname_sep[1]
             mfov_sifts_dir = os.path.join(layer_sifts_dir, cur_wafer_mfov)
-            if not os.path.exists(mfov_sifts_dir):
-                os.makedirs(mfov_sifts_dir)
-            
+            create_dir(mfov_sifts_dir)
 
+            mfovs.add(ts["mfov"])
+            
             # create the sift features of these tiles
             sifts_json = os.path.join(mfov_sifts_dir, "{0}_sifts_{1}.h5py".format(tiles_fname_prefix, tile_fname))
             if not os.path.exists(sifts_json):
@@ -239,7 +304,16 @@ if __name__ == '__main__':
                 jobs[slayer]['sifts'][imgurl] = job_sift
             layers_data[slayer]['sifts'][imgurl] = sifts_json
 
+        # create the intra matched sifts directories
+        for mfov in mfovs:
+            mfov_intra_dir = os.path.join(layer_matched_sifts_intra_dir, str(mfov))
+            create_dir(mfov_intra_dir)
+
+        # A map between layer to a list of multiple matches 
+        multiple_match_jobs = {}
         # read every pair of overlapping tiles, and match their sift features
+        jobs_match_intra_mfovs = {}
+        jobs_match_inter_mfovs = []
         indices = []
         for pair in itertools.combinations(xrange(len(cur_tilespec)), 2):
             idx1 = pair[0]
@@ -256,7 +330,13 @@ if __name__ == '__main__':
                 tile_fname2 = os.path.basename(imageUrl2).split('.')[0]
                 print "Matching sift of tiles: {0} and {1}".format(imageUrl1, imageUrl2)
                 index_pair = [idx1, idx2]
-                match_json = os.path.join(layer_matched_sifts_dir, "{0}_sift_matches_{1}_{2}.json".format(tiles_fname_prefix, tile_fname1, tile_fname2))
+                if ts1["mfov"] == ts2["mfov"]:
+                    # Intra mfov job
+                    cur_match_dir = os.path.join(layer_matched_sifts_intra_dir, str(ts1["mfov"]))
+                else:
+                    # Inter mfov job
+                    cur_match_dir = layer_matched_sifts_inter_dir
+                match_json = os.path.join(cur_match_dir, "{0}_sift_matches_{1}_{2}.json".format(tiles_fname_prefix, tile_fname1, tile_fname2))
                 # match the features of overlapping tiles
                 if not os.path.exists(match_json):
                     dependencies = [ ]
@@ -264,10 +344,29 @@ if __name__ == '__main__':
                         dependencies.append(jobs[slayer]['sifts'][imageUrl1])
                     if imageUrl2 in jobs[slayer]['sifts'].keys():
                         dependencies.append(jobs[slayer]['sifts'][imageUrl2])
-                    job_match = MatchSiftFeaturesAndFilter(dependencies, layers_data[slayer]['ts'],
-                        layers_data[slayer]['sifts'][imageUrl1], layers_data[slayer]['sifts'][imageUrl2], match_json,
-                        index_pair, wait_time=30, conf_fname=args.conf_file_name)
-                    jobs[slayer]['matched_sifts'].append(job_match)
+
+                    # Check if the job already exists
+                    if ts1["mfov"] == ts2["mfov"]:
+                        if ts1["mfov"] in jobs[slayer]['matched_sifts']['intra'].keys():
+                            job_match = jobs[slayer]['matched_sifts']['intra'][ts1["mfov"]]
+                        else:
+                            job_match = MatchMultipleSiftFeaturesAndFilter(cur_match_dir, layers_data[slayer]['ts'],
+                                    "intra_l{}_{}".format(slayer,ts1["mfov"]),
+                                    threads_num=4, wait_time=30, conf_fname=args.conf_file_name)
+                            jobs[slayer]['matched_sifts']['intra'][ts1["mfov"]] = job_match
+                    else:
+                        if jobs[slayer]['matched_sifts']['inter'] is None:
+                            job_match = MatchMultipleSiftFeaturesAndFilter(cur_match_dir, layers_data[slayer]['ts'],
+                                    "inter_{}".format(slayer),
+                                    threads_num=4, wait_time=30, conf_fname=args.conf_file_name)
+                            jobs[slayer]['matched_sifts']['inter'] = job_match
+                        else:
+                            job_match = jobs[slayer]['matched_sifts']['inter']
+                    job_match.add_job(dependencies, layers_data[slayer]['sifts'][imageUrl1], layers_data[slayer]['sifts'][imageUrl2],
+                            match_json, index_pair)
+
+
+                    #jobs[slayer]['matched_sifts'].append(job_match)
                 layers_data[slayer]['matched_sifts'].append(match_json)
 
         # Create a single file that lists all tilespecs and a single file that lists all pmcc matches (the os doesn't support a very long list)
@@ -281,7 +380,8 @@ if __name__ == '__main__':
             print "Optimizing (affine) layer matches: {0}".format(slayer)
             dependencies = [ ]
             dependencies.extend(jobs[slayer]['sifts'].values())
-            dependencies.extend(jobs[slayer]['matched_sifts'])
+            dependencies.append(jobs[slayer]['matched_sifts']['inter'])
+            dependencies.extend(jobs[slayer]['matched_sifts']['intra'].values())
             job_opt_montage = OptimizeMontageTransform(dependencies, layers_data[slayer]['ts'],
                 matches_list_file, opt_montage_json,
                 conf_fname=args.conf_file_name)
