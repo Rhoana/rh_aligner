@@ -68,19 +68,19 @@ class MatchLayersByMaxPMCC(Job):
         #    self.auto_add_model = '--auto_add_model'
         #else:
         #    self.auto_add_model = ''
-        #self.threads = threads_num
-        #self.threads_str = '-t {0}'.format(threads_num)
+        self.threads = threads_num
+        self.threads_str = '-t {0}'.format(threads_num)
         self.dependencies = dependencies
         self.memory = 8000
-        self.time = 400
+        self.time = 800
         self.output = output_fname
         #self.already_done = os.path.exists(self.output_file)
 
     def command(self):
         return ['python -u',
-                os.path.join(os.environ['ALIGNER'], 'scripts', 'match_images_between_slices.py'),
+                os.path.join(os.environ['ALIGNER'], 'scripts', 'match_images_between_slices_optimized.py'),
                 self.output_fname, self.conf_fname,
-                #self.threads_str, self.auto_add_model,
+                self.threads_str, #self.auto_add_model,
                 self.tiles_fname1, self.tiles_fname2, self.pre_match_fname]
 
 

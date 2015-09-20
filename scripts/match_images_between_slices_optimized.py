@@ -18,7 +18,6 @@ import multiprocessing as mp
 import pyximport
 pyximport.install()
 import cv_wrap_module
-datadir, imgdir, workdir, outdir = os.getcwd(), os.getcwd(), os.getcwd(), os.getcwd()
 
 
 def get_image_top_left(ts, tile_index):
@@ -286,7 +285,7 @@ def perform_pmcc_unwrapper(arg):
     return perform_pmcc(ts1, ts2, template_size, scaling, img1_ind, best_transformations, mfov_centers1, prelimdict, min_corr, max_curvature, max_rod)
 
 
-def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, out_fname, conf_fname=None):
+def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, out_fname, conf_fname=None, processes_num=1):
     starttime = time.clock()
     print("Loading tilespecs, parameters, and other preliminary information")
 
@@ -391,7 +390,7 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
 
     # Execute PMCC Matching
     print("Performing PMCC Matching")
-    pool = mp.Pool(processes=4)
+    pool = mp.Pool(processes=processes_num)
     results = pool.map(perform_pmcc_unwrapper, commandlist)
     point_matches = [item for sublist in results for item in sublist]
 
@@ -432,11 +431,14 @@ def main():
     parser.add_argument('-c', '--conf_file_name', type=str,
                         help='the configuration file with the parameters for each step of the alignment process in json format (uses default parameters, if not supplied)',
                         default=None)
+    parser.add_argument('-t', '--threads_num', type=int,
+                        help='the number of threads (processes) to use (default: 1)',
+                        default=1)
 
     args = parser.parse_args()
     match_layers_pmcc_matching(args.tiles_file1, args.tiles_file2,
                                args.pre_matches_file, args.output_file,
-                               conf_fname=args.conf_file_name)
+                               conf_fname=args.conf_file_name, processes_num=args.threads_num)
 
 if __name__ == '__main__':
     main()

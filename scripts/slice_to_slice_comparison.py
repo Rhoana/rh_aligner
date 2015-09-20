@@ -58,7 +58,6 @@ def getindexfromnums((mfovnum, imgnum)):
     return (mfovnum - 1) * TILES_PER_MFOV + imgnum - 1
 
 
-@profile
 def load_features(feature_file, tile_ts):
     # Should have the same name as the following: [tilespec base filename]_[img filename].json/.hdf5
     assert(os.path.basename(os.path.splitext(tile_ts["mipmapLevels"]["0"]["imageUrl"])[0]) in feature_file)
