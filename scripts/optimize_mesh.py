@@ -10,7 +10,7 @@ from matplotlib import collections as mc
 
 import pyximport
 pyximport.install()
-import mesh_derivs
+import mesh_derivs_multibeam
 
 FLOAT_TYPE = np.float64
 
@@ -241,11 +241,11 @@ def optimize_meshes_links(meshes, links, conf_dict={}):
 
         # Compute the cost of the internal and external links
         for ts in meshes:
-            cost += mesh_derivs.internal_grad(meshes[ts].pts, gradients[ts],
+            cost += mesh_derivs_multibeam.internal_grad(meshes[ts].pts, gradients[ts],
                                               *((structural_meshes[ts]) +
                                                 (intra_slice_weight, intra_slice_winsor)))
         for (ts1, ts2), ((idx1, w1), (idx2, w2)) in links.iteritems():
-            cost += mesh_derivs.external_grad(meshes[ts1].pts, meshes[ts2].pts,
+            cost += mesh_derivs_multibeam.external_grad(meshes[ts1].pts, meshes[ts2].pts,
                                               gradients[ts1], gradients[ts2],
                                               idx1, w1,
                                               idx2, w2,
