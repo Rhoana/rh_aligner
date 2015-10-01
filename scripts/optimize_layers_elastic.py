@@ -135,6 +135,8 @@ def optimize_layers_elastic(tile_files, corr_files, out_dir, max_layer_distance,
     # Save the output
     utils.create_dir(out_dir)
     save_optimized_meshes(all_tile_urls, optimized_meshes, out_dir)
+
+    print("Done.")
     
 
 

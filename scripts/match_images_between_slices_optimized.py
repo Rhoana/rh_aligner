@@ -288,6 +288,7 @@ def perform_pmcc_unwrapper(arg):
 def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, out_fname, conf_fname=None, processes_num=1):
     starttime = time.clock()
     print("Loading tilespecs, parameters, and other preliminary information")
+    print("Matching {} with {}".format(tiles_fname1, tiles_fname2))
 
     # Load parameters file
     params = utils.conf_from_file(conf_fname, 'MatchLayersBlockMatching')
