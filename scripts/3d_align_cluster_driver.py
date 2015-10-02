@@ -217,11 +217,17 @@ if __name__ == '__main__':
     # Verify that all the layers are there and that there are no holes
     all_layers.sort()
     for i in range(len(all_layers) - 1):
+        slayer = str(all_layers[i])
+        layers_data[slayer]['pre_matched_mfovs'] = {}
+        layers_data[slayer]['matched_pmcc'] = {}
         if all_layers[i + 1] - all_layers[i] != 1:
             for l in range(all_layers[i] + 1, all_layers[i + 1]):
                 if l not in skipped_layers:
                     print "Error missing layer {} between: {} and {}".format(l, all_layers[i], all_layers[i + 1])
                     sys.exit(1)
+    slayer_last = str(all_layers[-1])
+    layers_data[slayer_last]['pre_matched_mfovs'] = {}
+    layers_data[slayer_last]['matched_pmcc'] = {}
 
     print "Found the following layers: {0}".format(all_layers)
 
@@ -230,8 +236,6 @@ if __name__ == '__main__':
     pmcc_jobs = []
     for layer1_ind, layer1 in enumerate(all_layers):
         slayer1 = str(layer1)
-        layers_data[slayer1]['pre_matched_mfovs'] = {}
-        layers_data[slayer1]['matched_pmcc'] = {}
         # Process all matched layers
         matched_after_layers = 0
         j = 1
@@ -277,8 +281,25 @@ if __name__ == '__main__':
                 pmcc_jobs.append(job_pmcc)
                 all_running_jobs.append(job_pmcc)
             layers_data[slayer1]['matched_pmcc'][slayer2] = pmcc_fname
-
             all_pmcc_files.append(pmcc_fname)
+
+            pmcc_fname2 = os.path.join(matched_pmcc_dir, "{0}_{1}_match_pmcc.json".format(fname2_prefix, fname1_prefix))
+            if not os.path.exists(pmcc_fname2):
+                print "Matching layers by Max PMCC: {0} and {1}".format(i + j, i)
+                dependencies = [ ]
+                if job_pre_match != None:
+                    dependencies.append(job_pre_match)
+
+                job_pmcc2 = MatchLayersByMaxPMCC(dependencies, layers_data[slayer2]['ts'], layers_data[slayer1]['ts'], 
+                    layers_data[slayer1]['pre_matched_mfovs'][slayer2], 
+                    pmcc_fname2, conf_fname=args.conf_file_name, threads_num=4, auto_add_model=args.auto_add_model)
+                pmcc_jobs.append(job_pmcc2)
+                all_running_jobs.append(job_pmcc2)
+            layers_data[slayer2]['matched_pmcc'][slayer1] = pmcc_fname2
+            all_pmcc_files.append(pmcc_fname2)
+
+
+
 
 
             j += 1
