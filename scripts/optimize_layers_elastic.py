@@ -10,6 +10,8 @@ import utils
 import export_mesh
 from optimize_mesh import optimize_meshes
 import math
+import numpy as np
+from scipy import spatial
 
 cached_radius = None
 
@@ -19,13 +21,13 @@ def compute_restricted_moving_ls_radius(url_optimized_mesh):
     # TODO - verify that the radius is dependent only on the mesh (not on the matches)
     if cached_radius is None:
         print "Computing restricted MLS radius"
-        min_point_dist_sqr = float("inf")
-        for p1idx,p2idx in itertools.combinations(range(len(url_optimized_mesh[0])), 2):
-            p1 = url_optimized_mesh[0][p1idx]
-            p2 = url_optimized_mesh[0][p2idx]
-            cur_dist_sqr = (p1[0] - p2[0]) * (p1[0] - p2[0]) + (p1[1] - p2[1]) * (p1[1] - p2[1])
-            min_point_dist_sqr = min(min_point_dist_sqr, cur_dist_sqr)
-        cached_radius = 2 * math.sqrt(min_point_dist_sqr)
+        
+        # Find the minimal distance between any two points, by finding the closest point to each point
+        # and take the minimum among the distances
+        points_tree = spatial.KDTree(url_optimized_mesh[0])
+        distances, _ = points_tree.query(url_optimized_mesh[0], 2)
+        min_point_dist = np.min(distances[:,1])
+        cached_radius = 2 * min_point_dist
         print "Restricted MLS radius: {}".format(cached_radius)
         
     return cached_radius
