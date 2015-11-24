@@ -328,7 +328,6 @@ if __name__ == '__main__':
                 imageUrl2 = ts2["mipmapLevels"]["0"]["imageUrl"]
                 tile_fname1 = os.path.basename(imageUrl1).split('.')[0]
                 tile_fname2 = os.path.basename(imageUrl2).split('.')[0]
-                print "Matching sift of tiles: {0} and {1}".format(imageUrl1, imageUrl2)
                 index_pair = [idx1, idx2]
                 if ts1["mfov"] == ts2["mfov"]:
                     # Intra mfov job
@@ -339,6 +338,7 @@ if __name__ == '__main__':
                 match_json = os.path.join(cur_match_dir, "{0}_sift_matches_{1}_{2}.json".format(tiles_fname_prefix, tile_fname1, tile_fname2))
                 # match the features of overlapping tiles
                 if not os.path.exists(match_json):
+                    print "Matching sift of tiles: {0} and {1}".format(imageUrl1, imageUrl2)
                     dependencies = [ ]
                     if imageUrl1 in jobs[slayer]['sifts'].keys():
                         dependencies.append(jobs[slayer]['sifts'][imageUrl1])
@@ -347,6 +347,7 @@ if __name__ == '__main__':
 
                     # Check if the job already exists
                     if ts1["mfov"] == ts2["mfov"]:
+                        # Intra mfov job
                         if ts1["mfov"] in jobs[slayer]['matched_sifts']['intra'].keys():
                             job_match = jobs[slayer]['matched_sifts']['intra'][ts1["mfov"]]
                         else:
@@ -355,6 +356,7 @@ if __name__ == '__main__':
                                     threads_num=4, wait_time=30, conf_fname=args.conf_file_name)
                             jobs[slayer]['matched_sifts']['intra'][ts1["mfov"]] = job_match
                     else:
+                        # Inter mfov job
                         if jobs[slayer]['matched_sifts']['inter'] is None:
                             job_match = MatchMultipleSiftFeaturesAndFilter(cur_match_dir, layers_data[slayer]['ts'],
                                     "inter_{}".format(slayer),
@@ -379,9 +381,12 @@ if __name__ == '__main__':
         if not os.path.exists(opt_montage_json):
             print "Optimizing (affine) layer matches: {0}".format(slayer)
             dependencies = [ ]
-            dependencies.extend(jobs[slayer]['sifts'].values())
-            dependencies.append(jobs[slayer]['matched_sifts']['inter'])
-            dependencies.extend(jobs[slayer]['matched_sifts']['intra'].values())
+            if len(jobs[slayer]['sifts']) > 0:
+                dependencies.extend(jobs[slayer]['sifts'].values())
+            if jobs[slayer]['matched_sifts']['inter'] is not None:
+                dependencies.append(jobs[slayer]['matched_sifts']['inter'])
+            if jobs[slayer]['matched_sifts']['intra'] is not None and len(jobs[slayer]['matched_sifts']['intra']) > 0:
+                dependencies.extend(jobs[slayer]['matched_sifts']['intra'].values())
             job_opt_montage = OptimizeMontageTransform(dependencies, layers_data[slayer]['ts'],
                 matches_list_file, opt_montage_json,
                 conf_fname=args.conf_file_name)
