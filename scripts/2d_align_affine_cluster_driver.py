@@ -277,6 +277,11 @@ if __name__ == '__main__':
 
         all_layers.append(layer)
 
+        # Skip the section if already have the optimized result
+        opt_montage_json = os.path.join(args.output_dir, "{0}_montaged.json".format(tiles_fname_prefix))
+        if os.path.exists(opt_montage_json):
+            print "Previously optimizing (affine) layer: {0}, skipping all pre-computations".format(slayer)
+            continue
 
         job_sift = None
         job_match = None
