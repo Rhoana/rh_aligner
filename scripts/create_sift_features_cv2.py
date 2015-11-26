@@ -12,11 +12,8 @@ import json
 import numpy as np
 import h5py
 
+def create_sift_features(tilespecs, out_fname, index, conf_fname=None):
 
-def create_sift_features(tiles_fname, out_fname, index, conf_fname=None):
-
-    # load tilespecs files
-    tilespecs = utils.load_tilespecs(tiles_fname)
     tilespec = tilespecs[index]
 
     # load the image
@@ -45,10 +42,9 @@ def create_sift_features(tiles_fname, out_fname, index, conf_fname=None):
 
     descs = np.array(descs, dtype=np.uint8)
 
-    print "Found {} features".format(len(descs))
     # Save the features
 
-    print "Saving sift features at: {}".format(out_fname)
+    print "Saving {} sift features at: {}".format(len(descs), out_fname)
     with h5py.File(out_fname, 'w') as hf:
         hf.create_dataset("imageUrl",
                             data=np.array(image_path.encode("utf-8"), dtype='S'))
@@ -58,22 +54,16 @@ def create_sift_features(tiles_fname, out_fname, index, conf_fname=None):
         hf.create_dataset("pts/octaves", data=np.array([p.octave for p in pts], dtype=np.float32))
         hf.create_dataset("descs", data=descs)
 
-    # features = [{"location" : (np.array(k.pt) * 2).tolist(),
-    #              "response" : k.response,
-    #              "scale" : k.size,
-    #              "descriptor" : d.tolist()} for k, d in zip(pts, descs)]
 
-    # out_data = [{
-    #     "mipmapLevels" : {
-    #         "0" : {
-    #             "imageUrl" : image_path,
-    #             "featureList" : features
-    #         }
-    #     },
-    #     "mipmapLevel" : 0
-    # }]
-    # with open(out_fname, 'w') as out:
-    #     json.dump(out_data, out, indent=4)
+
+
+def create_multiple_sift_features(tiles_fname, out_fnames, indices, conf_fname=None):
+
+    # load tilespecs files
+    tilespecs = utils.load_tilespecs(tiles_fname)
+
+    for index, out_fname in zip(indices, out_fnames):
+        create_sift_features(tilespecs, out_fname, index, conf_fname)
 
 
 
@@ -83,23 +73,25 @@ def main():
     parser = argparse.ArgumentParser(description='Iterates over a directory that contains json files, \
         and creates the sift features of each file. \
         The output is either in the same directory or in a different, user-provided, directory \
-        (in either case, we use a different file name).')
+        (in either case, we use a different file name). \
+        The order and number of the indices must match the output files.')
     parser.add_argument('tiles_fname', metavar='tiles_json', type=str, 
                         help='a tile_spec file that contains the images to create sift features for, in json format')
-    parser.add_argument('index', metavar='index', type=int, 
-                        help='the index of the tile in the tilespec that needs to be computed')
-    parser.add_argument('-o', '--output_file', type=str, 
-                        help='an output feature_spec file, that will include the sift features for all tiles (default: ./siftFeatures.json)',
-                        default='./siftFeatures.json')
+    parser.add_argument('-i', '--indices', type=int, nargs='+', 
+                        help='the indices of the tiles in the tilespec that needs to be computed')
+    parser.add_argument('-o', '--output_files', type=str, nargs='+', 
+                        help='output feature_spec files list, each will include the sift features for the corresponding tile')
     parser.add_argument('-c', '--conf_file_name', type=str, 
                         help='the configuration file with the parameters for each step of the alignment process in json format (uses default parameters, if not supplied)',
                         default=None)
 
 
     args = parser.parse_args()
+    print args
 
+    assert(len(args.output_files) == len(args.indices))
     try:
-        create_sift_features(args.tiles_fname, args.output_file, args.index, conf_fname=args.conf_file_name)
+        create_multiple_sift_features(args.tiles_fname, args.output_files, args.indices, conf_fname=args.conf_file_name)
     except:
         sys.exit("Error while executing: {0}".format(sys.argv))
 

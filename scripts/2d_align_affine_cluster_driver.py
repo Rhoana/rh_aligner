@@ -45,6 +45,38 @@ class CreateSiftFeatures(Job):
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'create_sift_features_cv2.py'),
                 self.output_file, self.conf_fname, self.tiles_fname, self.tile_index]
 
+class CreateMultipleSiftFeatures(Job):
+    def __init__(self, tiles_fname, conf_fname=None, threads_num=1):
+        Job.__init__(self)
+        self.already_done = False
+        self.tiles_fname = '"{0}"'.format(tiles_fname)
+        self.tile_indices_list = []
+        self.output_files_list = []
+        if conf_fname is None:
+            self.conf_fname = ''
+        else:
+            self.conf_fname = '-c "{0}"'.format(conf_fname)
+        self.dependencies = []
+        # self.threads = threads_num
+        # self.threads_str = "-t {0}".format(threads_num)
+        self.memory = 6000
+        self.time = 100
+
+    def add_job(self, output_file, tile_index):
+        self.output_files_list.append(output_file)
+        self.tile_indices_list.append(tile_index)
+        self.output.append(output_file)
+
+
+    def command(self):
+        self.tile_indices = '-i {0}'.format(' '.join([str(i) for i in self.tile_indices_list]))
+        self.output_files = '-o {0}'.format(' '.join(self.output_files_list))
+        return ['python -u',
+                os.path.join(os.environ['ALIGNER'], 'scripts', 'create_sift_features_cv2.py'),
+                self.output_files, self.tile_indices, self.conf_fname, self.tiles_fname]
+
+
+
 
 class MatchSiftFeaturesAndFilter(Job):
     def __init__(self, dependencies, tiles_fname, features_fname1, features_fname2, corr_output_file, index_pair, wait_time=None, conf_fname=None):
@@ -283,13 +315,15 @@ if __name__ == '__main__':
             print "Previously optimizing (affine) layer: {0}, skipping all pre-computations".format(slayer)
             continue
 
-        job_sift = None
+        #job_sift = None
+        job_multi_sift = None
         job_match = None
         job_opt_montage = None
 
         mfovs = set()
 
-        # create the sift features of these tiles
+        # create the sift features of these tiles (per mfov)
+        prev_mfov = None
         for i, ts in enumerate(cur_tilespec):
             imgurl = ts["mipmapLevels"]["0"]["imageUrl"]
             tile_fname = os.path.basename(imgurl).split('.')[0]
@@ -300,13 +334,19 @@ if __name__ == '__main__':
             create_dir(mfov_sifts_dir)
 
             mfovs.add(ts["mfov"])
+
+            if ts["mfov"] != prev_mfov: # Assumes that the tiles are sorted by their mfov#
+                # found new mfov, create a new multiple sift computation job
+                job_multi_sift = CreateMultipleSiftFeatures(f, conf_fname=args.conf_file_name, threads_num=1)
+                prev_mfov = ts["mfov"]
             
             # create the sift features of these tiles
             sifts_json = os.path.join(mfov_sifts_dir, "{0}_sifts_{1}.h5py".format(tiles_fname_prefix, tile_fname))
             if not os.path.exists(sifts_json):
                 print "Computing tile  sifts: {0}".format(tile_fname)
-                job_sift = CreateSiftFeatures(f, sifts_json, i, conf_fname=args.conf_file_name, threads_num=2)
-                jobs[slayer]['sifts'][imgurl] = job_sift
+                job_multi_sift.add_job(sifts_json, i)
+                #job_sift = CreateSiftFeatures(f, sifts_json, i, conf_fname=args.conf_file_name, threads_num=2)
+                jobs[slayer]['sifts'][imgurl] = job_multi_sift
             layers_data[slayer]['sifts'][imgurl] = sifts_json
 
         # create the intra matched sifts directories
@@ -346,9 +386,11 @@ if __name__ == '__main__':
                     print "Matching sift of tiles: {0} and {1}".format(imageUrl1, imageUrl2)
                     dependencies = [ ]
                     if imageUrl1 in jobs[slayer]['sifts'].keys():
-                        dependencies.append(jobs[slayer]['sifts'][imageUrl1])
+                        if jobs[slayer]['sifts'][imageUrl1] not in dependencies: # needed because of multiple-sift job
+                            dependencies.append(jobs[slayer]['sifts'][imageUrl1])
                     if imageUrl2 in jobs[slayer]['sifts'].keys():
-                        dependencies.append(jobs[slayer]['sifts'][imageUrl2])
+                        if jobs[slayer]['sifts'][imageUrl2] not in dependencies: # needed because of multiple-sift job
+                            dependencies.append(jobs[slayer]['sifts'][imageUrl2])
 
                     # Check if the job already exists
                     if ts1["mfov"] == ts2["mfov"]:
