@@ -15,9 +15,9 @@ RUN_LOCAL = False
 USE_QSUB = False
 USE_SBATCH = True
 
-#SBATCH_QUEUE = 'serial_requeue'
+SBATCH_QUEUE = 'serial_requeue'
 # SBATCH_QUEUE = 'general'
-SBATCH_QUEUE = 'holyseasgpu'
+#SBATCH_QUEUE = 'holyseasgpu'
 
 # SBATCH_ACCOUNT = None
 SBATCH_ACCOUNT = 'lichtman_lab'
@@ -43,6 +43,7 @@ MAX_SUBMISSION_ATTEMPTS = 3
 
 class Job(object):
     all_jobs = []
+    submitted_job_blocks = {}
 
     def __init__(self):
         self.name = self.__class__.__name__ + str(len(Job.all_jobs)) + '_' + datetime.datetime.now().isoformat()
@@ -188,13 +189,14 @@ class Job(object):
         multicore_run_list(cls.all_jobs)
 
     @classmethod
-    def multicore_keep_running(cls):
+    def multicore_keep_running(cls, run_partial=False):
         all_jobs_complete = False
         cancelled_jobs = {}
         cancelled_requeue_iters = 5
-        submitted_job_blocks = {}
+        #submitted_job_blocks = {}
+        partial_done = False
 
-        while not all_jobs_complete:
+        while not all_jobs_complete and not partial_done:
 
             # Find running job blocks
             sacct_output = subprocess.check_output(['sacct', '-n', '-o', 'JobID,JobName%100,State%20'])
@@ -221,7 +223,7 @@ class Job(object):
                 job_name = job_split[1]
                 job_status = ' '.join(job_split[2:])
 
-                if job_name in submitted_job_blocks:
+                if job_name in cls.submitted_job_blocks:
                     if job_status in ['PENDING', 'RUNNING', 'COMPLETED']:
                         if job_name in pending_running_complete_job_blocks:
                             print('Found duplicate job: ' + job_name)
@@ -268,7 +270,7 @@ class Job(object):
                     elif job_status in ['TIMEOUT']:
                         timeout += 1
                         # in case of a timeout, add all jobs to the timed_out_jobs set
-                        job_block_list = submitted_job_blocks[job_name]
+                        job_block_list = cls.submitted_job_blocks[job_name]
                         timed_out_jobs.update(job_block_list)
                     else:
                         print("Unexpected status: {0}".format(job_status))
@@ -280,7 +282,7 @@ class Job(object):
             pending_running_complete_jobs = {}
             for job_block_name in pending_running_complete_job_blocks:
                 job_id, job_status = pending_running_complete_job_blocks[job_block_name]
-                job_block_list = submitted_job_blocks[job_block_name]
+                job_block_list = cls.submitted_job_blocks[job_block_name]
                 for job in job_block_list:
                     pending_running_complete_jobs[job.name] = (job_id, job_status)
 
@@ -299,7 +301,7 @@ class Job(object):
 
             new_job_blocks = Job.multicore_run_list(runnable_jobs)
             block_count += len(new_job_blocks)
-            submitted_job_blocks.update(new_job_blocks)
+            cls.submitted_job_blocks.update(new_job_blocks)
 
             print 'Found {0} pending, {1} running, {2} complete, {3} failed, {4} cancelled, {5} timeout, {6} unknown status and {7} non-matching job blocks.'.format(
                 pending, running, complete, failed, cancelled, timeout, other_status, non_matching)
@@ -312,6 +314,10 @@ class Job(object):
                 time.sleep(60)
             else:
                 all_jobs_complete = True
+
+            # If need to run a partial (just a single execution), then exit the loop
+            if run_partial:
+                partial_done = True
 
     @classmethod
     def keep_running(cls):
@@ -576,8 +582,8 @@ class JobBlock(object):
         #     for j in job_block:
         #         j.jobid = str(cls.block_count - 1)
 
-        # print "command_list: {0}".format(command_list)
-        # print "full_command: {0}".format(full_command)
+        print "command_list: {0}".format(command_list)
+        print "full_command: {0}".format(full_command)
 
         submission_attempts = 0
         job_submitted = False

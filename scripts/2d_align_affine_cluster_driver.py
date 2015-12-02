@@ -35,7 +35,7 @@ class CreateSiftFeatures(Job):
         self.dependencies = []
         # self.threads = threads_num
         # self.threads_str = "-t {0}".format(threads_num)
-        self.memory = 6000
+        self.memory = 4000
         self.time = 20
         self.output = output_file
         #self.already_done = os.path.exists(self.output_file)
@@ -59,7 +59,7 @@ class CreateMultipleSiftFeatures(Job):
         self.dependencies = []
         # self.threads = threads_num
         # self.threads_str = "-t {0}".format(threads_num)
-        self.memory = 6000
+        self.memory = 4000
         self.time = 100
 
     def add_job(self, output_file, tile_index):
@@ -125,7 +125,7 @@ class MatchMultipleSiftFeaturesAndFilter(Job):
             self.wait_time = ''
         else:
             self.wait_time = '-w {0}'.format(wait_time)
-        self.memory = 8000
+        self.memory = 3000
         self.time = 100
         self.threads = threads_num
         self.threads_str = "-t {0}".format(threads_num)
@@ -438,6 +438,11 @@ if __name__ == '__main__':
                 matches_list_file, opt_montage_json,
                 conf_fname=args.conf_file_name)
         layers_data[slayer]['optimized_montage'] = opt_montage_json
+
+        #if args.multicore_keeprunning:
+        #    # Bundle jobs for multicore nodes, and run the ones that are ready at the moment
+        #    Job.multicore_keep_running(run_partial=True)
+ 
 
 
 
