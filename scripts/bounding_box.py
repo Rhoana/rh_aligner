@@ -78,6 +78,18 @@ class BoundingBox:
             return ret_val.toArray()
         return None
 
+    @classmethod
+    def read_bbox_from_ts(cls, tilespec):
+        all_bboxes = [BoundingBox.fromList(tile['bbox']) for tile in tilespec]
+        # merge the bounding boxes to a single bbox
+        if len(all_bboxes) > 0:
+            ret_val = all_bboxes[0]
+            for bbox in all_bboxes:
+                ret_val.extend(bbox)
+            return ret_val
+        return None
+
+
     def union(self, other_bbox):
         return BoundingBox(min(self.from_x, other_bbox.from_x),
                            max(self.to_x, other_bbox.to_x),
