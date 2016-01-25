@@ -232,7 +232,7 @@ def generatehexagonalgrid(boundingbox, spacing):
                 xpos += spacing * 0.5
             if (j % 2 == 1) and (i == sizex - 1):
                 continue
-            pointsret.append([int(xpos), int(ypos)])
+            pointsret.append([int(xpos + boundingbox[0]), int(ypos + boundingbox[2])])
     return pointsret
 
 
@@ -380,7 +380,9 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
     # Generate an hexagonal grid according to the first section's bounding box
     print("Generating Hexagonal Grid")
     bb = BoundingBox.read_bbox(tiles_fname1)
+    print("bounding_box: ", bb)
     hexgr = generatehexagonalgrid(bb, hex_spacing)
+    print(hexgr)
 
     # Iterate over the hexagonal points to find preliminary matches
     print("Starting finding preliminary matches for each point ({} possible points)".format(len(hexgr)))
@@ -389,6 +391,7 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
     for i in range(len(hexgr)):
         # Find the tile image where the point from the hexagonal is in the first section
         img1_ind = get_closest_index_to_point(hexgr[i], tile_centers1tree)
+        print(img1_ind)
         if img1_ind is None:
             continue
         if not is_point_in_img(ts1[img1_ind], hexgr[i]):
@@ -429,7 +432,7 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
         commandlist.append((ts1, ts2, template_size, scaling, img1_ind, best_transformations, mfov_centers1, prelimdict, min_corr, max_curvature, max_rod, debug_save_matches, debug_dir))
 
     # Execute PMCC Matching
-    print("Performing PMCC Matching")
+    print("Performing PMCC Matching with {} processes".format(processes_num))
     pool = mp.Pool(processes=processes_num)
     results = pool.map(perform_pmcc_unwrapper, commandlist)
     point_matches = [item for sublist in results for item in sublist]
