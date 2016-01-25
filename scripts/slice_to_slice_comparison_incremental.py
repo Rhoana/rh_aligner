@@ -20,42 +20,6 @@ from bounding_box import BoundingBox
 TILES_PER_MFOV = 61
 
 
-def secondlargest(nums):
-    largest = -1
-    secondlarge = -2
-    for index in range(0, len(nums)):
-        if nums[index] > largest:
-            secondlarge = largest
-            largest = nums[index]
-        elif nums[index] > secondlarge:
-            secondlarge = nums[index]
-    return secondlarge
-
-
-def thirdlargest(nums):
-    largest = -1
-    secondlarge = -2
-    thirdlarge = -3
-    for index in range(0, len(nums)):
-        if nums[index] > largest:
-            thirdlarge = secondlarge
-            secondlarge = largest
-            largest = nums[index]
-        elif nums[index] > secondlarge:
-            thirdlarge = secondlarge
-            secondlarge = nums[index]
-        elif nums[index] > thirdlarge:
-            thirdlarge = nums[index]
-    return thirdlarge
-
-
-def getnumsfromindex(ind):
-    return (ind / TILES_PER_MFOV + 1, ind % TILES_PER_MFOV + 1)
-
-
-def getindexfromnums((mfovnum, imgnum)):
-    return (mfovnum - 1) * TILES_PER_MFOV + imgnum - 1
-
 def compute_features(tile_ts):
     # Load the image
     img_file = tile_ts["mipmapLevels"]["0"]["imageUrl"].replace('file://', '')
@@ -74,7 +38,7 @@ def compute_features(tile_ts):
 
 def load_features(feature_file, tile_ts):
     # Should have the same name as the following: [tilespec base filename]_[img filename].json/.hdf5
-    #assert(os.path.basename(os.path.splitext(tile_ts["mipmapLevels"]["0"]["imageUrl"])[0]) in feature_file)
+    assert(os.path.basename(os.path.splitext(tile_ts["mipmapLevels"]["0"]["imageUrl"])[0]) in feature_file)
 
     # print("Loading feature file {} of tile {}, with a transform {}".format(feature_file, tile_ts["mipmapLevels"]["0"]["imageUrl"], tile_ts["transforms"][0]))
     # load the image features
@@ -93,20 +57,13 @@ def load_features(feature_file, tile_ts):
 
     currentocta = (octas.astype(int) & 0xff)
     currentocta[currentocta > 127] -= 255
-    #mask = (currentocta == 5)
     mask = (currentocta == 4) | (currentocta == 5)
-    #mask = (currentocta == 3) | (currentocta == 4) | (currentocta == 5)
-    #mask = (currentocta == 2) | (currentocta == 3) | (currentocta == 4) | (currentocta == 5)
-    #mask = (currentocta == 1) | (currentocta == 2) | (currentocta == 3) | (currentocta == 4) | (currentocta == 5)
-    #mask = (currentocta == 0) | (currentocta == 1) | (currentocta == 2) | (currentocta == 3) | (currentocta == 4) | (currentocta == 5)
-    #points = newallps[mask, :]
     points = allps[mask, :]
     resps = resps[mask]
     descs = descs[mask]
 
     # Apply the transformation to each point
     newmodel = models.Transforms.from_tilespec(tile_ts["transforms"][0])
-    #newallps = newmodel.apply_special(allps)
     points = newmodel.apply_special(points)
 
     return (points, resps, descs)
@@ -120,64 +77,6 @@ def getcenter(mfov_ts):
         nump += 2
     return [xlocsum / nump, ylocsum / nump]
 
-
-def getslicecenter(tilespecs):
-    xlocsum, ylocsum, nump = 0, 0, 0
-    for i in tilespecs:
-        mfov_ts = tilespecs[i]
-        for tile_ts in mfov_ts.values():
-            xlocsum += tile_ts["bbox"][0] + tile_ts["bbox"][1]
-            ylocsum += tile_ts["bbox"][2] + tile_ts["bbox"][3]
-            nump += 2
-    return [xlocsum / nump, ylocsum / nump]
-
-
-def get_closest_index_to_point(point, centers):
-    closest_index = np.argmin([distance.euclidean(point, center) for center in centers])
-    return closest_index
-
-
-def getcenterprecompute(num, precomplist):
-    return precomplist[num - 1]
-
-
-def getdistprecompute(num, precomplist):
-    return precomplist[num - 1]
-
-
-def pickrandomnearcenter(choicelist, tilespecs1, tilespecs2, precompcenters1, precompdists1, avgx, avgy, avgx2, avgy2):
-    choices1 = [i[0] for i in choicelist]
-    centers1 = [getcenterprecompute(i, precompcenters1) for i in choices1]
-    # (avgx, avgy) = getslicecenter(tilespecs1)
-    dists1 = [getdistprecompute(i, precompdists1) for i in choices1]
-    dists1sum = np.sum(dists1)
-    dists1 = [i / dists1sum for i in dists1]
-    choice1 = np.random.choice(choices1, p=dists1)
-
-    possiblechoicesprelim = []
-    for i in choicelist:
-        if i[0] == choice1:
-            possiblechoicesprelim.append(i)
-
-    choices2 = [i[1] for i in possiblechoicesprelim]
-    centers2 = [getcenter(tilespecs2[i]) for i in choices2]
-    # (avgx2, avgy2) = getslicecenter(tilespecs2)
-    dists2 = [1 / distance.euclidean((avgx2, avgy2), i) for i in centers2]
-    dists2sum = np.sum(dists2)
-    dists2 = [i / dists2sum for i in dists2]
-    choice2 = np.random.choice(choices2, p=dists2)
-    finalchoice = (choice1, choice2)
-    return [i for i in range(len(choicelist)) if choicelist[i] == finalchoice][0]
-
-
-def reorienttris(trilist, pointlist):
-    for num in range(0, trilist.shape[0]):
-        v0 = np.array(pointlist[trilist[num][0]])
-        v1 = np.array(pointlist[trilist[num][1]])
-        v2 = np.array(pointlist[trilist[num][2]])
-        if np.cross((v1 - v0), (v2 - v0)) < 0:
-            trilist[num][0], trilist[num][1] = trilist[num][1], trilist[num][0]
-    return
 
 
 def analyzemfov(mfov_ts, features_dir):
@@ -206,69 +105,6 @@ def analyzemfov(mfov_ts, features_dir):
     return (allpoints, np.concatenate(allresps), np.vstack(alldescs))
 
 
-def generatematches_cv2(allpoints1, allpoints2, alldescs1, alldescs2, actual_params):
-    matcher = cv2.BFMatcher()
-    matches = matcher.knnMatch(np.array(alldescs1), np.array(alldescs2), k=2)
-    goodmatches = []
-    for m, n in matches:
-        #if (n.distance == 0 and m.distance == 0) or (m.distance / n.distance < actual_params["ROD_cutoff"]):
-        if m.distance < actual_params["ROD_cutoff"] * n.distance:
-            goodmatches.append([m])
-    match_points = np.array([
-        np.array([allpoints1[[m[0].queryIdx for m in goodmatches]]][0]),
-        np.array([allpoints2[[m[0].trainIdx for m in goodmatches]]][0])])
-    return match_points
-
-def generatematches_cv2_given_model(allpoints1, allpoints2, alldescs1, alldescs2, actual_params, assumed_model):
-    matcher = cv2.BFMatcher()
-    matches = matcher.knnMatch(np.array(alldescs1), np.array(alldescs2), k=2)
-    print("len(matches):", len(matches))
-    goodmatches = []
-    max_epsilon_2 = actual_params["max_epsilon"] ** 2
-    for m, n in matches:
-        m_p1 = allpoints1[m.queryIdx]
-        m_p2 = allpoints2[m.trainIdx]
-        n_p1 = allpoints1[n.queryIdx]
-        n_p2 = allpoints2[n.trainIdx]
-        m_p1_transformed = assumed_model.apply(m_p1)
-        n_p1_transformed = assumed_model.apply(n_p1)
-        dist_m = np.sum((m_p2 - m_p1_transformed) ** 2) # distance w/o the square root
-        dist_n = np.sum((n_p2 - n_p1_transformed) ** 2) # distance w/o the square root
-        print("m_p1: {}, m_p2: {}, m_p1_trans: {}, dist_m: {}".format(m_p1, m_p2, m_p1_transformed, dist_m))
-        #print("n_p1: {}, n_p2: {}, n_p1_trans: {}, dist_n: {}".format(n_p1, n_p2, n_p1_transformed, dist_n))
-        if dist_m < max_epsilon_2:
-            print("adding point m")
-            goodmatches.append([m])
-        elif dist_n < max_epsilon_2:
-            print("adding point n")
-            goodmatches.append([n])
-        
-        ##if (n.distance == 0 and m.distance == 0) or (m.distance / n.distance < actual_params["ROD_cutoff"]):
-        #if m.distance < actual_params["ROD_cutoff"] * n.distance:
-        #    goodmatches.append([m])
-    match_points = np.array([
-        np.array([allpoints1[[m[0].queryIdx for m in goodmatches]]][0]),
-        np.array([allpoints2[[m[0].trainIdx for m in goodmatches]]][0])])
-    return match_points
-
-
-def generatematches_flann_cv2(allpoints1, allpoints2, alldescs1, alldescs2, actual_params):
-    FLANN_INDEX_KDTREE = 1
-    index_params = dict(algorithm = FLANN_INDEX_KDTREE, trees = 5)
-    #search_params = dict(checks=50)
-
-    flann_matcher = cv2.FlannBasedMatcher(index_params, {})#search_params)
-
-    matches = flann_matcher.knnMatch(np.array(alldescs1).astype(np.float32), np.array(alldescs2).astype(np.float32), k=2)
-    goodmatches = []
-    for m, n in matches:
-        if (n.distance == 0 and m.distance == 0) or (m.distance / n.distance < actual_params["ROD_cutoff"]):
-            goodmatches.append([m])
-    match_points = np.array([
-        np.array([allpoints1[[m[0].queryIdx for m in goodmatches]]][0]),
-        np.array([allpoints2[[m[0].trainIdx for m in goodmatches]]][0])])
-    return match_points
-
 def generatematches_crosscheck_cv2(allpoints1, allpoints2, alldescs1, alldescs2, actual_params):
     matcher = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True)
     matches = matcher.knnMatch(np.array(alldescs1), np.array(alldescs2), k=1)
@@ -280,97 +116,15 @@ def generatematches_crosscheck_cv2(allpoints1, allpoints2, alldescs1, alldescs2,
 
 
 
-def generatematches_brute(allpoints1, allpoints2, alldescs1, alldescs2, actual_params):
-    bestpoints1 = []
-    bestpoints2 = []
-    for pointrange in range(0, len(allpoints1)):
-        selectedpoint = allpoints1[pointrange]
-        selectedpointd = alldescs1[pointrange]
-        bestdistsofflann_ar = sys.float_info.max - 1
-        secondbestdistsofar = sys.float_info.max
-        bestcomparedpoint = allpoints2[0]
-        distances = []
-        for num in range(0, len(allpoints2)):
-            comparedpointd = alldescs2[num]
-            bestdist = distance.euclidean(selectedpointd.astype(np.int), comparedpointd.astype(np.int))
-            distances.append(bestdist)
-            if bestdist < bestdistsofar:
-                secondbestdistsofar = bestdistsofar
-                bestdistsofar = bestdist
-                bestcomparedpoint = allpoints2[num]
-            elif bestdist < secondbestdistsofar:
-                secondbestdistsofar = bestdist
-        if bestdistsofar / secondbestdistsofar < actual_params["ROD_cutoff"]:
-            bestpoints1.append(selectedpoint)
-            bestpoints2.append(bestcomparedpoint)
-    match_points = np.array([bestpoints1, bestpoints2])
-    return match_points
-
-
-def analyze2slicesmfovs(mfov1_ts, mfov2_ts, features_dir1, features_dir2, actual_params):
-    first_tile1 = mfov1_ts.values()[0]
-    first_tile2 = mfov2_ts.values()[0]
-    print("Sec{}_Mfov{} vs. Sec{}_Mfov{}".format(first_tile1["layer"], first_tile1["mfov"], first_tile2["layer"], first_tile2["mfov"]))
-    (allpoints1, allresps1, alldescs1) = analyzemfov(mfov1_ts, features_dir1)
-    (allpoints2, allresps2, alldescs2) = analyzemfov(mfov2_ts, features_dir2)
-    match_points = generatematches_flann_cv2(allpoints1, allpoints2, alldescs1, alldescs2, actual_params)
-    model_index = actual_params["model_index"]
-    iterations = actual_params["iterations"]
-    max_epsilon = actual_params["max_epsilon"]
-    min_inlier_ratio = actual_params["min_inlier_ratio"]
-    min_num_inlier = actual_params["min_num_inlier"]
-    max_trust = actual_params["max_trust"]
-    model, filtered_matches = ransac.filter_matches(match_points, model_index, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, max_trust)
-    if filtered_matches is None:
-        filtered_matches = np.zeros((0, 0))
-    if model is None:
-        print("Could not find a valid model between Sec{}_Mfov{} vs. Sec{}_Mfov{}".format(first_tile1["layer"], first_tile1["mfov"], first_tile2["layer"], first_tile2["mfov"]))
-    else:
-        print("Found a model {} (with {} matches) between Sec{}_Mfov{} vs. Sec{}_Mfov{}".format(model.to_str(), filtered_matches.shape[1], first_tile1["layer"], first_tile1["mfov"], first_tile2["layer"], first_tile2["mfov"]))
-    return (model, filtered_matches.shape[1], float(filtered_matches.shape[1]) / match_points.shape[1], match_points.shape[1], len(allpoints1), len(allpoints2))
-
-def find_homography(good, MIN_MATCH_COUNT=5):
-    M = None
-    if good.shape[1]>MIN_MATCH_COUNT:
-        src_pts = np.float32([ m for m in good[0] ]).reshape(-1,1,2)
-        dst_pts = np.float32([ m for m in good[1] ]).reshape(-1,1,2)
-
-        M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
-        matchesMask = mask.ravel().tolist()
-
-    else:
-        print("Not enough matches are found - {}/{}".format(good.shape[1],MIN_MATCH_COUNT))
-        matchesMask = None
-    return M, matchesMask
-
 def compare_features(section1_pts_resps_descs, section2_pts_resps_descs, actual_params):
     [allpoints1, allresps1, alldescs1] = section1_pts_resps_descs
     [allpoints2, allresps2, alldescs2] = section2_pts_resps_descs
-    print("lengths: len(allpoints1): {}, alldescs1.shape: {}".format(len(allpoints1), alldescs1.shape))
-    print("lengths: len(allpoints2): {}, alldescs2.shape: {}".format(len(allpoints2), alldescs2.shape))
-    #match_points = generatematches_cv2(allpoints1, allpoints2, alldescs1, alldescs2, actual_params)
-    #match_points = generatematches_flann_cv2(allpoints1, allpoints2, alldescs1, alldescs2, actual_params)
+    # print("lengths: len(allpoints1): {}, alldescs1.shape: {}".format(len(allpoints1), alldescs1.shape))
+    # print("lengths: len(allpoints2): {}, alldescs2.shape: {}".format(len(allpoints2), alldescs2.shape))
     match_points = generatematches_crosscheck_cv2(allpoints1, allpoints2, alldescs1, alldescs2, actual_params)
 
-    #M, matches_mask = find_homography(match_points)
-    #print("found model: {}".format(M))
-    #if M is None:
-    #    filtered_matches = np.zeros((0, 0))
-    #    model = None
-    #else:
-    #    filtered_matches = np.array([
-    #                                np.array([m for i, m in enumerate(match_points[0]) if matches_mask[i] == 1]),
-    #                                np.array([m for i, m in enumerate(match_points[1]) if matches_mask[i] == 1])
-    #                               ])
-    #    print("filtere_matches#: {}".format(filtered_matches.shape))
-    #    model = models.AffineModel(M)
-
     if match_points.shape[0] == 0 or match_points.shape[1] == 0:
         return (None, 0, 0, 0, len(allpoints1), len(allpoints2))
-    #else:
-    #    print("match_points:")
-    #    for m in zip(match_points[0], match_points[1]):
-    #        print("\t{} -> {}".format(m[0], m[1]))
     
     model_index = actual_params["model_index"]
     iterations = actual_params["iterations"]
@@ -381,56 +135,7 @@ def compare_features(section1_pts_resps_descs, section2_pts_resps_descs, actual_
     model, filtered_matches = ransac.filter_matches(match_points, model_index, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, max_trust)
     if filtered_matches is None:
         filtered_matches = np.zeros((0, 0))
-    #else:
-    #    print("Filtered_matches:")
-    #    for m in zip(filtered_matches[0], filtered_matches[1]):
-    #        print("\t{} -> {}".format(m[0], m[1]))
     return (model, filtered_matches.shape[1], float(filtered_matches.shape[1]) / match_points.shape[1], match_points.shape[1], len(allpoints1), len(allpoints2))
-
-def compare_features_given_model(section1_pts_resps_descs, section2_pts_resps_descs, actual_params, assumed_model):
-    [allpoints1, allresps1, alldescs1] = section1_pts_resps_descs
-    [allpoints2, allresps2, alldescs2] = section2_pts_resps_descs
-    print("lengths: len(allpoints1): {}, alldescs1.shape: {}".format(len(allpoints1), alldescs1.shape))
-    print("lengths: len(allpoints2): {}, alldescs2.shape: {}".format(len(allpoints2), alldescs2.shape))
-    match_points = generatematches_cv2_given_model(allpoints1, allpoints2, alldescs1, alldescs2, actual_params, assumed_model)
-    #match_points = generatematches_flann_cv2(allpoints1, allpoints2, alldescs1, alldescs2, actual_params)
-    #match_points = generatematches_crosscheck_cv2(allpoints1, allpoints2, alldescs1, alldescs2, actual_params)
-
-    #M, matches_mask = find_homography(match_points)
-    #print("found model: {}".format(M))
-    #if M is None:
-    #    filtered_matches = np.zeros((0, 0))
-    #    model = None
-    #else:
-    #    filtered_matches = np.array([
-    #                                np.array([m for i, m in enumerate(match_points[0]) if matches_mask[i] == 1]),
-    #                                np.array([m for i, m in enumerate(match_points[1]) if matches_mask[i] == 1])
-    #                               ])
-    #    print("filtere_matches#: {}".format(filtered_matches.shape))
-    #    model = models.AffineModel(M)
-
-    if match_points.shape[0] == 0 or match_points.shape[1] == 0:
-        return (None, 0, 0, 0, len(allpoints1), len(allpoints2))
-    #else:
-    #    print("match_points:")
-    #    for m in zip(match_points[0], match_points[1]):
-    #        print("\t{} -> {}".format(m[0], m[1]))
-    
-    model_index = actual_params["model_index"]
-    iterations = actual_params["iterations"]
-    max_epsilon = actual_params["max_epsilon"]
-    min_inlier_ratio = actual_params["min_inlier_ratio"]
-    min_num_inlier = actual_params["min_num_inlier"]
-    max_trust = actual_params["max_trust"]
-    model, filtered_matches = ransac.filter_matches(match_points, model_index, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, max_trust)
-    if filtered_matches is None:
-        filtered_matches = np.zeros((0, 0))
-    #else:
-    #    print("Filtered_matches:")
-    #    for m in zip(filtered_matches[0], filtered_matches[1]):
-    #        print("\t{} -> {}".format(m[0], m[1]))
-    return (model, filtered_matches.shape[1], float(filtered_matches.shape[1]) / match_points.shape[1], match_points.shape[1], len(allpoints1), len(allpoints2))
-
 
 
 def load_mfovs_features(indexed_ts, features_dir, mfovs_idx):
@@ -476,10 +181,6 @@ def iterative_search(actual_params, layer1, layer2, indexed_ts1, indexed_ts2, fe
     print("Features loaded")
     current_features = (current_features_pts, np.concatenate(current_features_resps), np.vstack(current_features_descs))
 
-    #current_features = analyzemfov(indexed_ts2[center_mfov_num2], features_dir2)
-    #current_features_pts = current_features[0]
-    #current_features_resps = [current_features[1]]
-    #current_features_descs = [current_features[2]]
     match_found = False
     match_iteration = 0
     best_transform = None
@@ -500,10 +201,6 @@ def iterative_search(actual_params, layer1, layer2, indexed_ts1, indexed_ts2, fe
         print("Iteration {}: using {} mfovs from section {} ({} features)".format(match_iteration, len(current_mfovs), layer2, len(current_features_pts)))
         # Try to match the 3-mfovs features of section1 to the current features of section2
         (model, num_filtered, filter_rate, num_rod, num_m1, num_m2) = compare_features(section1_pts_resps_descs, current_features, actual_params)
-        #if assumed_model is None:
-        #    (model, num_filtered, filter_rate, num_rod, num_m1, num_m2) = compare_features(section1_pts_resps_descs, current_features, actual_params)
-        #else:
-        #    (model, num_filtered, filter_rate, num_rod, num_m1, num_m2) = compare_features_given_model(section1_pts_resps_descs, current_features, actual_params, assumed_model)
 
         if model is None:
             print("Could not find a valid model between Sec{} and Sec{} in iteration {}".format(layer1, layer2, match_iteration))
@@ -517,11 +214,7 @@ def iterative_search(actual_params, layer1, layer2, indexed_ts1, indexed_ts2, fe
                 saved_model['num_m1'] = num_m1
                 saved_model['num_m2'] = num_m2
 
-        #model_arr[mfov1 - 1, mfov2 - 1] = model
-        #num_filter_arr[mfov1 - 1, mfov2 - 1] = num_filtered
-        #filter_rate_arr[mfov1 - 1, mfov2 - 1] = filter_rate
         if num_filtered > (actual_params["num_filtered_percent"] * len(all_points1) / len(mfovs_nums1)) and filter_rate > actual_params["filter_rate_cutoff"]:
-        #if filter_rate > actual_params["filter_rate_cutoff"]:
             best_transform = model
             match_found = True
         else:
@@ -591,16 +284,11 @@ def analyze_slices(tiles_fname1, tiles_fname2, features_dir1, features_dir2, act
 
     # Take the mfov closest to the middle of each section
     section_center1 = np.mean(centers1, axis=0)
-    #print("section_center1", section_center1)
     section_center2 = np.mean(centers2, axis=0)
     # Find the 3 closest mfovs to the center of section 1
     closest_mfovs_nums1 = np.argpartition([((c[0] - section_center1[0])**2 + (c[1] - section_center1[1])**2) for c in centers1], 3)[:3]
     closest_mfovs_nums1 = [n + 1 for n in closest_mfovs_nums1]
     # Find the closest mfov to the center of section 2
-    #center_mfov_num2 = np.argmin([((c[0] - section_center2[0])**2 + (c[1] - section_center2[1])**2) for c in centers2]) + 1
-    #centers_mfovs_nums2 = np.argpartition([((c[0] - section_center2[0])**2 + (c[1] - section_center2[1])**2) for c in centers2], 3)[:3]
-    #print("argpartition 3:", np.argpartition([((c[0] - section_center2[0])**2 + (c[1] - section_center2[1])**2) for c in centers2], 3)[:3])
-    #print("sorted: ", np.argsort([((c[0] - section_center2[0])**2 + (c[1] - section_center2[1])**2) for c in centers2]))
     centers_mfovs_nums2 = [np.argmin([((c[0] - section_center2[0])**2 + (c[1] - section_center2[1])**2) for c in centers2])]
     centers_mfovs_nums2 = [n + 1 for n in centers_mfovs_nums2]
     
@@ -627,8 +315,7 @@ def analyze_slices(tiles_fname1, tiles_fname2, features_dir1, features_dir2, act
     # Iterate throught the mfovs of section1, and try to find
     # for each mfov the transformation to section 2
     # (do an iterative search as was done in the previous phase)
-    #for i in range(0, num_mfovs1):
-    for i in range(50, num_mfovs1):
+    for i in range(0, num_mfovs1):
         # Find the location of all mfovs in section 2 that "overlap" the current mfov from section 1
         # (according to the estimated transform)
         #section1_mfov_bbox = BoundingBox.read_bbox_from_ts(indexed_ts1[i + 1].values())
@@ -646,12 +333,12 @@ def analyze_slices(tiles_fname1, tiles_fname2, features_dir1, features_dir2, act
         #for j, section2_mfov_bbox in enumerate(section2_mfov_bboxes):
         #    if projected_mfov_bbox.overlap(section2_mfov_bbox):
         #        relevant_mfovs_nums2.append(j + 1)
+
         # Find the "location" of mfov i's center on section2
         center1 = centers1[i]
         center1_transformed = np.dot(best_transform_matrix, np.append(center1, [1]))[0:2]
         distances = np.array([np.linalg.norm(center1_transformed - centers2[j]) for j in range(num_mfovs2)])
         print("distances:", [str(x) + ":" + str(d) for x, d in enumerate(distances)])
-        #relevant_mfov_num2 = np.argsort(distances)[0] + 1
         relevant_mfovs_nums2 = [np.argsort(distances)[0] + 1]
         print("Initial assumption Section {} mfov {} will match Section {} mfovs {}".format(layer1, i + 1, layer2, relevant_mfovs_nums2))
         # Do an iterative search of the mfov from section 1 to the "corresponding" mfov of section2
@@ -684,14 +371,6 @@ def analyze_slices(tiles_fname1, tiles_fname2, features_dir1, features_dir2, act
 
     return to_ret
 
-def find_middle(ts):
-    """Finds the x,y coordinate in the middle of the given section's tilespec"""
-    # TODO - this only works for a "rectangualr" region. Might need something else in the future
-
-    # Fetch the bounding box of each section (to find the middle of the sections)
-    bbox = bounding_box.read_bbox_from_ts(ts)
-    return np.array([(bbox.to_x - bbox.from_x) / 2, (bbox.to_y - bbox.from_y) / 2])
-
 def match_layers_sift_features(tiles_fname1, features_dir1, tiles_fname2, features_dir2, out_fname, conf_fname=None):
     params = utils.conf_from_file(conf_fname, 'MatchLayersSiftFeaturesAndFilter')
     if params is None:
@@ -699,7 +378,6 @@ def match_layers_sift_features(tiles_fname1, features_dir1, tiles_fname2, featur
     actual_params = {}
     # Parameters for the matching
     actual_params["max_attempts"] = params.get("max_attempts", 10)
-    #actual_params["num_filtered_cutoff"] = params.get("num_filtered_cutoff", 50)
     actual_params["num_filtered_percent"] = params.get("num_filtered_percent", 0.25)
     actual_params["filter_rate_cutoff"] = params.get("filter_rate_cutoff", 0.25)
     actual_params["ROD_cutoff"] = params.get("ROD_cutoff", 0.92)
