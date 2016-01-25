@@ -341,6 +341,11 @@ class AffineModel(AbstractAffineModel):
     #         return np.vstack([np.dot(self.m, p_i) for p_i in p])
     #     raise RuntimeError, "Invalid points input"
 
+    def apply_special(self, p):
+        pts = np.atleast_2d(p)
+        return np.dot(self.m[:2,:2],
+                       pts.T).T + np.asarray(self.m.T[2][:2]).reshape((1, 2))
+
     def to_str(self):
         return "M={}".format(self.m)
 
@@ -361,7 +366,7 @@ class AffineModel(AbstractAffineModel):
             )
 
     def get_matrix(self):
-        return m
+        return self.m
 
     def fit(self, X, y):
         """
