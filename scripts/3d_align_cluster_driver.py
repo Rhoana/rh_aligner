@@ -41,7 +41,7 @@ class PreliminaryMatchLayersMfovs(Job):
         self.dependencies = [ ]
         #self.threads = threads_num
         #self.threads_str = "-t {0}".format(threads_num)
-        self.memory = 8000
+        self.memory = 1000
         self.time = 300
         self.output = output_fname
         #self.already_done = os.path.exists(self.output_file)
@@ -71,7 +71,7 @@ class MatchLayersByMaxPMCC(Job):
         self.threads = threads_num
         self.threads_str = '-t {0}'.format(threads_num)
         self.dependencies = dependencies
-        self.memory = 8000
+        self.memory = 3000
         self.time = 800
         self.output = output_fname
         #self.already_done = os.path.exists(self.output_file)
@@ -100,10 +100,10 @@ class OptimizeLayersElastic(Job):
         else:
             self.skip_layers = '-s "{0}"'.format(skip_layers)
         self.max_layer_distance = '-d {}'.format(max_layer_distance)
-        #self.threads = threads_num
-        #self.threads_str = '-t {0}'.format(threads_num)
+        self.threads = threads_num
+        self.threads_str = '-t {0}'.format(threads_num)
         self.dependencies = dependencies
-        self.memory = 16000
+        self.memory = 32000
         self.time = 800
         self.output = outputs
         #self.already_done = os.path.exists(self.output_file)
@@ -111,7 +111,7 @@ class OptimizeLayersElastic(Job):
     def command(self):
         return ['python -u',
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'optimize_layers_elastic.py'),
-                self.output_dir, self.conf_fname, 
+                self.output_dir, self.conf_fname, self.threads_str,
                 self.max_layer_distance, self.skip_layers, self.tiles_fnames, self.corr_fnames]
 
 

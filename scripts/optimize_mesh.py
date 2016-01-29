@@ -14,6 +14,7 @@ import mesh_derivs_multibeam
 
 FLOAT_TYPE = np.float64
 
+SHOW_FINAL_MO = True
 
 sys.setrecursionlimit(10000)  # for grad
 
@@ -282,6 +283,10 @@ def optimize_meshes_links(meshes, links, conf_dict={}):
             break
     print("last MO: {}\n".format(mean_offsets(meshes, links, sorted_slices[-1], plot=False)))
 
+    if SHOW_FINAL_MO:
+        print("Final MO:")
+        for i, active_ts in enumerate(sorted_slices):
+            print(" Section {}: {}".format(i, mean_offsets(meshes, links, active_ts, plot=False)))
     # Prepare per-layer output
     out_positions = {}
 

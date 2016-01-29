@@ -12,6 +12,7 @@ from optimize_mesh import optimize_meshes
 import math
 import numpy as np
 from scipy import spatial
+import multiprocessing as mp
 
 cached_radius = None
 
@@ -64,9 +65,21 @@ def get_moving_ls_transform(url_optimized_mesh):
     return transform
 
 
+def save_json_file(out_fname, data):
+    with open(out_fname, 'w') as outjson:
+        json.dump(data, outjson, sort_keys=True, indent=4)
+        print('Wrote tilespec to {0}'.format(out_fname))
 
 
-def save_optimized_meshes(all_tile_urls, optimized_meshes, out_dir):
+def save_optimized_meshes(all_tile_urls, optimized_meshes, out_dir, processes_num=1):
+    # pre-compute the restricted MLS radius
+    first_ts_fname = all_tile_urls[0].replace('file://', '')
+    compute_restricted_moving_ls_radius(optimized_meshes[first_ts_fname])
+
+    # Do the actual multiprocessed save
+    pool = mp.Pool(processes=processes_num)
+    print("Using {} processes to save the output jsons".format(processes_num))
+
     for ts_url in all_tile_urls:
         ts_fname = ts_url.replace('file://', '')
         ts_base = os.path.basename(ts_fname)
@@ -88,11 +101,11 @@ def save_optimized_meshes(all_tile_urls, optimized_meshes, out_dir):
                 tile["transforms"].append(tile_transform)
 
             # save the output tile spec
-            with open(out_fname, 'w') as outjson:
-                json.dump(data, outjson, sort_keys=True, indent=4)
-                print('Wrote tilespec to {0}'.format(out_fname))
+            res = pool.apply_async(save_json_file, (out_fname, data))
         else:
             print('Nothing to write for tilespec {}'.format(ts_fname))
+    pool.close()
+    pool.join()
         
 def read_ts_layers(tile_files):
     tsfile_to_layerid = {}
@@ -136,7 +149,7 @@ def optimize_layers_elastic(tile_files, corr_files, out_dir, max_layer_distance,
     
     # Save the output
     utils.create_dir(out_dir)
-    save_optimized_meshes(all_tile_urls, optimized_meshes, out_dir)
+    save_optimized_meshes(all_tile_urls, optimized_meshes, out_dir, threads_num)
 
     print("Done.")
     
