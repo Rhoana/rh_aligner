@@ -105,6 +105,19 @@ def analyzemfov(mfov_ts, features_dir):
     return (allpoints, np.concatenate(allresps), np.vstack(alldescs))
 
 
+def generatematches_cv2(allpoints1, allpoints2, alldescs1, alldescs2, actual_params):
+    matcher = cv2.BFMatcher()
+    matches = matcher.knnMatch(np.array(alldescs1), np.array(alldescs2), k=2)
+    goodmatches = []
+    for m, n in matches:
+        #if (n.distance == 0 and m.distance == 0) or (m.distance / n.distance < actual_params["ROD_cutoff"]):
+        if m.distance < actual_params["ROD_cutoff"] * n.distance:
+            goodmatches.append([m])
+    match_points = np.array([
+        np.array([allpoints1[[m[0].queryIdx for m in goodmatches]]][0]),
+        np.array([allpoints2[[m[0].trainIdx for m in goodmatches]]][0])])
+    return match_points
+
 def generatematches_crosscheck_cv2(allpoints1, allpoints2, alldescs1, alldescs2, actual_params):
     matcher = cv2.BFMatcher(cv2.NORM_L2, crossCheck=True)
     matches = matcher.knnMatch(np.array(alldescs1), np.array(alldescs2), k=1)
@@ -121,7 +134,8 @@ def compare_features(section1_pts_resps_descs, section2_pts_resps_descs, actual_
     [allpoints2, allresps2, alldescs2] = section2_pts_resps_descs
     # print("lengths: len(allpoints1): {}, alldescs1.shape: {}".format(len(allpoints1), alldescs1.shape))
     # print("lengths: len(allpoints2): {}, alldescs2.shape: {}".format(len(allpoints2), alldescs2.shape))
-    match_points = generatematches_crosscheck_cv2(allpoints1, allpoints2, alldescs1, alldescs2, actual_params)
+    match_points = generatematches_cv2(allpoints1, allpoints2, alldescs1, alldescs2, actual_params)
+    #match_points = generatematches_crosscheck_cv2(allpoints1, allpoints2, alldescs1, alldescs2, actual_params)
 
     if match_points.shape[0] == 0 or match_points.shape[1] == 0:
         return (None, 0, 0, 0, len(allpoints1), len(allpoints2))
@@ -159,7 +173,7 @@ def iterative_search(actual_params, layer1, layer2, indexed_ts1, indexed_ts2, fe
     if (len(all_points1) < actual_params["min_features_num"]):
         print("Number of features in Section {} mfov(s) {} is {}, and smaller than {}. Skipping feature matching".format(
             layer1, mfovs_nums1, len(all_points1), actual_params["min_features_num"]))
-        return None, 0, 0, 0, 0, 0
+        return None, 0, 0, 0, 0, 0, 0
 
     # Take the mfovs in the middle of the 2nd section as the initial matched area
     # (on each iteration, increase the matched area, by taking all the mfovs that overlap
@@ -193,9 +207,12 @@ def iterative_search(actual_params, layer1, layer2, indexed_ts1, indexed_ts2, fe
     # Save the best model that we find through the iterations
     saved_model = {
         'model' : None,
-        'num_filtered' : 0
+        'num_filtered' : 0,
+        'filter_rate' : 0,
+        'num_rod' : 0,
+        'num_m1' : 0,
+        'num_m2' : 0
     }
-    saved_model_num_filtered = 0
     while not match_found:
         match_iteration += 1
         print("Iteration {}: using {} mfovs from section {} ({} features)".format(match_iteration, len(current_mfovs), layer2, len(current_features_pts)))
@@ -206,7 +223,7 @@ def iterative_search(actual_params, layer1, layer2, indexed_ts1, indexed_ts2, fe
             print("Could not find a valid model between Sec{} and Sec{} in iteration {}".format(layer1, layer2, match_iteration))
         else:
             print("Found a model {} (with {} matches) between Sec{} and Sec{} in iteration {}, need to verify cutoff".format(model.to_str(), num_filtered, layer1, layer2, match_iteration))
-            if num_filtered > saved_model_num_filtered:
+            if num_filtered > saved_model['num_filtered']:
                 saved_model['model'] = model
                 saved_model['num_filtered'] = num_filtered
                 saved_model['filter_rate'] = filter_rate
@@ -254,7 +271,7 @@ def iterative_search(actual_params, layer1, layer2, indexed_ts1, indexed_ts2, fe
         num_m1 = saved_model['num_m1']
         num_m2 = saved_model['num_m2']
 
-    return best_transform, num_filtered, filter_rate, num_rod, num_m1, num_m2
+    return best_transform, num_filtered, filter_rate, num_rod, num_m1, num_m2, match_iteration
 
 
 
@@ -296,11 +313,11 @@ def analyze_slices(tiles_fname1, tiles_fname2, features_dir1, features_dir2, act
     section2_mfov_bboxes = [BoundingBox.read_bbox_from_ts(indexed_ts2[i].values()) for i in range(1, num_mfovs2 + 1)]
 
     print("Comparing Sec{} (mfovs: {}) and Sec{} (starting from mfovs: {})".format(layer1, closest_mfovs_nums1, layer2, centers_mfovs_nums2))
-    initial_search_start_time = time.clock()
+    initial_search_start_time = time.time()
     # Do an iterative search of the 3 mfovs closest to the center of section 1 to the mfovs of section2 (starting from the center)
-    best_transform, num_filtered, filter_rate, _, _, _ = iterative_search(actual_params, layer1, layer2, indexed_ts1, indexed_ts2,
+    best_transform, num_filtered, filter_rate, _, _, _, initial_search_iters_num = iterative_search(actual_params, layer1, layer2, indexed_ts1, indexed_ts2,
                          features_dir1, features_dir2, closest_mfovs_nums1, centers_mfovs_nums2, section2_mfov_bboxes, num_mfovs2)
-    initial_search_end_time = time.clock()
+    initial_search_end_time = time.time()
 
 
     
@@ -309,7 +326,7 @@ def analyze_slices(tiles_fname1, tiles_fname2, features_dir1, features_dir2, act
         return to_ret
 
     best_transform_matrix = best_transform.get_matrix()
-    print("Found a preliminary transform between sections: {} and {} (filtered matches#: {}, rate: {}), with model: {} in {} seconds".format(layer1, layer2, num_filtered, filter_rate, best_transform_matrix, initial_search_end_time - initial_search_start_time))
+    print("Found a preliminary transform between sections: {} and {} (filtered matches#: {}, rate: {}), with model: {} in {} seconds, and {} iterations".format(layer1, layer2, num_filtered, filter_rate, best_transform_matrix, initial_search_end_time - initial_search_start_time, initial_search_iters_num))
 
 
     # Iterate throught the mfovs of section1, and try to find
@@ -342,10 +359,10 @@ def analyze_slices(tiles_fname1, tiles_fname2, features_dir1, features_dir2, act
         relevant_mfovs_nums2 = [np.argsort(distances)[0] + 1]
         print("Initial assumption Section {} mfov {} will match Section {} mfovs {}".format(layer1, i + 1, layer2, relevant_mfovs_nums2))
         # Do an iterative search of the mfov from section 1 to the "corresponding" mfov of section2
-        mfov_search_start_time = time.clock()
-        mfov_transform, num_filtered, filter_rate, num_rod, num_m1, num_m2 = iterative_search(actual_params, layer1, layer2, indexed_ts1, indexed_ts2,
+        mfov_search_start_time = time.time()
+        mfov_transform, num_filtered, filter_rate, num_rod, num_m1, num_m2, match_iterations = iterative_search(actual_params, layer1, layer2, indexed_ts1, indexed_ts2,
                              features_dir1, features_dir2, [i + 1], relevant_mfovs_nums2, section2_mfov_bboxes, num_mfovs2, assumed_model=best_transform)
-        mfov_search_end_time = time.clock()
+        mfov_search_end_time = time.time()
         if mfov_transform is None:
             # Could not find a transformation for the given mfov
             print("Could not find a transformation between Section {} mfov {}, to Section {} (after {} seconds), skipping the mfov".format(layer1, i + 1, layer2, mfov_search_end_time - mfov_search_start_time))
@@ -366,10 +383,11 @@ def analyze_slices(tiles_fname1, tiles_fname2, features_dir1, features_dir2, act
             dictentry['matches_model'] = num_filtered
             dictentry['filter_rate'] = filter_rate
             dictentry['mfov_search_time'] = mfov_search_end_time - mfov_search_start_time
+            dictentry['mfov_iterations_num'] = match_iterations
             to_ret.append(dictentry)
 
 
-    return to_ret
+    return to_ret, initial_search_iters_num, initial_search_end_time - initial_search_start_time
 
 def match_layers_sift_features(tiles_fname1, features_dir1, tiles_fname2, features_dir2, out_fname, conf_fname=None):
     params = utils.conf_from_file(conf_fname, 'MatchLayersSiftFeaturesAndFilter')
@@ -393,17 +411,19 @@ def match_layers_sift_features(tiles_fname1, features_dir1, tiles_fname2, featur
 
     print("Matching layers: {} and {}".format(tiles_fname1, tiles_fname2))
 
-    starttime = time.clock()
+    starttime = time.time()
 
     # Match the two sections
-    retval = analyze_slices(tiles_fname1, tiles_fname2, features_dir1, features_dir2, actual_params)
+    retval, initial_search_iters_num, initial_search_time = analyze_slices(tiles_fname1, tiles_fname2, features_dir1, features_dir2, actual_params)
 
     # Save the output
     jsonfile = {}
     jsonfile['tilespec1'] = tiles_fname1
     jsonfile['tilespec2'] = tiles_fname2
     jsonfile['matches'] = retval
-    jsonfile['runtime'] = time.clock() - starttime
+    jsonfile['runtime'] = time.time() - starttime
+    jsonfile['initial_search_iterations_num'] = initial_search_iters_num
+    jsonfile['initial_search_time'] = initial_search_time
     with open(out_fname, 'w') as out:
         json.dump(jsonfile, out, indent=4)
     print("Done.")
