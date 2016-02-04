@@ -48,7 +48,7 @@ class PreliminaryMatchLayersMfovs(Job):
 
     def command(self):
         return ['python -u',
-                os.path.join(os.environ['ALIGNER'], 'scripts', 'slice_to_slice_comparison.py'),
+                os.path.join(os.environ['ALIGNER'], 'scripts', 'slice_to_slice_comparison_incremental.py'),
                 self.output_fname, self.conf_fname, self.tiles_fname1, self.features_dir1, self.tiles_fname2, self.features_dir2]
 
 

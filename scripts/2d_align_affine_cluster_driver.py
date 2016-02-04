@@ -46,7 +46,7 @@ class CreateSiftFeatures(Job):
                 self.output_file, self.conf_fname, self.tiles_fname, self.tile_index]
 
 class CreateMultipleSiftFeatures(Job):
-    def __init__(self, tiles_fname, conf_fname=None, threads_num=1):
+    def __init__(self, tiles_fname, sifts_work_dir, temp_output_list_file, conf_fname=None, threads_num=1):
         Job.__init__(self)
         self.already_done = False
         self.tiles_fname = '"{0}"'.format(tiles_fname)
@@ -59,18 +59,30 @@ class CreateMultipleSiftFeatures(Job):
         self.dependencies = []
         # self.threads = threads_num
         # self.threads_str = "-t {0}".format(threads_num)
-        self.memory = 4000
+        self.memory = 3000
         self.time = 100
+        self.sifts_work_dir = sifts_work_dir
+        self.temp_output_list_file = temp_output_list_file
 
     def add_job(self, output_file, tile_index):
         self.output_files_list.append(output_file)
         self.tile_indices_list.append(tile_index)
         self.output.append(output_file)
 
+    def prepare_files(self):
+        if len(self.tile_indices_list) > 0:
+            self.tile_indices = '-i {0}'.format(' '.join([str(i) for i in self.tile_indices_list]))
+            self.output_files = '-o {0}'.format(' '.join(self.output_files_list))
+            #tmp_output_files = os.path.join(self.sifts_work_dir, "{}_sifts_outputs_lst.txt".format(self.temp_output_list_file))
+            #with open(tmp_output_files, 'w') as f:
+            #    for i, item in zip(self.tile_indices_list, self.output_files_list):
+            #        f.write("{},{}\n".format(i, item))
+            #self.output_files = '-o "{0}"'.format(tmp_output_files)
+
+
 
     def command(self):
-        self.tile_indices = '-i {0}'.format(' '.join([str(i) for i in self.tile_indices_list]))
-        self.output_files = '-o {0}'.format(' '.join(self.output_files_list))
+        self.prepare_files()
         return ['python -u',
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'create_sift_features_cv2.py'),
                 self.output_files, self.tile_indices, self.conf_fname, self.tiles_fname]
@@ -337,7 +349,7 @@ if __name__ == '__main__':
 
             if ts["mfov"] != prev_mfov: # Assumes that the tiles are sorted by their mfov#
                 # found new mfov, create a new multiple sift computation job
-                job_multi_sift = CreateMultipleSiftFeatures(f, conf_fname=args.conf_file_name, threads_num=1)
+                job_multi_sift = CreateMultipleSiftFeatures(f, mfov_sifts_dir, cur_wafer_mfov, conf_fname=args.conf_file_name, threads_num=1)
                 prev_mfov = ts["mfov"]
             
             # create the sift features of these tiles
