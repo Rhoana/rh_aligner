@@ -6,6 +6,7 @@ import os
 import json
 from decimal import *
 from utils import create_dir
+import re
 
 # input_folder: the folder of a single wafer
 # output_folder: where to put the tilespecs
@@ -128,7 +129,7 @@ def offset_list(lst):
     return [item - m for item in lst]
 
 
-def parse_wafer(wafer_folder, output_folder, wafer_num=1, start_layer=1):
+def parse_wafer(wafer_folder, output_folder, wafer_name=1, start_layer=1):
     sub_folders = sorted(glob.glob(os.path.join(wafer_folder, '*')))
 
     coords = {}
@@ -148,7 +149,7 @@ def parse_wafer(wafer_folder, output_folder, wafer_num=1, start_layer=1):
             coords_file = os.path.join(sub_folder, "full_image_coordinates.txt")
             if os.path.exists(coords_file):
                 layer = int(sub_folder.split(os.path.sep)[-1])
-                output_json_fname = os.path.join(output_folder, "W{0:02d}_Sec{1:03d}.json".format(wafer_num, layer))
+                output_json_fname = os.path.join(output_folder, "{0}_Sec{1:03d}.json".format(wafer_name, layer))
 
                 if os.path.exists(output_json_fname):
                     print "Output file {} already found, skipping".format(output_json_fname)
@@ -208,18 +209,25 @@ def parse_wafer(wafer_folder, output_folder, wafer_num=1, start_layer=1):
 
 def main():
     input_folder = sys.argv[1]
-    output_folder = sys.argv[-1]
 
-    if len(sys.argv) < 2:
-        output_folder = os.path.join(input_folder, 'tilespecs')
+    if len(sys.argv) > 2:
+        output_folder = sys.argv[2]
     else:
-        output_folder = sys.argv[-1]
+        output_folder = os.path.join(input_folder, 'tilespecs')
+
+    if len(sys.argv) > 3:
+        start_layer = int(sys.argv[-1])
+    else:
+        start_layer = 1
 
     create_dir(output_folder)
 
+    print input_folder
+    m = re.match('.*[W|w]([0-9]+).*', input_folder)
+    wafer_name = 'W' + str(int(m.group(1))).zfill(2)
 
-    parse_wafer(input_folder, output_folder)
-
+    print "wafer_name", wafer_name, "start_layer", start_layer
+    parse_wafer(input_folder, output_folder, wafer_name, start_layer)
 
 if __name__ == '__main__':
     main()
