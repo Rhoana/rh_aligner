@@ -22,8 +22,9 @@ SBATCH_QUEUE = 'serial_requeue'
 # SBATCH_ACCOUNT = None
 SBATCH_ACCOUNT = 'lichtman_lab'
 
-# SBATCH_EXCLUDED = None
-SBATCH_EXCLUDED = 'nelson01,regal01,regal02,regal03,regal04,regal10,regal09,regal08,regal11,regal13,regal18,jenny02,hsph05,hsph06,holy2a13104,regal14'
+#SBATCH_EXCLUDED = None
+# SBATCH_EXCLUDED = 'regal01,regal02,regal03,regal04,regal10,regal09,regal08,regal11,regal13,regal18,hsph05,hsph06,regal14'
+SBATCH_EXCLUDED = 'holygiribet06'
 
 # Make sure the logs directory exists
 if not os.path.exists(LOGS_DIR) or not os.path.isdir(os.path.dirname(LOGS_DIR)):
@@ -607,6 +608,7 @@ class JobBlock(object):
 
             elif process.returncode != 0:
                 print("Error while submitting job: {}\n{}".format(command_list, full_command))
+                print("Error ({}) is: {}".format(process.returncode, submit_err))
                 if submission_attempts == MAX_SUBMISSION_ATTEMPTS:
                     print("Reached maximal submissions attempts, aborting driver")
                     sys.exit(1)
