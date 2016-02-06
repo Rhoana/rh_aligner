@@ -230,6 +230,10 @@ def iterative_search(actual_params, layer1, layer2, indexed_ts1, indexed_ts2, fe
                 saved_model['num_rod'] = num_rod
                 saved_model['num_m1'] = num_m1
                 saved_model['num_m2'] = num_m2
+            elif num_filtered < saved_model['num_filtered']:
+                # if already passed the highest number of matches that can be found
+                # just use the best that was found, and no need to search more
+                break
 
         if num_filtered > (actual_params["num_filtered_percent"] * len(all_points1) / len(mfovs_nums1)) and filter_rate > actual_params["filter_rate_cutoff"]:
             best_transform = model
