@@ -49,6 +49,20 @@ class Mesh(object):
                                         triangles_as_pts[:, 1, :] - triangles_as_pts[:, 0, :])
         return edge_indices, edge_lengths, simplices, triangle_areas
 
+    def remove_unneeded_points(self, pts1, pts2):
+        """Removes points that cause query_cross_barycentrics to fail"""
+        p1 = pts1.copy()
+        p1[p1 < 0] = 0.01
+        simplex_indices = self.triangulation.find_simplex(p1)
+        if np.any(simplex_indices == -1):
+            locs = np.where(simplex_indices == -1)
+            print("locations", locs)
+            print("points:", pts1[locs])
+            print("removing the above points")
+            pts1 = np.delete(pts1, locs, 0)
+            pts2 = np.delete(pts2, locs, 0)
+        return pts1, pts2
+
     def query_barycentrics(self, points):
         """Returns the mesh indices that surround a point, and the barycentric weights of those points"""
         p = points.copy()
@@ -335,6 +349,9 @@ def optimize_meshes(match_files_list, conf_dict={}):
         pts1 = np.array([p["point1"] for p in data["pointmatches"]])
         pts2 = np.array([p["point2"] for p in data["pointmatches"]])
         if len(pts1) > 0:
+            pts1, pts2 = meshes[ts1].remove_unneeded_points(pts1, pts2)
+            pts2, pts1 = meshes[ts2].remove_unneeded_points(pts2, pts1)
+
             links[ts1, ts2] = (meshes[ts1].query_barycentrics(pts1),
                                meshes[ts2].query_barycentrics(pts2))
         if not data["tilespec1"] in meshes:
