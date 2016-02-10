@@ -327,36 +327,52 @@ def optimize_meshes_links(meshes, links, conf_dict={}):
 def optimize_meshes(match_files_list, conf_dict={}):
     meshes = {}
 
+    meshes_per_mfov = {}
+    pair_ts_to_pts = {}
     # extract meshes
     for match_file in match_files_list:
+        # Assumes that the mesh can be separated into multiple files with the same tilespec1 or tilespec2
         data = None
+        print match_file
         with open(match_file, 'r') as f:
             data = json.load(f)
         if not data["tilespec1"] in meshes:
-            meshes[data["tilespec1"]] = Mesh(data["mesh"])
-        if not data["tilespec2"] in meshes:
-            meshes[data["tilespec2"]] = Mesh(data["mesh"])
+            if "mfov" in data:
+                if not data["tilespec1"] in meshes_per_mfov:
+                    meshes_per_mfov[data["tilespec1"]] = {}
+                if not data["mfov"] in meshes_per_mfov[data["tilespec1"]]:
+                    meshes_per_mfov[data["tilespec1"]][data["mfov"]] = data["mesh"]
+            else:
+                meshes[data["tilespec1"]] = Mesh(data["mesh"])
+        if not data["tilespec1"] in pair_ts_to_pts:
+            pair_ts_to_pts[data["tilespec1"]] = {}
+        if not data["tilespec2"] in pair_ts_to_pts[data["tilespec1"]]:
+            pair_ts_to_pts[data["tilespec1"]][data["tilespec2"]] = []
+        pts1 = np.array([p["point1"] for p in data["pointmatches"]])
+        pts2 = np.array([p["point2"] for p in data["pointmatches"]])
+        pair_ts_to_pts[data["tilespec1"]][data["tilespec2"]].append((pts1, pts2))
+
+    # Make sure the meshes are initialized per tilespec
+    for tilespec_url in meshes_per_mfov:
+        if tilespec_url not in meshes:
+            # Merge all the mfov sub-meshes into a single mesh, and set it as the tilespec's mesh
+            # (this seems to be the fastest way to merge, according to: http://stackoverflow.com/questions/952914/making-a-flat-list-out-of-list-of-lists-in-python)
+            meshes[tilespec_url] = Mesh([p for submesh in meshes for p in submesh])
 
     links = {}
     # extract links
-    for match_file in match_files_list:
-        print match_file
-        data = None
-        with open(match_file, 'r') as f:
-            data = json.load(f)
-        ts1 = data["tilespec1"]
-        ts2 = data["tilespec2"]
-        pts1 = np.array([p["point1"] for p in data["pointmatches"]])
-        pts2 = np.array([p["point2"] for p in data["pointmatches"]])
-        if len(pts1) > 0:
-            pts1, pts2 = meshes[ts1].remove_unneeded_points(pts1, pts2)
-            pts2, pts1 = meshes[ts2].remove_unneeded_points(pts2, pts1)
+    for ts1 in meshes:
+        for ts2 in pair_ts_to_pts[ts1]:
+            pts1 = np.concatenate([l[0] for l in pair_ts_to_pts[ts1][ts2]])
+            pts2 = np.concatenate([l[1] for l in pair_ts_to_pts[ts1][ts2]])
 
-            links[ts1, ts2] = (meshes[ts1].query_barycentrics(pts1),
-                               meshes[ts2].query_barycentrics(pts2))
-        if not data["tilespec1"] in meshes:
-            meshes[data["tilespec1"]] = Mesh(data["mesh"])
+            if len(pts1) > 0:
+                pts1, pts2 = meshes[ts1].remove_unneeded_points(pts1, pts2)
+                pts2, pts1 = meshes[ts2].remove_unneeded_points(pts2, pts1)
 
+                links[ts1, ts2] = (meshes[ts1].query_barycentrics(pts1),
+                                   meshes[ts2].query_barycentrics(pts2))
+ 
     return optimize_meshes_links(meshes, links, conf_dict)
 
 if __name__ == '__main__':

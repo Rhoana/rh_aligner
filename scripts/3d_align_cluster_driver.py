@@ -52,14 +52,15 @@ class PreliminaryMatchLayersMfovs(Job):
                 self.output_fname, self.conf_fname, self.tiles_fname1, self.features_dir1, self.tiles_fname2, self.features_dir2]
 
 
-class MatchLayersByMaxPMCC(Job):
-    def __init__(self, dependencies, tiles_fname1, tiles_fname2, pre_match_fname, output_fname, conf_fname=None, threads_num=1, auto_add_model=False):
+class MatchLayersByMaxPMCCMfov(Job):
+    def __init__(self, dependencies, tiles_fname1, tiles_fname2, pre_match_fname, output_fname, targeted_mfov, conf_fname=None, threads_num=1, auto_add_model=False):
         Job.__init__(self)
         self.already_done = False
         self.tiles_fname1 = '"{0}"'.format(tiles_fname1)
         self.tiles_fname2 = '"{0}"'.format(tiles_fname2)
         self.pre_match_fname = '"{0}"'.format(pre_match_fname)
         self.output_fname = '-o "{0}"'.format(output_fname)
+        self.targeted_mfov = '-m {0}'.format(targeted_mfov)
         if conf_fname is None:
             self.conf_fname = ''
         else:
@@ -81,6 +82,7 @@ class MatchLayersByMaxPMCC(Job):
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'match_images_between_slices_optimized.py'),
                 self.output_fname, self.conf_fname,
                 self.threads_str, #self.auto_add_model,
+                self.targeted_mfov,
                 self.tiles_fname1, self.tiles_fname2, self.pre_match_fname]
 
 
@@ -186,16 +188,23 @@ if __name__ == '__main__':
 
     all_running_jobs = []
 
+    mfovs_per_layer = {}
+
 
     # Make sure we only parse the relevant sections
     for f in json_files.keys():
         # read the layer from the file
-        layer = read_layer_from_file(f)
+        data = None
+        with open(f, 'r') as data_file:
+            data = json.load(data_file)
+        layer = data[0]['layer']
 
         if layer in skipped_layers:
             continue
 
         slayer = str(layer)
+        # read the possible mfovs for the layer
+        mfovs_per_layer[slayer] = set([tile["mfov"] for tile in data])
 
         if not (slayer in layers_data.keys()):
             layers_data[slayer] = {}
@@ -219,7 +228,7 @@ if __name__ == '__main__':
     for i in range(len(all_layers) - 1):
         slayer = str(all_layers[i])
         layers_data[slayer]['pre_matched_mfovs'] = {}
-        layers_data[slayer]['matched_pmcc'] = {}
+        #layers_data[slayer]['matched_pmcc'] = {}
         if all_layers[i + 1] - all_layers[i] != 1:
             for l in range(all_layers[i] + 1, all_layers[i + 1]):
                 if l not in skipped_layers:
@@ -227,7 +236,7 @@ if __name__ == '__main__':
                     sys.exit(1)
     slayer_last = str(all_layers[-1])
     layers_data[slayer_last]['pre_matched_mfovs'] = {}
-    layers_data[slayer_last]['matched_pmcc'] = {}
+    #layers_data[slayer_last]['matched_pmcc'] = {}
 
     print "Found the following layers: {0}".format(all_layers)
 
@@ -267,38 +276,45 @@ if __name__ == '__main__':
             layers_data[slayer1]['pre_matched_mfovs'][slayer2] = pre_match_json
 
 
-            # match by max PMCC the two layers
+            # match by max PMCC the two layers (mfov after mfov)
+            for mfov1 in mfovs_per_layer[slayer1]:
+                pmcc_fname_mfov1 = os.path.join(matched_pmcc_dir, "{0}_{1}_match_pmcc_mfov_{2}.json".format(fname1_prefix, fname2_prefix, mfov1))
+                if not os.path.exists(pmcc_fname_mfov1):
+                    print "Matching layers by Max PMCC: {0} (mfov {1}) and {2}".format(i, mfov1, i + j)
+                    dependencies = [ ]
+                    if job_pre_match != None:
+                        dependencies.append(job_pre_match)
+
+                    job_pmcc_mfov1 = MatchLayersByMaxPMCCMfov(dependencies, layers_data[slayer1]['ts'], layers_data[slayer2]['ts'], 
+                        layers_data[slayer1]['pre_matched_mfovs'][slayer2], 
+                        pmcc_fname_mfov1, int(mfov1),
+                        conf_fname=args.conf_file_name, threads_num=4, auto_add_model=args.auto_add_model)
+                    all_running_jobs.append(job_pmcc_mfov1)
+                    pmcc_jobs.append(job_pmcc_mfov1)
+                #layers_data[slayer1]['matched_pmcc'][slayer2] = pmcc_fname_mfov1
+                all_pmcc_files.append(pmcc_fname_mfov1)
+
+
+            for mfov2 in mfovs_per_layer[slayer2]:
+                pmcc_fname2_mfov2 = os.path.join(matched_pmcc_dir, "{0}_{1}_match_pmcc_mfov_{2}.json".format(fname2_prefix, fname1_prefix, mfov2))
+                if not os.path.exists(pmcc_fname2_mfov2):
+                    print "Matching layers by Max PMCC: {0} (mfov {1}) and {2}".format(i + j, mfov2, i)
+                    dependencies = [ ]
+                    if job_pre_match != None:
+                        dependencies.append(job_pre_match)
+
+                    job_pmcc2_mfov2 = MatchLayersByMaxPMCCMfov(dependencies, layers_data[slayer2]['ts'], layers_data[slayer1]['ts'], 
+                        layers_data[slayer1]['pre_matched_mfovs'][slayer2], 
+                        pmcc_fname2_mfov2, int(mfov2),
+                        conf_fname=args.conf_file_name, threads_num=4, auto_add_model=args.auto_add_model)
+                    pmcc_jobs.append(job_pmcc2_mfov2)
+                    all_running_jobs.append(job_pmcc2_mfov2)
+                #layers_data[slayer2]['matched_pmcc'][slayer1] = pmcc_fname2_mfov2
+                all_pmcc_files.append(pmcc_fname2_mfov2)
+
+
+            # Merge the multiple mfovs pmcc match files into one per direction
             pmcc_fname = os.path.join(matched_pmcc_dir, "{0}_{1}_match_pmcc.json".format(fname1_prefix, fname2_prefix))
-            if not os.path.exists(pmcc_fname):
-                print "Matching layers by Max PMCC: {0} and {1}".format(i, i + j)
-                dependencies = [ ]
-                if job_pre_match != None:
-                    dependencies.append(job_pre_match)
-
-                job_pmcc = MatchLayersByMaxPMCC(dependencies, layers_data[slayer1]['ts'], layers_data[slayer2]['ts'], 
-                    layers_data[slayer1]['pre_matched_mfovs'][slayer2], 
-                    pmcc_fname, conf_fname=args.conf_file_name, threads_num=4, auto_add_model=args.auto_add_model)
-                pmcc_jobs.append(job_pmcc)
-                all_running_jobs.append(job_pmcc)
-            layers_data[slayer1]['matched_pmcc'][slayer2] = pmcc_fname
-            all_pmcc_files.append(pmcc_fname)
-
-            pmcc_fname2 = os.path.join(matched_pmcc_dir, "{0}_{1}_match_pmcc.json".format(fname2_prefix, fname1_prefix))
-            if not os.path.exists(pmcc_fname2):
-                print "Matching layers by Max PMCC: {0} and {1}".format(i + j, i)
-                dependencies = [ ]
-                if job_pre_match != None:
-                    dependencies.append(job_pre_match)
-
-                job_pmcc2 = MatchLayersByMaxPMCC(dependencies, layers_data[slayer2]['ts'], layers_data[slayer1]['ts'], 
-                    layers_data[slayer1]['pre_matched_mfovs'][slayer2], 
-                    pmcc_fname2, conf_fname=args.conf_file_name, threads_num=4, auto_add_model=args.auto_add_model)
-                pmcc_jobs.append(job_pmcc2)
-                all_running_jobs.append(job_pmcc2)
-            layers_data[slayer2]['matched_pmcc'][slayer1] = pmcc_fname2
-            all_pmcc_files.append(pmcc_fname2)
-
-
 
 
 

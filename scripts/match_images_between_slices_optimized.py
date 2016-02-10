@@ -139,6 +139,25 @@ def get_img_matches(ts1, tile_centers1, ts2, tile_centers2_kdtree, best_transfor
         img_matches.append(closest_indices)
     return img_matches
 
+def get_mfov_img_matches(ts1, tile_centers1, ts2, tile_centers2_kdtree, best_transformations, mfov_centers1, targeted_mfov1):
+    """For each tile in the targeted_mfov1 of section1 find the closest 10 tiles in the second image (after applying the preliminary transformation)"""
+    img_matches = []
+
+    # Iterate over the first section tiles, and get the approximated location on section 2 (after transformation)
+    # and then get the closest 10 tiles (according to their centers) to that location
+    for ind1, tile1 in enumerate(ts1):
+        if tile1["mfov"] != targeted_mfov1:
+            img_matches.append([])
+            continue
+        center1 = tile_centers1[ind1]
+        trans_matrix = find_best_mfov_transformation(tile1["mfov"], best_transformations, mfov_centers1)
+        expected_new_center = np.array(np.dot(trans_matrix, np.append(center1, [1]))[0:2])
+        closest_indices = get_closest_indices_to_point(expected_new_center, tile_centers2_kdtree, 10)
+        img_matches.append(closest_indices)
+    return img_matches
+
+
+
 
 def is_point_in_img(tile_ts, point):
     """Returns True if the given point lies inside the image as denoted by the given tile_tilespec"""
@@ -332,10 +351,10 @@ def perform_pmcc_unwrapper(arg):
     return perform_pmcc(ts1, ts2, template_size, scaling, img1_ind, best_transformations, mfov_centers1, prelimdict, min_corr, max_curvature, max_rod, debug_save_matches, debug_dir)
 
 
-def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, out_fname, conf_fname=None, processes_num=1):
+def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, out_fname, targeted_mfov=-1, conf_fname=None, processes_num=1):
     starttime = time.time()
     print("Loading tilespecs, parameters, and other preliminary information")
-    print("Block-Matching+PMCC layers: {} with {}".format(tiles_fname1, tiles_fname2))
+    print("Block-Matching+PMCC layers: {} with {} targeted mfov: {}".format(tiles_fname1, tiles_fname2, 'all' if targeted_mfov==-1 else targeted_mfov))
 
     # Load parameters file
     params = utils.conf_from_file(conf_fname, 'MatchLayersBlockMatching')
@@ -394,7 +413,6 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
     out_jsonfile['tilespec2'] = tiles_fname2
 
     # Get width and height of a resized template (using the first image size)
-    img_matches = get_img_matches(ts1, tile_centers1, ts2, tile_centers2tree, best_transformations, mfov_centers1)
     img1height = ts1[0]["width"] * scaling
     img1width = ts1[0]["height"] * scaling
     #img1width = ts1[0]["width"] * scaling
@@ -416,9 +434,19 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
     print("bounding_box: ", bb)
     hexgr = generatehexagonalgrid(bb, hex_spacing)
     #print(hexgr)
+    # if a single mfov is targeted, restrict the hexagonal grid to that mfov locations
+    if targeted_mfov != -1:
+        mfov_tiles = indexed_ts1[targeted_mfov]
+        bb_mfov = BoundingBox.read_bbox_from_ts(mfov_tiles.values())
+        print("Trimming bounding box grid points to {} (mfov {})".format(bb_mfov.toArray(), targeted_mfov))
+        hexgr = [p for p in hexgr if bb_mfov.contains(np.array([p]))]
 
     # Iterate over the hexagonal points to find preliminary matches
     print("Starting finding preliminary matches for each point ({} possible points)".format(len(hexgr)))
+    if targeted_mfov == -1:
+        img_matches = get_img_matches(ts1, tile_centers1, ts2, tile_centers2tree, best_transformations, mfov_centers1)
+    else:
+        img_matches = get_mfov_img_matches(ts1, tile_centers1, ts2, tile_centers2tree, best_transformations, mfov_centers1, targeted_mfov)
     # Store all the possible matching tiles between the sections
     # (1 tile from section1 to a list of tiles in section2): tile1 (of section1) -> [tile2_a, tile2_b, ...] (of section2)
     prelimdict = {}
@@ -428,6 +456,8 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
         img1_ind = get_closest_index_to_point(hexgr[i], tile_centers1tree)
         #print(img1_ind)
         if img1_ind is None:
+            continue
+        if targeted_mfov != -1 and ts1[img1_ind]["mfov"] != targeted_mfov:
             continue
         if not is_point_in_img(ts1[img1_ind], hexgr[i]):
             continue
@@ -473,6 +503,8 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
     print("Saving output to: {}".format(out_fname))
     out_jsonfile['runtime'] = time.time() - starttime
     out_jsonfile['mesh'] = hexgr
+    if targeted_mfov != -1:
+        out_jsonfile['mfov1'] = targeted_mfov
 
     final_point_matches = []
     for pm in point_matches:
@@ -509,10 +541,14 @@ def main():
     parser.add_argument('-t', '--threads_num', type=int,
                         help='the number of threads (processes) to use (default: 1)',
                         default=1)
+    parser.add_argument('-m', '--mfov', type=int,
+                        help='the mfov number of compare (default: all)',
+                        default=-1)
 
     args = parser.parse_args()
     match_layers_pmcc_matching(args.tiles_file1, args.tiles_file2,
                                args.pre_matches_file, args.output_file,
+                               targeted_mfov=args.mfov,
                                conf_fname=args.conf_file_name, processes_num=args.threads_num)
 
 if __name__ == '__main__':
