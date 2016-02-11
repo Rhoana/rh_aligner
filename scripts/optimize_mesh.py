@@ -7,6 +7,7 @@ import cPickle
 from scipy.spatial import Delaunay
 import pylab
 from matplotlib import collections as mc
+import gc
 
 import pyximport
 pyximport.install()
@@ -337,11 +338,11 @@ def optimize_meshes(match_files_list, conf_dict={}):
         with open(match_file, 'r') as f:
             data = json.load(f)
         if not data["tilespec1"] in meshes:
-            if "mfov" in data:
+            if "mfov1" in data:
                 if not data["tilespec1"] in meshes_per_mfov:
                     meshes_per_mfov[data["tilespec1"]] = {}
-                if not data["mfov"] in meshes_per_mfov[data["tilespec1"]]:
-                    meshes_per_mfov[data["tilespec1"]][data["mfov"]] = data["mesh"]
+                if not data["mfov1"] in meshes_per_mfov[data["tilespec1"]]:
+                    meshes_per_mfov[data["tilespec1"]][data["mfov1"]] = data["mesh"]
             else:
                 meshes[data["tilespec1"]] = Mesh(data["mesh"])
         if not data["tilespec1"] in pair_ts_to_pts:
@@ -350,19 +351,25 @@ def optimize_meshes(match_files_list, conf_dict={}):
             pair_ts_to_pts[data["tilespec1"]][data["tilespec2"]] = []
         pts1 = np.array([p["point1"] for p in data["pointmatches"]])
         pts2 = np.array([p["point2"] for p in data["pointmatches"]])
-        pair_ts_to_pts[data["tilespec1"]][data["tilespec2"]].append((pts1, pts2))
+        if len(pts1) > 0:
+            pair_ts_to_pts[data["tilespec1"]][data["tilespec2"]].append((pts1, pts2))
 
     # Make sure the meshes are initialized per tilespec
     for tilespec_url in meshes_per_mfov:
         if tilespec_url not in meshes:
             # Merge all the mfov sub-meshes into a single mesh, and set it as the tilespec's mesh
             # (this seems to be the fastest way to merge, according to: http://stackoverflow.com/questions/952914/making-a-flat-list-out-of-list-of-lists-in-python)
-            meshes[tilespec_url] = Mesh([p for submesh in meshes for p in submesh])
+            meshes[tilespec_url] = Mesh([p for submesh in meshes_per_mfov[tilespec_url].values() for p in submesh])
+
+    # Free some memory
+    del meshes_per_mfov
+    gc.collect()
 
     links = {}
     # extract links
     for ts1 in meshes:
         for ts2 in pair_ts_to_pts[ts1]:
+            #print("ts1:",ts1,"ts2:",ts2,[l[0].shape for l in pair_ts_to_pts[ts1][ts2]])
             pts1 = np.concatenate([l[0] for l in pair_ts_to_pts[ts1][ts2]])
             pts2 = np.concatenate([l[1] for l in pair_ts_to_pts[ts1][ts2]])
 
@@ -372,6 +379,10 @@ def optimize_meshes(match_files_list, conf_dict={}):
 
                 links[ts1, ts2] = (meshes[ts1].query_barycentrics(pts1),
                                    meshes[ts2].query_barycentrics(pts2))
+
+    # free some memory
+    del pair_ts_to_pts
+    gc.collect()
  
     return optimize_meshes_links(meshes, links, conf_dict)
 
