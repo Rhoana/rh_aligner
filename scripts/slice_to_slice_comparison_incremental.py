@@ -92,9 +92,11 @@ def analyzemfov(mfov_ts, features_dir):
         print("Warning: number of feature files in directory: {} is smaller than {}".format(os.path.join(os.path.join(features_dir, mfov_string)), TILES_PER_MFOV), file=sys.stderr)
 
     # load each features file, and concatenate all to single lists
-    for feature_file in mfov_feature_files:
+    for tile_num in mfov_ts.keys():
+    #for feature_file in mfov_feature_files:
+        feature_file = [fname for fname in mfov_feature_files if "_{}_{}_".format(mfov_string, "%03d" % tile_num) in fname.split('sifts_')[1]][0]
         # Get the correct tile tilespec from the section tilespec (convert to int to remove leading zeros)
-        tile_num = int(feature_file.split('sifts_')[1].split('_')[2])
+        #tile_num = int(feature_file.split('sifts_')[1].split('_')[2])
         (tempoints, tempresps, tempdescs) = load_features(feature_file, mfov_ts[tile_num])
         if type(tempdescs) is not list:
             # concatentate the results
