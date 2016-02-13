@@ -326,16 +326,18 @@ def perform_pmcc(ts1, ts2, template_size, scaling, img1_ind, best_transformation
             img1_center_point = img1_model.apply(np.array([starty + h / 2, startx + w / 2]) / scaling)  # + imgoffset1
 
             # Do template matching
-            result, reason = PMCC_filter_example.PMCC_match(img2_resized, rotated_and_cropped_temp1, min_correlation=min_corr, maximal_curvature_ratio=max_curvature, maximal_ROD=max_rod)
+            result, reason, match_val = PMCC_filter_example.PMCC_match(img2_resized, rotated_and_cropped_temp1, min_correlation=min_corr, maximal_curvature_ratio=max_curvature, maximal_ROD=max_rod)
             if result is not None:
                 reasonx, reasony = reason
                 # TODO - assumes a single transformation, but there might be more
                 img2_model = models.Transforms.from_tilespec(ts2[img2_ind]["transforms"][0])
                 img2_center_point = img2_model.apply(np.array([reasony + newh / 2, reasonx + neww / 2]) / scaling)  # + imgoffset2
-                point_matches.append((img1_center_point, img2_center_point, not_on_mesh))
+                point_matches.append((img1_center_point, img2_center_point, not_on_mesh, match_val))
                 if debug_save_matches:
-                    debug_out_fname1 = os.path.join(debug_dir, "debug_match_sec1{}-{}_sec2{}-{}_image1.png".format(hexgr_point[0], hexgr_point[1], reasonx, reasony))
-                    debug_out_fname2 = os.path.join(debug_dir, "debug_match_sec1{}-{}_sec2{}-{}_image2.png".format(hexgr_point[0], hexgr_point[1], reasonx, reasony))
+                    #debug_out_fname1 = os.path.join(debug_dir, "debug_match_sec1{}-{}_sec2{}-{}_image1.png".format(hexgr_point[0], hexgr_point[1], reasonx, reasony))
+                    #debug_out_fname2 = os.path.join(debug_dir, "debug_match_sec1{}-{}_sec2{}-{}_image2.png".format(hexgr_point[0], hexgr_point[1], reasonx, reasony))
+                    debug_out_fname1 = os.path.join(debug_dir, "debug_match_sec1{}-{}_sec2{}-{}_image1.png".format(int(img1_center_point[0]), int(img1_center_point[1]), int(img2_center_point[0]), int(img2_center_point[1])))
+                    debug_out_fname2 = os.path.join(debug_dir, "debug_match_sec1{}-{}_sec2{}-{}_image2.png".format(int(img1_center_point[0]), int(img1_center_point[1]), int(img2_center_point[0]), int(img2_center_point[1])))
                     cv2.imwrite(debug_out_fname1, rotated_and_cropped_temp1)
                     temp1_final_sizex = rotated_and_cropped_temp1.shape[0]
                     temp1_final_sizey = rotated_and_cropped_temp1.shape[1]
@@ -508,11 +510,12 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
 
     final_point_matches = []
     for pm in point_matches:
-        p1, p2, nmesh = pm
+        p1, p2, nmesh, match_val = pm
         record = {}
         record['point1'] = p1.tolist()
         record['point2'] = p2.tolist()
         record['isvirtualpoint'] = nmesh
+        record['match_val'] = match_val
         final_point_matches.append(record)
 
     out_jsonfile['pointmatches'] = final_point_matches

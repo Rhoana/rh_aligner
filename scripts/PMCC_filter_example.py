@@ -21,16 +21,16 @@ def PMCC_match(image, template, min_correlation=0.2, maximal_curvature_ratio=10,
     maxima_values.sort()
 
     if maxima_values[-1] < min_correlation:
-        return None, FAIL_PMCC_SCORE_TOO_LOW
+        return None, FAIL_PMCC_SCORE_TOO_LOW, 0
 
     # TrakEM2 code uses (1 + 2nd_best) / (1 + best) for this test...?
     if (maxima_values.size > 1) and (maxima_values[-2] / maxima_values[-1] > maximal_ROD):
-        return None, FAIL_PMCC_MAXRATIO_TOO_HIGH
+        return None, FAIL_PMCC_MAXRATIO_TOO_HIGH, 0
 
     # find the maximum location
     mi, mj = np.unravel_index(np.argmax(correlation_image), correlation_image.shape)
     if (mi == 0) or (mj == 0) or (mi == correlation_image.shape[0] - 1) or (mj == correlation_image.shape[1] - 1):
-        return None, FAIL_PMCC_ON_EDGE
+        return None, FAIL_PMCC_ON_EDGE, 0
 
     # extract pixels around maximum
     [[c00, c01, c02],
@@ -47,7 +47,7 @@ def PMCC_match(image, template, min_correlation=0.2, maximal_curvature_ratio=10,
     det = dxx * dyy - dxy * dxy
     trace = dxx + dyy
     if (det <= 0) or (trace * trace / det > maximal_curvature_ratio):
-        return None, FAIL_PMCC_CURVATURE_TOO_HIGH
+        return None, FAIL_PMCC_CURVATURE_TOO_HIGH, 0
 
     # localize by Taylor expansion
     # invert Hessian
@@ -60,9 +60,9 @@ def PMCC_match(image, template, min_correlation=0.2, maximal_curvature_ratio=10,
     oy = -ixy * dx - iyy * dy
 
     if abs(ox) >= 1 or abs(oy) >= 1:
-        return None, FAIL_PMCC_NOT_LOCALIZED
+        return None, FAIL_PMCC_NOT_LOCALIZED, 0
 
-    return True, (mi + oy, mj + ox)
+    return True, (mi + oy, mj + ox), maxima_values[-1]
 
 if __name__ == '__main__':
     # template = cv2.imread(sys.argv[1], 0)  # flags=0 -> grayscale
