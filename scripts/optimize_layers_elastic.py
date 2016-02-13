@@ -14,29 +14,29 @@ import numpy as np
 from scipy import spatial
 import multiprocessing as mp
 
-cached_radius = None
+SAMPLED_POINTS_NUM = 50
 
-def compute_restricted_moving_ls_radius(url_optimized_mesh):
-    global cached_radius
+def compute_restricted_moving_ls_radius(url_optimized_mesh0, points_tree):
 
     # TODO - verify that the radius is dependent only on the mesh (not on the matches)
-    if cached_radius is None:
-        print "Computing restricted MLS radius"
-        
-        # Find the minimal distance between any two points, by finding the closest point to each point
-        # and take the minimum among the distances
-        points_tree = spatial.KDTree(url_optimized_mesh[0])
-        distances, _ = points_tree.query(url_optimized_mesh[0], 2)
-        min_point_dist = np.min(distances[:,1])
-        cached_radius = 2 * min_point_dist
-        print "Restricted MLS radius: {}".format(cached_radius)
-        
-    return cached_radius
+    print "Computing restricted MLS radius"
+
+    # Sample SAMPLED_POINTS_NUM points to find the closest neighbors to these points
+    sampled_points_indices = np.random.choice(url_optimized_mesh0.shape[0], SAMPLED_POINTS_NUM, replace=False)
+    sampled_points = url_optimized_mesh0[np.array(sampled_points_indices)]
+
+    # Find the minimal distance between the sampled points to any other point, by finding the closest point to each point
+    # and take the minimum among the distances
+    distances, _ = points_tree.query(sampled_points, 2)
+    min_point_dist = np.min(distances[:,1])
+    radius = 2 * min_point_dist
+    print "Restricted MLS radius: {}".format(radius)
+
+    return radius
 
 
-def get_restricted_moving_ls_transform(url_optimized_mesh, bbox):
+def get_restricted_moving_ls_transform(url_optimized_mesh, bbox, points_tree, radius):
     # Find the tile bbox with a halo of radius around it
-    radius = compute_restricted_moving_ls_radius(url_optimized_mesh)
     bbox_with_halo = list(bbox)
     bbox_with_halo[0] -= radius
     bbox_with_halo[2] -= radius
@@ -44,10 +44,21 @@ def get_restricted_moving_ls_transform(url_optimized_mesh, bbox):
     bbox_with_halo[3] += radius
 
     # filter the matches according to the new bounding box
-    matches_str = " ".join(["{0} {1} {2} {3} 1.0".format(m[0][0], m[0][1], m[1][0], m[1][1])
-                             for m in zip(url_optimized_mesh[0], url_optimized_mesh[1])
-                                 if (bbox_with_halo[0] <= m[0][0] <= bbox_with_halo[1]) and (bbox_with_halo[2] <= m[0][1] <= bbox_with_halo[3])])
+    # (first pre-filter entire mesh using a radius of "diagonal + 2*RMLS_radius + 1) around the top-left point)
+    top_left = np.array([bbox[0], bbox[2]])
+    bottom_right = np.array([bbox[1], bbox[3]])
+    pre_filtered_indices = points_tree.query_ball_point(top_left, np.linalg.norm(bottom_right - top_left) + 2 * radius + 1)
+    #print bbox_with_halo, "with filtered_indices:", pre_filtered_indices
 
+    if len(pre_filtered_indices) == 0:
+        print "Could not find any mesh points in bbox {}, skipping the tile"
+        return None
+
+    matches_str = " ".join(["{0} {1} {2} {3} 1.0".format(m[0][0], m[0][1], m[1][0], m[1][1])
+                            for m in zip(url_optimized_mesh[0][np.array(pre_filtered_indices)], url_optimized_mesh[1][np.array(pre_filtered_indices)])
+                                if (bbox_with_halo[0] <= m[0][0] <= bbox_with_halo[1]) and (bbox_with_halo[2] <= m[0][1] <= bbox_with_halo[3])])
+
+    # print bbox_with_halo, "with pre_filtered_indices len:", len(pre_filtered_indices), "with matches_str:", matches_str
     # create the tile transformation
     transform = {
             "className" : "mpicbg.trakem2.transform.RestrictedMovingLeastSquaresTransform2",
@@ -69,41 +80,53 @@ def save_json_file(out_fname, data):
     with open(out_fname, 'w') as outjson:
         json.dump(data, outjson, sort_keys=True, indent=4)
         print('Wrote tilespec to {0}'.format(out_fname))
+        sys.stdout.flush()
+
+def save_optimized_mesh(ts_fname, url_optimized_mesh, out_dir):
+    # pre-compute the restricted MLS radius for that section
+    print "Working on:", ts_fname
+
+    points_tree = spatial.KDTree(url_optimized_mesh[0])
+    radius = compute_restricted_moving_ls_radius(url_optimized_mesh[0], points_tree)
+
+    ts_base = os.path.basename(ts_fname)
+    out_fname = os.path.join(out_dir, ts_base)
+    # read tilespec
+    data = None
+    with open(ts_fname, 'r') as data_file:
+        data = json.load(data_file)
+
+    if len(data) > 0:
+        tiles_to_remove = []
+        # change the transfromation
+        for tile_index, tile in enumerate(data):
+            # Used for restricting the restricted_moving_ls_transform to a specific bbox
+            tile_transform = get_restricted_moving_ls_transform(url_optimized_mesh, tile["bbox"], points_tree, radius)
+            if tile_transform is None:
+                tiles_to_remove.append(tile_index)
+            else:
+                tile.get("transforms", []).append(tile_transform)
+
+        for tile_index in sorted(tiles_to_remove, reverse=True):
+            print "Removing tile {} from {}".format(data[tile_index]["mipmapLevels"]["0"]["imageUrl"], out_fname)
+            del data[tile_index]
+
+        # save the output tile spec
+        save_json_file(out_fname, data)
+    else:
+        print('Nothing to write for tilespec {}'.format(ts_fname))
+        sys.stdout.flush()
 
 
 def save_optimized_meshes(all_tile_urls, optimized_meshes, out_dir, processes_num=1):
-    # pre-compute the restricted MLS radius
-    first_ts_fname = all_tile_urls[0].replace('file://', '')
-    compute_restricted_moving_ls_radius(optimized_meshes[first_ts_fname])
-
     # Do the actual multiprocessed save
     pool = mp.Pool(processes=processes_num)
     print("Using {} processes to save the output jsons".format(processes_num))
 
     for ts_url in all_tile_urls:
         ts_fname = ts_url.replace('file://', '')
-        ts_base = os.path.basename(ts_fname)
-        out_fname = os.path.join(out_dir, ts_base)
-        # read tilespec
-        data = None
-        with open(ts_fname, 'r') as data_file:
-            data = json.load(data_file)
-
-        if len(data) > 0:
-            #transform = get_moving_ls_transform(optimized_meshes[ts_url])
-
-            # change the transfromation
-            for tile in data:
-                # Used for restricting the restricted_moving_ls_transform to a specific bbox
-                tile_transform = get_restricted_moving_ls_transform(optimized_meshes[ts_fname], tile["bbox"])
-                if "transforms" not in tile.keys():
-                    tile["transforms"] = []
-                tile["transforms"].append(tile_transform)
-
-            # save the output tile spec
-            res = pool.apply_async(save_json_file, (out_fname, data))
-        else:
-            print('Nothing to write for tilespec {}'.format(ts_fname))
+        #res = pool.apply_async(save_optimized_mesh, (ts_fname, optimized_meshes[ts_fname], out_dir))
+        save_optimized_mesh(ts_fname, optimized_meshes[ts_fname], out_dir)
     pool.close()
     pool.join()
         
