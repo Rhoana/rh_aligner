@@ -14,8 +14,10 @@ import numpy as np
 import scipy.sparse as spp
 from scipy.sparse.linalg import lsqr
 
+
 def dist(p1, p2):
     return np.sqrt(((p1 - p2) ** 2).sum(axis=0))
+
 
 def find_rotation(p1, p2, stepsize):
     U, S, VT = np.linalg.svd(np.dot(p1, p2.T))
@@ -23,6 +25,7 @@ def find_rotation(p1, p2, stepsize):
     angle = stepsize * np.arctan2(R[1, 0], R[0, 0])
     return np.array([[np.cos(angle), -np.sin(angle)],
                      [np.sin(angle),  np.cos(angle)]])
+
 
 def create_new_tilespec(old_ts_fname, rotations, translations, centers, out_fname):
     print("Optimization done, saving tilespec at: {}".format(out_fname))
@@ -46,14 +49,14 @@ def create_new_tilespec(old_ts_fname, rotations, translations, centers, out_fnam
         # print "old_bbox:", old_bbox_points
         # convert the transformation according to the rotations data
         # compute new bbox with rotations (Rot * (pt - center) + center + trans)
-        trans = np.array(translations[img_url]) # an array of 2 elements
-        rot_matrix = np.matrix(rotations[img_url]).T # a 2x2 matrix
-        center = np.array(centers[img_url]) # an array of 2 elements
+        trans = np.array(translations[img_url])  # an array of 2 elements
+        rot_matrix = np.matrix(rotations[img_url]).T  # a 2x2 matrix
+        center = np.array(centers[img_url])  # an array of 2 elements
         transformed_points = [np.dot(rot_matrix, old_point - center) + center + trans for old_point in old_bbox_points]
         # print "transformed_bbox:", transformed_points
-        min_xy = np.min(transformed_points, axis = 0).flatten()
-        max_xy = np.max(transformed_points, axis = 0).flatten()
-        new_bbox = [ min_xy[0], max_xy[0], min_xy[1], max_xy[1] ]
+        min_xy = np.min(transformed_points, axis=0).flatten()
+        max_xy = np.max(transformed_points, axis=0).flatten()
+        new_bbox = [min_xy[0], max_xy[0], min_xy[1], max_xy[1]]
         # print "new_bbox", new_bbox
         # compute the global transformation of the tile
         # the translation part is just taking (0, 0) and moving it to the first transformed_point
@@ -77,8 +80,8 @@ def create_new_tilespec(old_ts_fname, rotations, translations, centers, out_fnam
 
         # Set the transformation in the tilespec
         ts["transforms"] = [{
-                "className" : "mpicbg.trakem2.transform.RigidModel2D",
-                "dataString" : new_transformation
+                "className": "mpicbg.trakem2.transform.RigidModel2D",
+                "dataString": new_transformation
             }]
 
         ts["bbox"] = new_bbox
@@ -98,7 +101,7 @@ def optimize_2d_mfovs(tiles_fname, match_list_file, out_fname, conf_fname=None):
     # load the list of files
     with open(match_list_file, 'r') as list_file:
         match_files = list_file.readlines()
-    match_files = [fname.replace('\n','').replace('file://','') for fname in match_files]
+    match_files = [fname.replace('\n', '').replace('file://', '') for fname in match_files]
     # print match_files
 
     # Load config parameters
@@ -144,14 +147,14 @@ def optimize_2d_mfovs(tiles_fname, match_list_file, out_fname, conf_fname=None):
             if xrang < 0 or yrang < 0:
                 # The two areas do not overlap
                 continue
-            
+
             # Choose four random points in the overlap region - one from each quadrant
             xvals, yvals = [], []
             xvals.append(random.random() * xrang / 2 + obbox[0])
             xvals.append(random.random() * xrang / 2 + obbox[0] + xrang / 2)
             xvals.append(random.random() * xrang / 2 + obbox[0])
             xvals.append(random.random() * xrang / 2 + obbox[0] + xrang / 2)
-            
+
             yvals.append(random.random() * yrang / 2 + obbox[2])
             yvals.append(random.random() * yrang / 2 + obbox[2])
             yvals.append(random.random() * yrang / 2 + obbox[2] + yrang / 2)
@@ -162,12 +165,11 @@ def optimize_2d_mfovs(tiles_fname, match_list_file, out_fname, conf_fname=None):
             for i in range(0, len(xvals)):
                 newpair = {}
                 newpair['dist_after_ransac'] = 1.0
-                newp1 = {'l': [xvals[i] - tile1['bbox'][0],yvals[i] - tile1['bbox'][2]], 'w': [xvals[i],yvals[i]]}
-                newp2 = {'l': [xvals[i] - tile2['bbox'][0],yvals[i] - tile2['bbox'][2]], 'w': [xvals[i],yvals[i]]}
+                newp1 = {'l': [xvals[i] - tile1['bbox'][0], yvals[i] - tile1['bbox'][2]], 'w': [xvals[i], yvals[i]]}
+                newp2 = {'l': [xvals[i] - tile2['bbox'][0], yvals[i] - tile2['bbox'][2]], 'w': [xvals[i], yvals[i]]}
                 newpair['p1'] = newp1
                 newpair['p2'] = newp2
                 corpairs.append(newpair)
-
 
             pts1 = np.array([c["p1"]["w"] for c in corpairs]).T
             pts2 = np.array([c["p2"]["w"] for c in corpairs]).T
@@ -175,12 +177,10 @@ def optimize_2d_mfovs(tiles_fname, match_list_file, out_fname, conf_fname=None):
             all_pts[url1].append(pts1)
             all_pts[url2].append(pts2)
 
-
     # Find centers of each group of points
     centers = {k: np.mean(np.hstack(pts), axis=1, keepdims=True) for k, pts in all_pts.iteritems()}
     # a unique index for each url
     url_idx = {url: idx for idx, url in enumerate(all_pts)}
-
 
     prev_meanmed = np.inf
 
@@ -273,14 +273,14 @@ def optimize_2d_mfovs(tiles_fname, match_list_file, out_fname, conf_fname=None):
                      for k in self_centers}
             R = {k: np.dot(R[k], new_R[k]) for k in R}
 
-    R = {k:v.tolist() for k, v in R.iteritems()}
-    T = {k:v.tolist() for k, v in T.iteritems()}
-    centers = {k:v.tolist() for k, v in centers.iteritems()}
-    #json.dump({"Rotations": R,
-    #           "Translations": T,
-    #           "centers": centers},
-    #          open(sys.argv[2], "wb"),
-    #          indent=4)
+    R = {k: v.tolist() for k, v in R.iteritems()}
+    T = {k: v.tolist() for k, v in T.iteritems()}
+    centers = {k: v.tolist() for k, v in centers.iteritems()}
+    # json.dump({"Rotations": R,
+    #            "Translations": T,
+    #            "centers": centers},
+    #           open(sys.argv[2], "wb"),
+    #           indent=4)
     create_new_tilespec(tiles_fname, R, T, centers, out_fname)
 
 if __name__ == '__main__':
@@ -298,8 +298,6 @@ if __name__ == '__main__':
                         help='the configuration file with the parameters for each step of the alignment process in json format (uses default parameters, if not supplied)',
                         default=None)
 
-
     args = parser.parse_args()
 
     optimize_2d_mfovs(args.tiles_fname, args.match_files_list, args.output_file, conf_fname=args.conf_file_name)
-
