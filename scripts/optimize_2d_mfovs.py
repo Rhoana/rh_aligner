@@ -3,6 +3,7 @@ import os.path
 import os
 import argparse
 import utils
+import random
 
 from collections import defaultdict
 import json
@@ -100,6 +101,17 @@ def optimize_2d_mfovs(tiles_fname, match_list_file, out_fname, conf_fname=None):
     match_files = [fname.replace('\n','').replace('file://','') for fname in match_files]
     # print match_files
 
+    # Load config parameters
+    params = utils.conf_from_file(conf_fname, 'Optimize2Dmfovs')
+    if params is None:
+        params = {}
+    maxiter = params.get("maxIterations", 1000)
+    epsilon = params.get("maxEpsilon", 5)
+    stepsize = params.get("stepSize", 0.1)
+    damping = params.get("damping", 0.01)  # in units of matches per pair
+    noemptymatches = params.get("noEmptyMatches", True)
+    tilespec = json.load(open(tiles_fname, 'r'))
+
     # load the matches
     pbar = progressbar.ProgressBar()
     for f in pbar(match_files):
@@ -113,19 +125,63 @@ def optimize_2d_mfovs(tiles_fname, match_list_file, out_fname, conf_fname=None):
             all_matches[url1, url2] = (pts1, pts2)
             all_pts[url1].append(pts1)
             all_pts[url2].append(pts2)
+        # If we want to add fake points when no matches are found
+        elif noemptymatches:
+            # Find the images in the tilespec
+            for t in tilespec:
+                if t['mipmapLevels']['0']['imageUrl'] == url1:
+                    tile1 = t
+                if t['mipmapLevels']['0']['imageUrl'] == url2:
+                    tile2 = t
+
+            # Determine the region of overlap between the two images
+            overlapx_min = max(tile1['bbox'][0], tile2['bbox'][0])
+            overlapx_max = max(tile1['bbox'][1], tile2['bbox'][1])
+            overlapy_min = max(tile1['bbox'][2], tile2['bbox'][2])
+            overlapy_max = max(tile1['bbox'][3], tile2['bbox'][3])
+            obbox = [overlapx_min, overlapx_max, overlapy_min, overlapy_max]
+            xrang, yrang = obbox[1] - obbox[0], obbox[3] - obbox[2]
+            if xrang < 0 or yrang < 0:
+                # The two areas do not overlap
+                continue
+            
+            # Choose four random points in the overlap region - one from each quadrant
+            xvals, yvals = [], []
+            xvals.append(random.random() * xrang / 2 + obbox[0])
+            xvals.append(random.random() * xrang / 2 + obbox[0] + xrang / 2)
+            xvals.append(random.random() * xrang / 2 + obbox[0])
+            xvals.append(random.random() * xrang / 2 + obbox[0] + xrang / 2)
+            
+            yvals.append(random.random() * yrang / 2 + obbox[2])
+            yvals.append(random.random() * yrang / 2 + obbox[2])
+            yvals.append(random.random() * yrang / 2 + obbox[2] + yrang / 2)
+            yvals.append(random.random() * yrang / 2 + obbox[2] + yrang / 2)
+
+            # Add these 4 points to a list of point pairs
+            corpairs = []
+            for i in range(0, len(xvals)):
+                newpair = {}
+                newpair['dist_after_ransac'] = 1.0
+                newp1 = {'l': [xvals[i] - tile1['bbox'][0],yvals[i] - tile1['bbox'][2]], 'w': [xvals[i],yvals[i]]}
+                newp2 = {'l': [xvals[i] - tile2['bbox'][0],yvals[i] - tile2['bbox'][2]], 'w': [xvals[i],yvals[i]]}
+                newpair['p1'] = newp1
+                newpair['p2'] = newp2
+                corpairs.append(newpair)
+
+
+            pts1 = np.array([c["p1"]["w"] for c in corpairs]).T
+            pts2 = np.array([c["p2"]["w"] for c in corpairs]).T
+            all_matches[url1, url2] = (pts1, pts2)
+            all_pts[url1].append(pts1)
+            all_pts[url2].append(pts2)
+
 
     # Find centers of each group of points
     centers = {k: np.mean(np.hstack(pts), axis=1, keepdims=True) for k, pts in all_pts.iteritems()}
     # a unique index for each url
     url_idx = {url: idx for idx, url in enumerate(all_pts)}
 
-    params = utils.conf_from_file(conf_fname, 'Optimize2Dmfovs')
-    if params is None:
-        params = {}
-    maxiter = params.get("maxIterations", 1000)
-    epsilon = params.get("maxEpsilon", 5)
-    stepsize = params.get("stepSize", 0.1)
-    damping = params.get("damping", 0.01)  # in units of matches per pair
+
     prev_meanmed = np.inf
 
     T = defaultdict(lambda: np.zeros((2, 1)))
