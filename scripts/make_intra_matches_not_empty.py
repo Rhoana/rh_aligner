@@ -12,7 +12,7 @@ import random
 num_generated_pts = 2
 
 # Look through all the intra matches and find the empty ones
-allfiles = glob.glob('intra_25/*.json')
+allfiles = glob.glob('intra_54/*.json')
 emptyfiles = []
 for f in allfiles:
     stuff = json.load(open(f))
@@ -20,12 +20,12 @@ for f in allfiles:
         emptyfiles.append(f)
         
 # Read tilespec
-tilespec = json.loads(open('W04_Sec027.json', 'r').read())
+tilespec = json.load(open('W04_Sec001.json', 'r'))
 
 for f in allfiles:
     # If it isn't empty, just copy-paste it
     if not(f in emptyfiles):
-        newfilestr = 'intra_25_notempty\\' + f[9:]
+        newfilestr = 'intra_54_notempty\\' + f[9:]
         json.dump(json.load(open(f, 'r')), open(newfilestr, 'w'), sort_keys=True, indent=4)
         cooldude = json.load(open(f, 'r'))
     else:
@@ -49,30 +49,28 @@ for f in allfiles:
         if xrang < 0 or yrang < 0:
             print 'They don\'t overlap. Rest of code probably won\'t work'
         
-        # Choose two random points in the overlap region - one from left and one from right
-        xval1 = random.random() * xrang / 2 + obbox[0]
-        yval1 = random.random() * yrang + obbox[2]
-        xval2 = random.random() * xrang / 2 + obbox[0] + xrang / 2
-        yval2 = random.random() * yrang + obbox[2]
+        # Choose four random points in the overlap region - one from each quadrant
+        xvals, yvals = [], []
+        xvals.append(random.random() * xrang / 2 + obbox[0])
+        xvals.append(random.random() * xrang / 2 + obbox[0] + xrang / 2)
+        xvals.append(random.random() * xrang / 2 + obbox[0])
+        xvals.append(random.random() * xrang / 2 + obbox[0] + xrang / 2)
         
-        # Add the first point to the matches dict
-        newpair = {}
-        newpair['dist_after_ransac'] = 1.0
-        newp1 = {'l': [xval1 - tile1['bbox'][0],yval1 - tile1['bbox'][2]], 'w': [xval1,yval1]}
-        newp2 = {'l': [xval1 - tile2['bbox'][0],yval1 - tile2['bbox'][2]], 'w': [xval1,yval1]}
-        newpair['p1'] = newp1
-        newpair['p2'] = newp2
-        matches[0]["correspondencePointPairs"].append(newpair)
+        yvals.append(random.random() * yrang / 2 + obbox[2])
+        yvals.append(random.random() * yrang / 2 + obbox[2])
+        yvals.append(random.random() * yrang / 2 + obbox[2] + yrang / 2)
+        yvals.append(random.random() * yrang / 2 + obbox[2] + yrang / 2)
         
-        # Add the second point to the matches dict
-        newpair = {}
-        newpair['dist_after_ransac'] = 0.0
-        newp1 = {'l': [xval2 - tile1['bbox'][0],yval2 - tile1['bbox'][2]], 'w': [xval2,yval2]}
-        newp2 = {'l': [xval2 - tile2['bbox'][0],yval2 - tile2['bbox'][2]], 'w': [xval2,yval2]}
-        newpair['p1'] = newp1
-        newpair['p2'] = newp2
-        matches[0]["correspondencePointPairs"].append(newpair)
+        # Add these four points to the matches dict
+        for i in range(0, len(xvals)):
+            newpair = {}
+            newpair['dist_after_ransac'] = 1.0
+            newp1 = {'l': [xvals[i] - tile1['bbox'][0],yvals[i] - tile1['bbox'][2]], 'w': [xvals[i],yvals[i]]}
+            newp2 = {'l': [xvals[i] - tile2['bbox'][0],yvals[i] - tile2['bbox'][2]], 'w': [xvals[i],yvals[i]]}
+            newpair['p1'] = newp1
+            newpair['p2'] = newp2
+            matches[0]["correspondencePointPairs"].append(newpair)
         
         # Print out the new matches file
-        newfilestr = 'intra_25_notempty\\' + f[9:]
+        newfilestr = 'intra_54_notempty\\' + f[9:]
         json.dump(matches, open(newfilestr, 'w'), sort_keys=True, indent=4)
