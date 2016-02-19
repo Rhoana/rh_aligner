@@ -54,9 +54,15 @@ def get_restricted_moving_ls_transform(url_optimized_mesh, bbox, points_tree, ra
         print "Could not find any mesh points in bbox {}, skipping the tile"
         return None
 
+    filtered_matches = [m for m in zip(url_optimized_mesh[0][np.array(pre_filtered_indices)], url_optimized_mesh[1][np.array(pre_filtered_indices)])
+                                if (bbox_with_halo[0] <= m[0][0] <= bbox_with_halo[1]) and (bbox_with_halo[2] <= m[0][1] <= bbox_with_halo[3])]
+
+    if len(filtered_matches) == 0:
+        print "Could not find any mesh points in bbox {}, skipping the tile"
+        return None
+
     matches_str = " ".join(["{0} {1} {2} {3} 1.0".format(m[0][0], m[0][1], m[1][0], m[1][1])
-                            for m in zip(url_optimized_mesh[0][np.array(pre_filtered_indices)], url_optimized_mesh[1][np.array(pre_filtered_indices)])
-                                if (bbox_with_halo[0] <= m[0][0] <= bbox_with_halo[1]) and (bbox_with_halo[2] <= m[0][1] <= bbox_with_halo[3])])
+                            for m in filtered_matches])
 
     # print bbox_with_halo, "with pre_filtered_indices len:", len(pre_filtered_indices), "with matches_str:", matches_str
     # create the tile transformation
