@@ -257,27 +257,6 @@ def get_blank_template_from_img_and_point(imgwidth, imgheight, template_size, ce
     return (xstart, ystart, template_size, template_size, notonmesh)
 
 
-def generatehexagonalgrid(boundingbox, spacing):
-    hexheight = spacing
-    hexwidth = math.sqrt(3) * spacing / 2
-    vertspacing = 0.75 * hexheight
-    horizspacing = hexwidth
-    sizex = int((boundingbox[1] - boundingbox[0]) / horizspacing) + 2
-    sizey = int((boundingbox[3] - boundingbox[2]) / vertspacing) + 2
-    if sizey % 2 == 0:
-        sizey += 1
-    pointsret = []
-    for i in range(-2, sizex):
-        for j in range(-2, sizey):
-            xpos = i * spacing
-            ypos = j * spacing
-            if j % 2 == 1:
-                xpos += spacing * 0.5
-            if (j % 2 == 1) and (i == sizex - 1):
-                continue
-            pointsret.append([int(xpos + boundingbox[0]), int(ypos + boundingbox[2])])
-    return pointsret
-
 
 def perform_pmcc(ts1, ts2, template_size, scaling, img1_ind, best_transformations, mfov_centers1, prelimdict, min_corr, max_curvature, max_rod, debug_save_matches=False, debug_dir=None):
 
@@ -434,7 +413,7 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
     print("Generating Hexagonal Grid")
     bb = BoundingBox.read_bbox(tiles_fname1)
     print("bounding_box: ", bb)
-    hexgr = generatehexagonalgrid(bb, hex_spacing)
+    hexgr = utils.generate_hexagonal_grid(bb, hex_spacing)
     #print(hexgr)
     # if a single mfov is targeted, restrict the hexagonal grid to that mfov locations
     if targeted_mfov != -1:
@@ -515,7 +494,7 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
         record['point1'] = p1.tolist()
         record['point2'] = p2.tolist()
         record['isvirtualpoint'] = nmesh
-        record['match_val'] = match_val
+        record['match_val'] = float(match_val)
         final_point_matches.append(record)
 
     out_jsonfile['pointmatches'] = final_point_matches

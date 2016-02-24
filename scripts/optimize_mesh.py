@@ -5,9 +5,13 @@ import os.path
 import numpy as np
 import cPickle
 from scipy.spatial import Delaunay
+#import matplotlib
+#matplotlib.use('GTK')
 import pylab
 from matplotlib import collections as mc
 import gc
+from bounding_box import BoundingBox
+import utils
 
 import pyximport
 pyximport.install()
@@ -45,6 +49,7 @@ class Mesh(object):
         edge_indices = np.vstack({tuple(sorted(tuple(row))) for row in edge_indices}).astype(np.uint32)
         # mesh.pts[edge_indices, :].shape =(#edges, #pts-per-edge, #values-per-pt)
         edge_lengths = np.sqrt((np.diff(self.pts[edge_indices], axis=1) ** 2).sum(axis=2)).ravel()
+        #print("Median edge length:", np.median(edge_lengths), "Max edge length:", np.max(edge_lengths))
         triangles_as_pts = self.pts[simplices]
         triangle_areas = 0.5 * np.cross(triangles_as_pts[:, 2, :] - triangles_as_pts[:, 0, :],
                                         triangles_as_pts[:, 1, :] - triangles_as_pts[:, 0, :])
@@ -189,7 +194,7 @@ def get_transform_matrix(pts1, pts2, type):
         print("Unsupported transformation model type")
         return None
 
-def optimize_meshes_links(meshes, links, conf_dict={}):
+def optimize_meshes_links(meshes, links, layers, conf_dict={}):
     # set default values
     cross_slice_weight = conf_dict.get("cross_slice_weight", 1.0)
     cross_slice_winsor = conf_dict.get("cross_slice_winsor", 20)
@@ -265,7 +270,7 @@ def optimize_meshes_links(meshes, links, conf_dict={}):
                                               gradients[ts1], gradients[ts2],
                                               idx1, w1,
                                               idx2, w2,
-                                              cross_slice_weight, cross_slice_winsor)
+                                              cross_slice_weight / float(abs(layers[ts1] - layers[ts2])), cross_slice_winsor)
 
         if cost < prev_cost and not np.isinf(cost):
             prev_cost = cost
@@ -325,11 +330,12 @@ def optimize_meshes_links(meshes, links, conf_dict={}):
 
     return out_positions
 
-def optimize_meshes(match_files_list, conf_dict={}):
+def optimize_meshes(match_files_list, hex_spacing, conf_dict={}):
     meshes = {}
 
     meshes_per_mfov = {}
     pair_ts_to_pts = {}
+    layers = {}
     # extract meshes
     for match_file in match_files_list:
         # Assumes that the mesh can be separated into multiple files with the same tilespec1 or tilespec2
@@ -338,13 +344,20 @@ def optimize_meshes(match_files_list, conf_dict={}):
         with open(match_file, 'r') as f:
             data = json.load(f)
         if not data["tilespec1"] in meshes:
-            if "mfov1" in data:
-                if not data["tilespec1"] in meshes_per_mfov:
-                    meshes_per_mfov[data["tilespec1"]] = {}
-                if not data["mfov1"] in meshes_per_mfov[data["tilespec1"]]:
-                    meshes_per_mfov[data["tilespec1"]][data["mfov1"]] = data["mesh"]
-            else:
-                meshes[data["tilespec1"]] = Mesh(data["mesh"])
+            # if "mfov1" in data:
+            #     if not data["tilespec1"] in meshes_per_mfov:
+            #         meshes_per_mfov[data["tilespec1"]] = {}
+            #     if not data["mfov1"] in meshes_per_mfov[data["tilespec1"]]:
+            #         meshes_per_mfov[data["tilespec1"]][data["mfov1"]] = data["mesh"]
+            # else:
+            #     meshes[data["tilespec1"]] = Mesh(data["mesh"])
+            ts_fname = data["tilespec1"].replace("file://","")
+            print("Generating Hexagonal Grid")
+            bb = BoundingBox.read_bbox(ts_fname)
+            print("bounding_box: ", bb)
+            meshes[data["tilespec1"]] = Mesh(utils.generate_hexagonal_grid(bb, hex_spacing))
+            ts_layer = utils.read_layer_from_file(ts_fname)
+            layers[data["tilespec1"]] = ts_layer
         if not data["tilespec1"] in pair_ts_to_pts:
             pair_ts_to_pts[data["tilespec1"]] = {}
         if not data["tilespec2"] in pair_ts_to_pts[data["tilespec1"]]:
@@ -354,22 +367,22 @@ def optimize_meshes(match_files_list, conf_dict={}):
         if len(pts1) > 0:
             pair_ts_to_pts[data["tilespec1"]][data["tilespec2"]].append((pts1, pts2))
 
-    # Make sure the meshes are initialized per tilespec
-    for tilespec_url in meshes_per_mfov:
-        if tilespec_url not in meshes:
-            # Merge all the mfov sub-meshes into a single mesh, and set it as the tilespec's mesh
-            # (this seems to be the fastest way to merge, according to: http://stackoverflow.com/questions/952914/making-a-flat-list-out-of-list-of-lists-in-python)
-            merged_points = [p for submesh in meshes_per_mfov[tilespec_url].values() for p in submesh]
-            merged_points = np.array(merged_points)
-            ## Get unique mesh points (according to: http://stackoverflow.com/questions/16970982/find-unique-rows-in-numpy-array)
-            b = np.ascontiguousarray(merged_points).view(np.dtype((np.void, merged_points.dtype.itemsize * merged_points.shape[1])))
-            _, idx = np.unique(b, return_index=True)
-            merged_points = merged_points[idx]
-            meshes[tilespec_url] = Mesh(merged_points)
+#    # Make sure the meshes are initialized per tilespec
+#    for tilespec_url in meshes_per_mfov:
+#        if tilespec_url not in meshes:
+#            # Merge all the mfov sub-meshes into a single mesh, and set it as the tilespec's mesh
+#            # (this seems to be the fastest way to merge, according to: http://stackoverflow.com/questions/952914/making-a-flat-list-out-of-list-of-lists-in-python)
+#            merged_points = [p for submesh in meshes_per_mfov[tilespec_url].values() for p in submesh]
+#            merged_points = np.array(merged_points)
+#            ## Get unique mesh points (according to: http://stackoverflow.com/questions/16970982/find-unique-rows-in-numpy-array)
+#            b = np.ascontiguousarray(merged_points).view(np.dtype((np.void, merged_points.dtype.itemsize * merged_points.shape[1])))
+#            _, idx = np.unique(b, return_index=True)
+#            merged_points = merged_points[idx]
+#            meshes[tilespec_url] = Mesh(merged_points)
 
-    # Free some memory
-    del meshes_per_mfov
-    gc.collect()
+#    # Free some memory
+#    del meshes_per_mfov
+#    gc.collect()
 
     links = {}
     # extract links
@@ -396,10 +409,10 @@ def optimize_meshes(match_files_list, conf_dict={}):
     del pair_ts_to_pts
     gc.collect()
  
-    return optimize_meshes_links(meshes, links, conf_dict)
+    return optimize_meshes_links(meshes, links, layers, conf_dict)
 
 if __name__ == '__main__':
-    new_positions = optimize_meshes(sys.argv[1:-1])
+    new_positions = optimize_meshes(sys.argv[1:-1], 1500)
 
     out_file = sys.argv[-1]
     json.dump(new_positions, open(out_file, "w"), indent=1)
