@@ -300,7 +300,7 @@ cpdef FLOAT_TYPE external_grad(FLOAT_TYPE[:, ::1] mesh1,
                                  d_cost_d_mesh1, d_cost_d_mesh2,
                                  indices1, indices2,
                                  barys1, barys2,
-                                 between_winsor, between_winsor)
+                                 between_weight, between_winsor)
 
 
 def compare(x, y, eps, restlen, sigma):
