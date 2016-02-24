@@ -168,13 +168,16 @@ def optimize_layers_elastic(tile_files, corr_files, out_dir, max_layer_distance,
         actual_corr_files = [line.replace('file://', '').strip('\n') for line in f.readlines()]
 
     conf_dict = {}
+    hex_spacing = 1500 # default value (from block matching)
     if conf is not None:
         with open(conf, 'r') as f:
-            conf_dict = json.load(f)["OptimizeLayersElastic"]
+            params = json.load(f)
+            conf_dict = params["OptimizeLayersElastic"]
+            hex_spacing = params["MatchLayersBlockMatching"]["hex_spacing"]
 
     print(actual_corr_files)
     # Create a per-layer optimized mesh
-    optimized_meshes = optimize_meshes(actual_corr_files, conf_dict)
+    optimized_meshes = optimize_meshes(actual_corr_files, hex_spacing, conf_dict)
     
     # Save the output
     utils.create_dir(out_dir)
