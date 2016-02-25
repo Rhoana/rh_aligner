@@ -24,9 +24,6 @@ def ransac(matches, target_model_type, iterations, epsilon, min_inlier_ratio, mi
         # print "proposed_model", proposed_model.to_str()
         # Verify the new model 
         proposed_model_score, inlier_mask, proposed_model_mean = proposed_model.score(matches[0], matches[1], epsilon, min_inlier_ratio, min_num_inlier)
-        # If no model was found (invalid score), stop the iterations
-        if proposed_model_score == -1:
-            break
         # print "proposed_model_score", proposed_model_score
         if proposed_model_score > best_model_score:
             best_model = copy.deepcopy(proposed_model)
