@@ -131,11 +131,16 @@ def optimize_2d_mfovs(tiles_fname, match_list_file, out_fname, conf_fname=None):
         # If we want to add fake points when no matches are found
         elif noemptymatches:
             # Find the images in the tilespec
+            mfov1, mfov2 = -1, -1
             for t in tilespec:
                 if t['mipmapLevels']['0']['imageUrl'] == url1:
                     tile1 = t
+                    mfov1 = t["mfov"]
                 if t['mipmapLevels']['0']['imageUrl'] == url2:
                     tile2 = t
+                    mfov2 = t["mfov"]
+            if mfov1 == -1 or mfov2 == -1 or mfov1 != mfov2:
+                continue
 
             # Determine the region of overlap between the two images
             overlapx_min = max(tile1['bbox'][0], tile2['bbox'][0])
