@@ -332,7 +332,7 @@ def analyze_slices(tiles_fname1, tiles_fname2, features_dir1, features_dir2, act
     
     if best_transform is None:
         print("Could not find a preliminary transform between sections: {} and {}, after {} seconds.".format(layer1, layer2, initial_search_end_time - initial_search_start_time))
-        return to_ret
+        return to_ret, initial_search_iters_num, initial_search_end_time - initial_search_start_time
 
     best_transform_matrix = best_transform.get_matrix()
     print("Found a preliminary transform between sections: {} and {} (filtered matches#: {}, rate: {}), with model: {} in {} seconds, and {} iterations".format(layer1, layer2, num_filtered, filter_rate, best_transform_matrix, initial_search_end_time - initial_search_start_time, initial_search_iters_num))
