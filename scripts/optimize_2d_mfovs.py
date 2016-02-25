@@ -147,9 +147,9 @@ def optimize_2d_mfovs(tiles_fname, match_list_file, out_fname, conf_fname=None):
 
             # Determine the region of overlap between the two images
             overlapx_min = max(tile1['bbox'][0], tile2['bbox'][0])
-            overlapx_max = max(tile1['bbox'][1], tile2['bbox'][1])
+            overlapx_max = min(tile1['bbox'][1], tile2['bbox'][1])
             overlapy_min = max(tile1['bbox'][2], tile2['bbox'][2])
-            overlapy_max = max(tile1['bbox'][3], tile2['bbox'][3])
+            overlapy_max = min(tile1['bbox'][3], tile2['bbox'][3])
             obbox = [overlapx_min, overlapx_max, overlapy_min, overlapy_max]
             xrang, yrang = obbox[1] - obbox[0], obbox[3] - obbox[2]
             if xrang < 0 or yrang < 0:
