@@ -41,7 +41,7 @@ def get_mfov_centers_from_json(indexed_ts):
         mfov_centers[mfov] = np.array([(min_x / 2.0 + max_x / 2.0, min_y / 2.0 + max_y / 2.0)])
     return mfov_centers
 
-def get_best_transformations(pre_mfov_matches, tiles_fname1, tiles_fname2, mfov_centers1, mfov_centers2):
+def get_best_transformations(pre_mfov_matches, tiles_fname1, tiles_fname2, mfov_centers1, mfov_centers2, sorted_mfovs1, sorted_mfovs2):
     """Returns a dictionary that maps an mfov number to a matrix that best describes the transformation to the other section.
        As not all mfov's may be matched, some mfovs will be missing from the dictionary.
        If the given tiles file names are reversed, an inverted matrix is returned."""
@@ -70,7 +70,7 @@ def get_best_transformations(pre_mfov_matches, tiles_fname1, tiles_fname2, mfov_
         
         assert(len(reversed_transformations) == len(closest_centers_idx))
         for closest_idx, reversed_transform in zip(closest_centers_idx, reversed_transformations):
-            mfov_num2 = closest_idx + 1
+            mfov_num2 = sorted_mfovs1[closest_idx]
             transforms[mfov_num2] = reversed_transform
 
     else:
@@ -91,6 +91,20 @@ def get_best_transformations(pre_mfov_matches, tiles_fname1, tiles_fname2, mfov_
 #            transforms[m["mfov2"]] = rev_matrix
 #        else:
 #            transforms[m["mfov1"]] = m["transformation"]["matrix"]
+
+    # Add the "transformations" of all the mfovs w/o a direct mapping (using their neighbors)
+    estimated_transforms = {}
+    trans_keys = transforms.keys()
+    for m in sorted_mfovs1:
+        if m not in transforms.keys():
+            # Need to find a more intelligent way to do this, but this suffices for now
+            # Uses transformation of another mfov (should be changed to the closest, unvisited mfov)
+            mfov_center = mfov_centers1[m]
+            closest_mfov_idx = np.argmin([distance.euclidean(mfov_center, mfov_centers1[mfovk]) for mfovk in trans_keys])
+            estimated_transforms[m] = transforms[trans_keys[closest_mfov_idx]]
+ 
+    transforms.update(estimated_transforms)
+           
     return transforms
 
 
@@ -102,10 +116,10 @@ def find_best_mfov_transformation(mfov, best_transformations, mfov_centers):
     # Uses transformation of another mfov (should be changed to the closest, unvisited mfov)
     mfov_center = mfov_centers[mfov]
     trans_keys = best_transformations.keys()
-    closest_mfov_index = np.argmin([distance.euclidean(mfov_center, mfov_centers[mfovk]) for mfovk in trans_keys])
+    closest_mfov_idx = np.argmin([distance.euclidean(mfov_center, mfov_centers[mfovk]) for mfovk in trans_keys])
     # ** Should we add this transformation? maybe not, because we don't want to get a different result when a few
     # ** missing mfov matches occur and the "best transformation" can change when the centers are updated
-    return best_transformations[trans_keys[closest_mfov_index]]
+    return best_transformations[trans_keys[closest_mfov_idx]]
 
 
 def get_tile_centers_from_json(ts):
@@ -372,6 +386,9 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
     indexed_ts1 = utils.index_tilespec(ts1)
     indexed_ts2 = utils.index_tilespec(ts2)
 
+    sorted_mfovs1 = sorted(indexed_ts1.keys())
+    sorted_mfovs2 = sorted(indexed_ts2.keys())
+
     # Get the tiles centers for each section
     tile_centers1 = get_tile_centers_from_json(ts1)
     tile_centers1tree = spatial.KDTree(tile_centers1)
@@ -386,7 +403,7 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
     if len(mfov_pre_matches["matches"]) == 0:
         print("No matches were found in pre-matching, aborting Block-Matching proces between layers: {} and {}".format(tiles_fname1, tiles_fname2))
         return
-    best_transformations = get_best_transformations(mfov_pre_matches, tiles_fname1, tiles_fname2, mfov_centers1, mfov_centers2)
+    best_transformations = get_best_transformations(mfov_pre_matches, tiles_fname1, tiles_fname2, mfov_centers1, mfov_centers2, sorted_mfovs1, sorted_mfovs2)
 
     # Create output dictionary
     out_jsonfile = {}

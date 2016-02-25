@@ -114,10 +114,10 @@ def generatematches_cv2(allpoints1, allpoints2, alldescs1, alldescs2, actual_par
     for m, n in matches:
         #if (n.distance == 0 and m.distance == 0) or (m.distance / n.distance < actual_params["ROD_cutoff"]):
         if m.distance < actual_params["ROD_cutoff"] * n.distance:
-            goodmatches.append([m])
+            goodmatches.append(m)
     match_points = np.array([
-        np.array([allpoints1[[m[0].queryIdx for m in goodmatches]]][0]),
-        np.array([allpoints2[[m[0].trainIdx for m in goodmatches]]][0])])
+        np.array([allpoints1[[m.queryIdx for m in goodmatches]]][0]),
+        np.array([allpoints2[[m.trainIdx for m in goodmatches]]][0])])
     return match_points
 
 def generatematches_crosscheck_cv2(allpoints1, allpoints2, alldescs1, alldescs2, actual_params):
@@ -165,7 +165,7 @@ def load_mfovs_features(indexed_ts, features_dir, mfovs_idx):
  
 
 
-def iterative_search(actual_params, layer1, layer2, indexed_ts1, indexed_ts2, features_dir1, features_dir2, mfovs_nums1, centers_mfovs_nums2, section2_mfov_bboxes, num_mfovs2, assumed_model=None):
+def iterative_search(actual_params, layer1, layer2, indexed_ts1, indexed_ts2, features_dir1, features_dir2, mfovs_nums1, centers_mfovs_nums2, section2_mfov_bboxes, sorted_mfovs2, assumed_model=None):
     # Load the features from the mfovs in section 1
     all_points1, all_resps1, all_descs1 = load_mfovs_features(indexed_ts1, features_dir1, mfovs_nums1)
     section1_pts_resps_descs = [all_points1, np.concatenate(all_resps1), np.vstack(all_descs1)]
@@ -180,12 +180,12 @@ def iterative_search(actual_params, layer1, layer2, indexed_ts1, indexed_ts2, fe
     # Take the mfovs in the middle of the 2nd section as the initial matched area
     # (on each iteration, increase the matched area, by taking all the mfovs that overlap
     # with the bounding box of the previous matched area)
-    current_area = BoundingBox.fromList(section2_mfov_bboxes[centers_mfovs_nums2[0] - 1].toArray())
-    print("Adding area 0: {}".format(section2_mfov_bboxes[centers_mfovs_nums2[0] - 1].toArray()))
+    current_area = BoundingBox.fromList(section2_mfov_bboxes[centers_mfovs_nums2[0]].toArray())
+    print("Adding area 0: {}".format(section2_mfov_bboxes[centers_mfovs_nums2[0]].toArray()))
     for i in range(1, len(centers_mfovs_nums2)):
         center_mfov_num2 = centers_mfovs_nums2[i]
-        current_area.extend(BoundingBox.fromList(section2_mfov_bboxes[center_mfov_num2 - 1].toArray()))
-        print("Adding area {}: {}".format(i, section2_mfov_bboxes[center_mfov_num2 - 1].toArray()))
+        current_area.extend(BoundingBox.fromList(section2_mfov_bboxes[center_mfov_num2].toArray()))
+        print("Adding area {}: {}".format(i, section2_mfov_bboxes[center_mfov_num2].toArray()))
     current_mfovs = set(centers_mfovs_nums2)
     current_features_pts, current_features_resps, current_features_descs = np.array([]).reshape((0, 2)), [], []
     for center_mfov_num2 in centers_mfovs_nums2:
@@ -245,9 +245,9 @@ def iterative_search(actual_params, layer1, layer2, indexed_ts1, indexed_ts2, fe
             print("len(mfovs_nums1)", len(mfovs_nums1))
             print("threshold wasn't met: num_filtered: {} > {} and filter_rate: {} > {}".format(num_filtered, (actual_params["num_filtered_percent"] * len(all_points1) / len(mfovs_nums1)), filter_rate, actual_params["filter_rate_cutoff"]))
             overlapping_mfovs = set()
-            for i in range(1, num_mfovs2 + 1):
-                if current_area.overlap(section2_mfov_bboxes[i - 1]):
-                    overlapping_mfovs.add(i)
+            for m in sorted_mfovs2:
+                if current_area.overlap(section2_mfov_bboxes[m]):
+                    overlapping_mfovs.add(m)
 
             new_mfovs = overlapping_mfovs - current_mfovs
             if len(new_mfovs) == 0:
@@ -257,14 +257,14 @@ def iterative_search(actual_params, layer1, layer2, indexed_ts1, indexed_ts2, fe
 
             # Add the new mfovs features
             print("Adding {} mfovs ({}) to the second layer".format(len(new_mfovs), new_mfovs))
-            for i in new_mfovs:
-                mfov_points, mfov_resps, mfov_descs = analyzemfov(indexed_ts2[i], features_dir2)
+            for m in new_mfovs:
+                mfov_points, mfov_resps, mfov_descs = analyzemfov(indexed_ts2[m], features_dir2)
                 current_features_pts = np.append(current_features_pts, mfov_points, axis=0)
                 current_features_resps.append(mfov_resps)
                 current_features_descs.append(mfov_descs)
 
                 # Expand the current area
-                current_area.extend(section2_mfov_bboxes[i - 1])
+                current_area.extend(section2_mfov_bboxes[m])
             print("Combining features")
             current_features = (current_features_pts, np.concatenate(current_features_resps), np.vstack(current_features_descs))
             current_mfovs = overlapping_mfovs
@@ -292,37 +292,40 @@ def analyze_slices(tiles_fname1, tiles_fname2, features_dir1, features_dir2, act
     num_mfovs1 = len(indexed_ts1)
     num_mfovs2 = len(indexed_ts2)
 
+    sorted_mfovs1 = sorted(indexed_ts1.keys())
+    sorted_mfovs2 = sorted(indexed_ts2.keys())
+
     layer1 = indexed_ts1.values()[0].values()[0]["layer"]
     layer2 = indexed_ts2.values()[0].values()[0]["layer"]
     to_ret = []
-    model_arr = np.zeros((num_mfovs1, num_mfovs2), dtype=models.RigidModel)
-    num_filter_arr = np.zeros((num_mfovs1, num_mfovs2))
-    filter_rate_arr = np.zeros((num_mfovs1, num_mfovs2))
     best_transform = None
 
     # Get all the centers of each section
     #print("Fetching sections centers")
-    centers1 = np.array([getcenter(indexed_ts1[i]) for i in range(1, num_mfovs1 + 1)])
-    centers2 = np.array([getcenter(indexed_ts2[i]) for i in range(1, num_mfovs2 + 1)])
+    centers1 = np.array([getcenter(indexed_ts1[m]) for m in sorted_mfovs1])
+    centers2 = np.array([getcenter(indexed_ts2[i]) for i in sorted_mfovs2])
 
     # Take the mfov closest to the middle of each section
     section_center1 = np.mean(centers1, axis=0)
     section_center2 = np.mean(centers2, axis=0)
     # Find the 3 closest mfovs to the center of section 1
-    closest_mfovs_nums1 = np.argpartition([((c[0] - section_center1[0])**2 + (c[1] - section_center1[1])**2) for c in centers1], 3)[:3]
-    closest_mfovs_nums1 = [n + 1 for n in closest_mfovs_nums1]
+    if num_mfovs1 <= 3:
+        closest_mfovs_nums1 = indexed_ts1.keys()
+    else:
+        closest_mfovs_nums1 = np.argpartition([((c[0] - section_center1[0])**2 + (c[1] - section_center1[1])**2) for c in centers1], min_mfovs_to_find)[:min_mfovs_to_find]
+        closest_mfovs_nums1 = [sorted_mfovs1[n] for n in closest_mfovs_nums1]
     # Find the closest mfov to the center of section 2
     centers_mfovs_nums2 = [np.argmin([((c[0] - section_center2[0])**2 + (c[1] - section_center2[1])**2) for c in centers2])]
-    centers_mfovs_nums2 = [n + 1 for n in centers_mfovs_nums2]
+    centers_mfovs_nums2 = [sorted_mfovs2[n] for n in centers_mfovs_nums2]
     
     # Compute per-mfov bounding box for the 2nd section
-    section2_mfov_bboxes = [BoundingBox.read_bbox_from_ts(indexed_ts2[i].values()) for i in range(1, num_mfovs2 + 1)]
+    section2_mfov_bboxes = {m: BoundingBox.read_bbox_from_ts(indexed_ts2[m].values()) for m in sorted_mfovs2}
 
     print("Comparing Sec{} (mfovs: {}) and Sec{} (starting from mfovs: {})".format(layer1, closest_mfovs_nums1, layer2, centers_mfovs_nums2))
     initial_search_start_time = time.time()
     # Do an iterative search of the 3 mfovs closest to the center of section 1 to the mfovs of section2 (starting from the center)
     best_transform, num_filtered, filter_rate, _, _, _, initial_search_iters_num = iterative_search(actual_params, layer1, layer2, indexed_ts1, indexed_ts2,
-                         features_dir1, features_dir2, closest_mfovs_nums1, centers_mfovs_nums2, section2_mfov_bboxes, num_mfovs2)
+                         features_dir1, features_dir2, closest_mfovs_nums1, centers_mfovs_nums2, section2_mfov_bboxes, sorted_mfovs2)
     initial_search_end_time = time.time()
 
 
@@ -362,21 +365,21 @@ def analyze_slices(tiles_fname1, tiles_fname2, features_dir1, features_dir2, act
         center1_transformed = np.dot(best_transform_matrix, np.append(center1, [1]))[0:2]
         distances = np.array([np.linalg.norm(center1_transformed - centers2[j]) for j in range(num_mfovs2)])
         print("distances:", [str(x) + ":" + str(d) for x, d in enumerate(distances)])
-        relevant_mfovs_nums2 = [np.argsort(distances)[0] + 1]
-        print("Initial assumption Section {} mfov {} will match Section {} mfovs {}".format(layer1, i + 1, layer2, relevant_mfovs_nums2))
+        relevant_mfovs_nums2 = [sorted_mfovs2[np.argsort(distances)[0]]]
+        print("Initial assumption Section {} mfov {} will match Section {} mfovs {}".format(layer1, sorted_mfovs1[i], layer2, relevant_mfovs_nums2))
         # Do an iterative search of the mfov from section 1 to the "corresponding" mfov of section2
         mfov_search_start_time = time.time()
         mfov_transform, num_filtered, filter_rate, num_rod, num_m1, num_m2, match_iterations = iterative_search(actual_params, layer1, layer2, indexed_ts1, indexed_ts2,
-                             features_dir1, features_dir2, [i + 1], relevant_mfovs_nums2, section2_mfov_bboxes, num_mfovs2, assumed_model=best_transform)
+                             features_dir1, features_dir2, [sorted_mfovs1[i]], relevant_mfovs_nums2, section2_mfov_bboxes, sorted_mfovs2, assumed_model=best_transform)
         mfov_search_end_time = time.time()
         if mfov_transform is None:
             # Could not find a transformation for the given mfov
-            print("Could not find a transformation between Section {} mfov {}, to Section {} (after {} seconds), skipping the mfov".format(layer1, i + 1, layer2, mfov_search_end_time - mfov_search_start_time))
+            print("Could not find a transformation between Section {} mfov {}, to Section {} (after {} seconds), skipping the mfov".format(layer1, sorted_mfovs1[i], layer2, mfov_search_end_time - mfov_search_start_time))
         else:
-            print("Found a transformation between section {} mfov {} to section {} (filtered matches#: {}, rate: {}), with model: {}".format(layer1, i + 1, layer2, num_filtered, filter_rate, mfov_transform.get_matrix()))
+            print("Found a transformation between section {} mfov {} to section {} (filtered matches#: {}, rate: {}), with model: {}".format(layer1, sorted_mfovs1[i], layer2, num_filtered, filter_rate, mfov_transform.get_matrix()))
             #best_transform_matrix = mfov_transform.get_matrix()
             dictentry = {}
-            dictentry['mfov1'] = i + 1
+            dictentry['mfov1'] = sorted_mfovs1[i]
             dictentry['section2_center'] = center1_transformed.tolist()
             #dictentry['mfov2'] = checkindices[j] + 1
             dictentry['features_in_mfov1'] = num_m1

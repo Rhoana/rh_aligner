@@ -66,6 +66,9 @@ def create_new_tilespec(old_ts_fname, rotations, translations, centers, out_fnam
         new_x, new_y = np.asarray(transformed_points[1].T)[0]
         k = (y * (new_x - delta[0]) - x * (new_y - delta[1])) / (x**2 + y**2)
         h1 = (new_x - delta[0] - k*y)/x
+        # To overcome a bug in arccos (when h1 is wrongly above 1)
+        if h1 > 1.0:
+            h1 = 1.0
         new_transformation = "{} {} {}".format(np.arccos(h1), delta[0], delta[1])
         # print "new_transformation:", new_transformation
 
