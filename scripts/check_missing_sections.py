@@ -17,6 +17,7 @@ MFOVS_MISSING_STR = 'MISSING_MFOVS'
 def create_db(db_fname):
     print("Using database file: {}".format(db_fname))
     db = sqlite3.connect(db_fname)
+    db.isolation_level = None
     cursor = db.cursor()
     cursor.execute('''CREATE TABLE IF NOT EXISTS parsed_folders(id INTEGER PRIMARY KEY AUTOINCREMENT,
                                                                 wafer_dir TEXT NOT NULL,
@@ -209,6 +210,8 @@ def find_missing_sections(wafer_dir, wafer_dir_normalized, db, cursor):
     missing_sections = []
     focus_failed_sections = []
     missing_mfovs_sections = []
+
+    cursor.execute("begin")
     for i in range(1, max_section + 1):
         section_num_str = str(i).zfill(3)
         if section_num_str in all_sections:
@@ -225,6 +228,7 @@ def find_missing_sections(wafer_dir, wafer_dir_normalized, db, cursor):
             all_sections[section_num_str] = {
                 'folder': MISSING_SECTION_STR,
                 'errors': MISSING_SECTION_STR }
+    db.commit()
 
     return all_sections, missing_sections, focus_failed_sections, missing_mfovs_sections
 
