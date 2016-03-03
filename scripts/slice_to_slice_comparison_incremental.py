@@ -312,7 +312,7 @@ def analyze_slices(tiles_fname1, tiles_fname2, features_dir1, features_dir2, act
     if num_mfovs1 <= 3:
         closest_mfovs_nums1 = indexed_ts1.keys()
     else:
-        closest_mfovs_nums1 = np.argpartition([((c[0] - section_center1[0])**2 + (c[1] - section_center1[1])**2) for c in centers1], min_mfovs_to_find)[:min_mfovs_to_find]
+        closest_mfovs_nums1 = np.argpartition([((c[0] - section_center1[0])**2 + (c[1] - section_center1[1])**2) for c in centers1], 3)[:3]
         closest_mfovs_nums1 = [sorted_mfovs1[n] for n in closest_mfovs_nums1]
     # Find the closest mfov to the center of section 2
     centers_mfovs_nums2 = [np.argmin([((c[0] - section_center2[0])**2 + (c[1] - section_center2[1])**2) for c in centers2])]
