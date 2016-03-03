@@ -12,6 +12,7 @@ from matplotlib import collections as mc
 import gc
 from bounding_box import BoundingBox
 import utils
+import datetime
 
 import pyximport
 pyximport.install()
@@ -116,10 +117,60 @@ def mean_offsets(meshes, links, stop_at_ts, plot=False):
             pylab.gca().add_collection(lc)
             pylab.scatter(pts1[:, 0], pts1[:, 1])
             pylab.gca().autoscale()
+            
         lens = np.sqrt(((pts1 - pts2) ** 2).sum(axis=1))
         #print(np.mean(lens), np.min(lens), np.max(lens))
         means.append(np.median(lens))
     return np.mean(means)
+
+def ts_mean_offsets(meshes, links, ts, plot=False):
+    means = []
+    for (ts1, ts2), ((idx1, w1), (idx2, w2)) in links.iteritems():
+        if ts not in (ts1, ts2):
+            continue
+        pts1 = np.einsum('ijk,ij->ik', meshes[ts1].pts[idx1], w1)
+        pts2 = np.einsum('ijk,ij->ik', meshes[ts2].pts[idx2], w2)
+        if plot:
+            lines = [[p1, p2] for p1, p2 in zip(pts1, pts2)]
+
+            lc = mc.LineCollection(lines)
+            pylab.figure()
+            pylab.title(ts1 + ' ' + ts2)
+            pylab.gca().add_collection(lc)
+            pylab.scatter(pts1[:, 0], pts1[:, 1])
+            pylab.gca().autoscale()
+            
+        lens = np.sqrt(((pts1 - pts2) ** 2).sum(axis=1))
+        #print(np.mean(lens), np.min(lens), np.max(lens))
+        means.append(np.median(lens))
+    return np.mean(means)
+
+
+def plot_offsets(meshes, links, ts, fname_prefix):
+    for (ts1, ts2), ((idx1, w1), (idx2, w2)) in links.iteritems():
+        if ts1 != ts:
+            continue
+        pts1 = np.einsum('ijk,ij->ik', meshes[ts1].pts[idx1], w1)
+        pts2 = np.einsum('ijk,ij->ik', meshes[ts2].pts[idx2], w2)
+        diffs2 = pts2 - pts1
+        #lines = [[p1, p2] for p1, p2 in zip(pts1, pts2)]
+
+        fname = "{}{}.png".format(fname_prefix, (os.path.basename(ts1) + '_' + os.path.basename(ts2)).replace(' ', '_'))
+        #lc = mc.LineCollection(lines)
+        pylab.figure()
+        pylab.title(ts1 + ' ' + ts2)
+        #pylab.gca().add_collection(lc)
+        pylab.quiver(pts1[:, 0], pts1[:, 1], diffs2[:, 0], diffs2[:, 1])
+        #pylab.scatter(pts1[:, 0], pts1[:, 1])
+        #pylab.gca().autoscale()
+        pylab.savefig(fname)
+
+def plot_points(pts, fname):
+    pylab.figure()
+    pylab.scatter(pts[:, 0], pts[:, 1])
+    #pylab.gca().autoscale()
+    pylab.savefig(fname)
+
 
 def align_rigid(pts1, pts2):
     # find R,T that bring pts1 to pts2
@@ -211,14 +262,31 @@ def optimize_meshes_links(meshes, links, layers, conf_dict={}):
     min_stepsize = conf_dict.get("min_stepsize", 1e-20)
     assumed_model = conf_dict.get("assumed_model", 3) # 0 - Translation (not supported), 1 - Rigid, 2 - Similarity (not supported), 3 - Affine
 
+    debugged_layers = conf_dict.get("debugged_layers", [])
+    print("Debugged layers: {}".format(debugged_layers))
+    DEBUG_DIR = None
+    if len(debugged_layers) > 0:
+        debugged_layers = map(int, debugged_layers.split(','))
+        DEBUG_DIR = os.path.join("debug_optimization", "logs_{}".format(datetime.datetime.now().isoformat()))
+        if not os.path.exists(DEBUG_DIR):
+            os.makedirs(DEBUG_DIR)
+
     # Build internal structural mesh
     # (edge_indices, edge_lengths, face_indices, face_areas)
     structural_meshes = {ts: mesh.internal_structural_mesh() for ts, mesh in meshes.iteritems()}
 
     # pre-optimization: rigid alignment of slices
+    # TODO - sort by the layer and not by the meshes keys
     sorted_slices = sorted(meshes.keys())
+
+    # TODO - make this faster by just iterating over the debugged layers
+    for active_ts in sorted_slices:
+        if layers[active_ts] in debugged_layers:
+            cPickle.dump([active_ts, meshes[active_ts].pts], open(os.path.join(DEBUG_DIR, "pre_affine_{}.pickle".format(os.path.basename(active_ts).replace(' ', '_'))), "w"))
+            #plot_points(meshes[active_ts].pts, os.path.join(DEBUG_DIR, "pre_affine_{}.png".format(os.path.basename(active_ts).replace(' ', '_'))))
+
     for active_ts in sorted_slices[1:]:
-        print("Before: {}".format(mean_offsets(meshes, links, active_ts, plot=False)))
+        print("Before affine (sec {}): {}".format(layers[active_ts], mean_offsets(meshes, links, active_ts, plot=False)))
         rot = 0
         tran = 0
         count = 0
@@ -244,7 +312,13 @@ def optimize_meshes_links(meshes, links, layers, conf_dict={}):
         tran = tran * (1.0 / count)
         # transform the points
         meshes[active_ts].pts = np.dot(meshes[active_ts].pts, rot) + tran
-        print("After: {}\n".format(mean_offsets(meshes, links, active_ts, plot=False)))
+        print("After affine (sec {}): {}\n".format(layers[active_ts], mean_offsets(meshes, links, active_ts, plot=False)))
+
+    # TODO - make this faster by just iterating over the debugged layers
+    for active_ts in sorted_slices:
+        if layers[active_ts] in debugged_layers:
+            cPickle.dump([active_ts, meshes[active_ts].pts], open(os.path.join(DEBUG_DIR, "post_affine_{}.pickle".format(os.path.basename(active_ts).replace(' ', '_'))), "w"))
+            # plot_points(meshes[active_ts].pts, os.path.join(DEBUG_DIR, "post_affine_{}.png".format(os.path.basename(active_ts).replace(' ', '_'))))
 
     print("After preopt MO: {}\n".format(mean_offsets(meshes, links, sorted_slices[-1], plot=False)))
 
@@ -295,6 +369,15 @@ def optimize_meshes_links(meshes, links, layers, conf_dict={}):
         if iter % 100 == 0:
             print("iter {}: C: {}, MO: {}, S: {}".format(iter, cost, mean_offsets(meshes, links, sorted_slices[-1], plot=False), stepsize))
 
+        # Save animation for debugging
+        if len(debugged_layers) > 0:
+            # TODO - make this faster by just iterating over the debugged layers
+            for active_ts in sorted_slices:
+                if layers[active_ts] in debugged_layers:
+                    cPickle.dump([active_ts, meshes[active_ts].pts], open(os.path.join(DEBUG_DIR, "post_iter{}_{}.pickle".format(str(iter).zfill(5), os.path.basename(active_ts).replace(' ', '_'))), "w"))
+                    #plot_points(meshes[active_ts].pts, os.path.join(DEBUG_DIR, "post_iter{}_{}.png".format(str(iter).zfill(5), os.path.basename(active_ts).replace(' ', '_'))))
+
+
         for ts in meshes:
             assert not np.any(~ np.isfinite(meshes[ts].pts))
 
@@ -305,8 +388,9 @@ def optimize_meshes_links(meshes, links, layers, conf_dict={}):
 
     if SHOW_FINAL_MO:
         print("Final MO:")
-        for i, active_ts in enumerate(sorted_slices):
-            print(" Section {}: {}".format(i, mean_offsets(meshes, links, active_ts, plot=False)))
+        for active_ts in sorted_slices:
+            print(" Section {}: {}".format(layers[active_ts], ts_mean_offsets(meshes, links, active_ts, plot=False)))
+
     # Prepare per-layer output
     out_positions = {}
 
