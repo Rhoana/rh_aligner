@@ -220,12 +220,16 @@ def verify_mfovs(folder):
 def find_recent_sections(wafer_dir):
     all_sections = {}
     # The directories are sorted by the timestamp in the directory name. Need to store it in a hashtable for sorting
-    all_parent_dirs = glob.glob(os.path.join(wafer_dir, '*'))
+    all_parent_files = glob.glob(os.path.join(wafer_dir, '*'))
+    all_parent_dirs = []
     dir_to_time = {}
-    for folder in all_parent_dirs:
+    for folder in all_parent_files:
         # Assuming folder names similar to: scs_20151217_19-45-07   (scs can be changed to any other name)
-        m = re.match('.*_([0-9]{8})_([0-9]{2})-([0-9]{2})-([0-9]{2})$', folder)
-        dir_to_time[folder] = "{}_{}-{}-{}".format(m.group(1), m.group(2), m.group(3), m.group(4))
+        if os.path.isdir(folder):
+            m = re.match('.*_([0-9]{8})_([0-9]{2})-([0-9]{2})-([0-9]{2})$', folder)
+            if m is not None:
+                dir_to_time[folder] = "{}_{}-{}-{}".format(m.group(1), m.group(2), m.group(3), m.group(4))
+                all_parent_dirs.append(folder)
     for sub_folder in sorted(all_parent_dirs, key=lambda folder: dir_to_time[folder]):
         if os.path.isdir(sub_folder):
             print("Finding recent sections from subfolder: {}".format(sub_folder))
