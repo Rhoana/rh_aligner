@@ -136,8 +136,8 @@ def compare_features(section1_pts_resps_descs, section2_pts_resps_descs, actual_
     [allpoints2, allresps2, alldescs2] = section2_pts_resps_descs
     # print("lengths: len(allpoints1): {}, alldescs1.shape: {}".format(len(allpoints1), alldescs1.shape))
     # print("lengths: len(allpoints2): {}, alldescs2.shape: {}".format(len(allpoints2), alldescs2.shape))
-    match_points = generatematches_cv2(allpoints1, allpoints2, alldescs1, alldescs2, actual_params)
-    #match_points = generatematches_crosscheck_cv2(allpoints1, allpoints2, alldescs1, alldescs2, actual_params)
+    #match_points = generatematches_cv2(allpoints1, allpoints2, alldescs1, alldescs2, actual_params)
+    match_points = generatematches_crosscheck_cv2(allpoints1, allpoints2, alldescs1, alldescs2, actual_params)
 
     if match_points.shape[0] == 0 or match_points.shape[1] == 0:
         return (None, 0, 0, 0, len(allpoints1), len(allpoints2))
@@ -308,11 +308,12 @@ def analyze_slices(tiles_fname1, tiles_fname2, features_dir1, features_dir2, act
     # Take the mfov closest to the middle of each section
     section_center1 = np.mean(centers1, axis=0)
     section_center2 = np.mean(centers2, axis=0)
-    # Find the 3 closest mfovs to the center of section 1
-    if num_mfovs1 <= 3:
+    CLOSEST_MFOVS1_NUM = 3
+    # Find the closest mfovs to the center of section 1
+    if num_mfovs1 <= CLOSEST_MFOVS1_NUM:
         closest_mfovs_nums1 = indexed_ts1.keys()
     else:
-        closest_mfovs_nums1 = np.argpartition([((c[0] - section_center1[0])**2 + (c[1] - section_center1[1])**2) for c in centers1], 3)[:3]
+        closest_mfovs_nums1 = np.argpartition([((c[0] - section_center1[0])**2 + (c[1] - section_center1[1])**2) for c in centers1], CLOSEST_MFOVS1_NUM)[:CLOSEST_MFOVS1_NUM]
         closest_mfovs_nums1 = [sorted_mfovs1[n] for n in closest_mfovs_nums1]
     # Find the closest mfov to the center of section 2
     centers_mfovs_nums2 = [np.argmin([((c[0] - section_center2[0])**2 + (c[1] - section_center2[1])**2) for c in centers2])]
@@ -323,7 +324,7 @@ def analyze_slices(tiles_fname1, tiles_fname2, features_dir1, features_dir2, act
 
     print("Comparing Sec{} (mfovs: {}) and Sec{} (starting from mfovs: {})".format(layer1, closest_mfovs_nums1, layer2, centers_mfovs_nums2))
     initial_search_start_time = time.time()
-    # Do an iterative search of the 3 mfovs closest to the center of section 1 to the mfovs of section2 (starting from the center)
+    # Do an iterative search of the mfovs closest to the center of section 1 to the mfovs of section2 (starting from the center)
     best_transform, num_filtered, filter_rate, _, _, _, initial_search_iters_num = iterative_search(actual_params, layer1, layer2, indexed_ts1, indexed_ts2,
                          features_dir1, features_dir2, closest_mfovs_nums1, centers_mfovs_nums2, section2_mfov_bboxes, sorted_mfovs2)
     initial_search_end_time = time.time()
