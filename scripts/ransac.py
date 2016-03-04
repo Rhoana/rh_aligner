@@ -1,6 +1,10 @@
 import numpy as np
 import copy
 from models import Transforms
+from scipy.misc import comb
+
+def array_to_string(arr):
+    return '_'.join(map(str, arr))
 
 def ransac(matches, target_model_type, iterations, epsilon, min_inlier_ratio, min_num_inlier):
     # model = Model.create_model(target_model_type)
@@ -16,11 +20,21 @@ def ransac(matches, target_model_type, iterations, epsilon, min_inlier_ratio, mi
         print "RANSAC cannot find a good model because the number of initial matches ({}) is too small.".format(matches.shape[1])
         return None, None, None
 
-    for i in xrange(iterations):
+    # Avoiding repeated indices permutations using a dictionary
+    prev_min_matches_idxs = {}
+    # Limit the number of possible matches that we can search for using n choose k
+    max_combinations = comb(len(matches[0]), proposed_model.MIN_MATCHES_NUM)
+    for i in xrange(min(iterations, max_combinations)):
         # choose a minimal number of matches randomly
         min_matches_idxs = np.random.choice(xrange(len(matches[0])), size=proposed_model.MIN_MATCHES_NUM, replace=False)
+        min_matches_idxs_str = array_to_string(min_matches_idxs)
+        while min_matches_idxs_str in prev_min_matches_idxs:
+            min_matches_idxs = np.random.choice(xrange(len(matches[0])), size=proposed_model.MIN_MATCHES_NUM, replace=False)
+            min_matches_idxs_str = array_to_string(min_matches_idxs)
+        prev_min_matches_idxs[min_matches_idxs_str] = True
         # Try to fit them to the model
-        proposed_model.fit(matches[0][min_matches_idxs], matches[1][min_matches_idxs])
+        if proposed_model.fit(matches[0][min_matches_idxs], matches[1][min_matches_idxs]) == False:
+            continue
         # print "proposed_model", proposed_model.to_str()
         # Verify the new model 
         proposed_model_score, inlier_mask, proposed_model_mean = proposed_model.score(matches[0], matches[1], epsilon, min_inlier_ratio, min_num_inlier)
@@ -46,6 +60,7 @@ def filter_after_ransac(candidates, model, max_trust, min_num_inliers):
     """
     # copy the model
     new_model = copy.deepcopy(model)
+    dists = []
 
     # iteratively find a new model, by fitting the candidates, and removing those that are far than max_trust*median-distance
     # until the set of remaining candidates does not change its size

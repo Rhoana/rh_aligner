@@ -1,4 +1,5 @@
 import numpy as np
+import sys
 import copy
 
 
@@ -400,6 +401,12 @@ class AffineModel(AbstractAffineModel):
         m01 = (a00 * b10 - a01 * b00) / det
         m10 = (a11 * b01 - a01 * b11) / det
         m11 = (a00 * b11 - a01 * b01) / det
+
+        # If the matrix is singular, this means that all points map to a single point, which is not an affine transformation that we want
+        cond_val = np.linalg.cond([[m00, m01], [m10, m11]])
+        if np.isnan(cond_val) or cond_val >= 1/sys.float_info.epsilon: 
+            return False
+
         self.m = np.array([
                 [m00, m01, qc[0] - m00 * pc[0] - m01 * pc[1]],
                 [m10, m11, qc[1] - m10 * pc[0] - m11 * pc[1]],
