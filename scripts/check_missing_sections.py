@@ -46,6 +46,12 @@ def get_batch_dirs(cursor, wafer_dir):
     data = cursor.fetchall()
     return [entry[0] for entry in data]
 
+def get_parsed_dirs(cursor, wafer_dir):
+    cursor.execute("SELECT DISTINCT dir FROM parsed_folders WHERE wafer_dir=?",
+                   (wafer_dir,))
+    data = cursor.fetchall()
+    return [entry[0] for entry in data]
+
 def add_parsed_folder(cursor, db, wafer_dir, batch_dir, dir, section_num, errors):
     cursor.execute("INSERT INTO parsed_folders (wafer_dir, batch_dir, dir, section_num, errors) VALUES (?, ?, ?, ?, ?)",
                    (wafer_dir, batch_dir, dir, section_num, errors))
@@ -151,9 +157,9 @@ def find_missing_sections(wafer_dir, wafer_dir_normalized, db, cursor):
                                             'parsed_folder_id': entry['parsed_folder_id']
                                         }
 
-    # Fetch the previously parsed batch dirs
-    prev_batch_dirs = get_batch_dirs(cursor, wafer_dir_normalized)
-    print("prev_dirs:", prev_batch_dirs)
+    # Fetch the previously parsed dirs
+    prev_section_dirs = get_parsed_dirs(cursor, wafer_dir_normalized)
+    print("prev_dirs:", prev_section_dirs)
 
     # The batch directories are sorted by the timestamp in the directory name. Need to store it in a hashtable for sorting
     all_batch_files = glob.glob(os.path.join(wafer_dir, '*'))
@@ -166,18 +172,19 @@ def find_missing_sections(wafer_dir, wafer_dir_normalized, db, cursor):
             if m is not None:
                 dir_to_time[folder] = "{}_{}-{}-{}".format(m.group(1), m.group(2), m.group(3), m.group(4))
                 all_batch_dirs.append(folder)
-    for sub_folder in sorted(all_batch_dirs, key=lambda folder: dir_to_time[folder]):
-        # If already parsed that batch dir
-        if normalize_path(sub_folder) in prev_batch_dirs:
-            print("Previously parsed batch dir: {}, skipping...".format(sub_folder))
-            continue
 
+    for sub_folder in sorted(all_batch_dirs, key=lambda folder: dir_to_time[folder]):
         if os.path.isdir(sub_folder):
             print("Parsing batch dir: {}".format(sub_folder))
             # Get all section folders in the sub-folder
             all_sections_folders = sorted(glob.glob(os.path.join(sub_folder, '*_*')))
             batch_section_data = {}
             for section_folder in all_sections_folders:
+                # If already parsed that section dir
+                if normalize_path(section_folder) in prev_section_dirs:
+                    print("Previously parsed section dir: {}, skipping...".format(section_folder))
+                    continue
+
                 print("Parsing section dir: {}".format(section_folder))
                 if os.path.isdir(section_folder):
                     # Found a section directory, now need to find out if it has a focus issue or not
