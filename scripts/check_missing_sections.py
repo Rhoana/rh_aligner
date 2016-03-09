@@ -7,6 +7,7 @@ import csv
 import argparse
 import sqlite3
 import re
+import time
 
 debug_input_dir = '/n/lichtmanfs2/SCS_2015-9-14_C1_W05_mSEM'
 
@@ -42,6 +43,12 @@ def get_wafers_dirs(cursor):
 
 def get_batch_dirs(cursor, wafer_dir):
     cursor.execute("SELECT DISTINCT batch_dir FROM parsed_folders WHERE wafer_dir=?",
+                   (wafer_dir,))
+    data = cursor.fetchall()
+    return [entry[0] for entry in data]
+
+def get_parsed_dirs(cursor, wafer_dir):
+    cursor.execute("SELECT DISTINCT dir FROM parsed_folders WHERE wafer_dir=?",
                    (wafer_dir,))
     data = cursor.fetchall()
     return [entry[0] for entry in data]
@@ -107,16 +114,19 @@ def verify_mfov_folder(folder):
 
 def read_region_metadata_csv_file(fname):
     #fname = '/n/lichtmanfs2/SCS_2015-9-21_C1_W04_mSEM/_20150930_21-50-13/090_S90R1/region_metadata.csv'
-    if os.path.exists(fname):
-        with open(fname, 'r') as f:
-            reader = csv.reader(f, delimiter=';', quoting=csv.QUOTE_NONE)
-            reader.next() # Skip the sep=';' row
-            reader.next() # Skip the headers row
-            for row in reader:
-                # print row
-                yield row
+    with open(fname, 'r') as f:
+        reader = csv.reader(f, delimiter=';', quoting=csv.QUOTE_NONE)
+        reader.next() # Skip the sep=';' row
+        reader.next() # Skip the headers row
+        for row in reader:
+            # print row
+            yield row
 
 def verify_mfovs(folder):
+    # if the region_metadata file doesn't exist, need to skip that folder
+    if not os.path.exists(os.path.join(folder, "region_metadata.csv")):
+       return -1, -1
+
     csv_reader = read_region_metadata_csv_file(os.path.join(folder, "region_metadata.csv"))
     max_mfov_num = 0
     mfovs = []
@@ -138,6 +148,59 @@ def verify_mfovs(folder):
 
     return mfovs, max_mfov_num
 
+
+def parse_batch_dir(batch_dir, wafer_dir, wafer_dir_normalized, prev_section_dirs, db, cursor):
+    batch_section_data = {}
+    last_section_folder = None
+    print("Parsing batch dir: {}".format(batch_dir))
+    # Get all section folders in the sub-folder
+    all_sections_folders = sorted(glob.glob(os.path.join(batch_dir, '*_*')))
+    for section_folder in all_sections_folders:
+        # If already parsed that section dir
+        if normalize_path(section_folder) in prev_section_dirs:
+            print("Previously parsed section dir: {}, skipping...".format(section_folder))
+            continue
+
+        print("Parsing section dir: {}".format(section_folder))
+        if os.path.isdir(section_folder):
+            # Found a section directory, now need to find out if it has a focus issue or not
+            # (if it has any sub-dir that is all numbers, it hasn't got an issue)
+            section_num = os.path.basename(section_folder).split('_')[0]
+            relevant_mfovs, max_mfov_num = verify_mfovs(section_folder)
+            if relevant_mfovs == -1:
+                # The folder doesn't have the "region_metadata.csv" file, need to skip it
+                continue
+            batch_section_data[section_num] = {'folder': section_folder}
+            if len(relevant_mfovs) > 0:
+                # a good section
+                if min(relevant_mfovs) == 1 and max_mfov_num == len(relevant_mfovs):
+                    # The directories in the wafer directory are sorted by the timestamp, and so here we'll get the most recent scan of the section
+                    batch_section_data[section_num]['errors'] = None
+                else:
+                    missing_mfovs = []
+                    for i in range(0, max(relevant_mfovs)):
+                        if i+1 not in relevant_mfovs:
+                            missing_mfovs.append(str(i+1))
+                    batch_section_data[section_num]['errors'] = MFOVS_MISSING_STR + ':"{}"'.format(','.join(missing_mfovs))
+            else:
+                batch_section_data[section_num]['errors'] = FOCUS_FAIL_STR
+
+        
+    # No need to verify that the last section is not being imaged at the moment
+    # because we only consider sections that have the "region_metadata.csv", and if it is not there,
+    # the folder is skipped
+    
+            
+    # Insert all parsed section folders to the database
+    for section_num in batch_section_data:
+        row_id = add_parsed_folder(cursor, db, wafer_dir_normalized, normalize_path(batch_dir), normalize_path(batch_section_data[section_num]['folder']),
+                                   section_num, batch_section_data[section_num]['errors'])
+        batch_section_data[section_num]['parsed_folder_id'] = row_id
+
+    return batch_section_data, last_section_dir
+
+
+
 def find_missing_sections(wafer_dir, wafer_dir_normalized, db, cursor):
 
     all_sections = {}
@@ -151,9 +214,9 @@ def find_missing_sections(wafer_dir, wafer_dir_normalized, db, cursor):
                                             'parsed_folder_id': entry['parsed_folder_id']
                                         }
 
-    # Fetch the previously parsed batch dirs
-    prev_batch_dirs = get_batch_dirs(cursor, wafer_dir_normalized)
-    print("prev_dirs:", prev_batch_dirs)
+    # Fetch the previously parsed dirs
+    prev_section_dirs = get_parsed_dirs(cursor, wafer_dir_normalized)
+    print("prev_dirs:", prev_section_dirs)
 
     # The batch directories are sorted by the timestamp in the directory name. Need to store it in a hashtable for sorting
     all_batch_files = glob.glob(os.path.join(wafer_dir, '*'))
@@ -166,46 +229,15 @@ def find_missing_sections(wafer_dir, wafer_dir_normalized, db, cursor):
             if m is not None:
                 dir_to_time[folder] = "{}_{}-{}-{}".format(m.group(1), m.group(2), m.group(3), m.group(4))
                 all_batch_dirs.append(folder)
-    for sub_folder in sorted(all_batch_dirs, key=lambda folder: dir_to_time[folder]):
-        # If already parsed that batch dir
-        if normalize_path(sub_folder) in prev_batch_dirs:
-            print("Previously parsed batch dir: {}, skipping...".format(sub_folder))
-            continue
 
+    # Parse the batch directories
+    for sub_folder in sorted(all_batch_dirs, key=lambda folder: dir_to_time[folder]):
         if os.path.isdir(sub_folder):
-            print("Parsing batch dir: {}".format(sub_folder))
-            # Get all section folders in the sub-folder
-            all_sections_folders = sorted(glob.glob(os.path.join(sub_folder, '*_*')))
-            batch_section_data = {}
-            for section_folder in all_sections_folders:
-                print("Parsing section dir: {}".format(section_folder))
-                if os.path.isdir(section_folder):
-                    # Found a section directory, now need to find out if it has a focus issue or not
-                    # (if it has any sub-dir that is all numbers, it hasn't got an issue)
-                    section_num = os.path.basename(section_folder).split('_')[0]
-                    relevant_mfovs, max_mfov_num = verify_mfovs(section_folder)
-                    batch_section_data[section_num] = {'folder': section_folder}
-                    if len(relevant_mfovs) > 0:
-                        # a good section
-                        if min(relevant_mfovs) == 1 and max_mfov_num == len(relevant_mfovs):
-                            # The directories in the wafer directory are sorted by the timestamp, and so here we'll get the most recent scan of the section
-                            batch_section_data[section_num]['errors'] = None
-                        else:
-                            missing_mfovs = []
-                            for i in range(0, max(relevant_mfovs)):
-                                if i+1 not in relevant_mfovs:
-                                    missing_mfovs.append(str(i+1))
-                            batch_section_data[section_num]['errors'] = MFOVS_MISSING_STR + ':"{}"'.format(','.join(missing_mfovs))
-                    else:
-                        batch_section_data[section_num]['errors'] = FOCUS_FAIL_STR
-            # Insert all parsed section folders to the database
-            for section_num in batch_section_data:
-                row_id = add_parsed_folder(cursor, db, wafer_dir_normalized, normalize_path(sub_folder), normalize_path(batch_section_data[section_num]['folder']),
-                                           section_num, batch_section_data[section_num]['errors'])
-                batch_section_data[section_num]['parsed_folder_id'] = row_id
+            batch_section_data = parse_batch_dir(sub_folder, wafer_dir, wafer_dir_normalized, prev_section_dirs, db, cursor)
 
             # Update the sections that were parsed during this execution
             all_sections.update(batch_section_data)
+
             
     # Insert a missing section for each non-seen section number starting from 001 (and ending with the highest number)
     all_sections_keys = sorted(all_sections.keys())
