@@ -23,7 +23,7 @@ def ransac(matches, target_model_type, iterations, epsilon, min_inlier_ratio, mi
     # Avoiding repeated indices permutations using a dictionary
     prev_min_matches_idxs = {}
     # Limit the number of possible matches that we can search for using n choose k
-    max_combinations = comb(len(matches[0]), proposed_model.MIN_MATCHES_NUM)
+    max_combinations = int(comb(len(matches[0]), proposed_model.MIN_MATCHES_NUM))
     for i in xrange(min(iterations, max_combinations)):
         # choose a minimal number of matches randomly
         min_matches_idxs = np.random.choice(xrange(len(matches[0])), size=proposed_model.MIN_MATCHES_NUM, replace=False)
