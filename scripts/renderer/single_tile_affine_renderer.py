@@ -81,11 +81,11 @@ class SingleTileAffineRenderer:
         adjusted_transform[0][2] -= self.bbox[0]
         adjusted_transform[1][2] -= self.bbox[2]
         
-        self.img = cv2.warpAffine(img, adjusted_transform, self.shape)
+        self.img = cv2.warpAffine(img, adjusted_transform, self.shape, flags=cv2.INTER_AREA)
         self.already_rendered = True
         if self.compute_mask:
             mask_img = np.ones(img.shape)
-            self.mask = cv2.warpAffine(mask_img, adjusted_transform, self.shape)
+            self.mask = cv2.warpAffine(mask_img, adjusted_transform, self.shape, flags=cv2.INTER_AREA)
             self.mask[self.mask > 0] = 1
         if self.compute_distances:
             # The initial weights for each pixel is the minimum from the image boundary
@@ -94,7 +94,7 @@ class SingleTileAffineRenderer:
                                 np.minimum(grid[0], self.height - 1 - grid[0]),
                                 np.minimum(grid[1], self.width - 1 - grid[1])
                             ).astype(np.float32)
-            self.weights = cv2.warpAffine(weights_img, adjusted_transform, self.shape)
+            self.weights = cv2.warpAffine(weights_img, adjusted_transform, self.shape, flags=cv2.INTER_AREA)
         # Returns the transformed image and the start point
         return self.img, (self.bbox[0], self.bbox[2])
 
