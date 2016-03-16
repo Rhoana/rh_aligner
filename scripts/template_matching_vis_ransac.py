@@ -30,9 +30,10 @@ def main(jsonfile):
     min_inlier_ratio = 0
     min_num_inlier = 7
     max_trust = 3
+    det_delta = 0.3
     pointmatchesr = (points1, points2)
     try:
-        model, filtered_matches = ransac.filter_matches(pointmatchesr, model_index, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, max_trust)
+        model, filtered_matches = ransac.filter_matches(pointmatchesr, model_index, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, max_trust, det_delta)
         R = model.get_matrix()[0:2, 0:2]
     except:
         return

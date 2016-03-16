@@ -138,6 +138,7 @@ def compare_features(section1_pts_resps_descs, section2_pts_resps_descs, actual_
     # print("lengths: len(allpoints2): {}, alldescs2.shape: {}".format(len(allpoints2), alldescs2.shape))
     #match_points = generatematches_cv2(allpoints1, allpoints2, alldescs1, alldescs2, actual_params)
     match_points = generatematches_crosscheck_cv2(allpoints1, allpoints2, alldescs1, alldescs2, actual_params)
+    print("pre-ransac matches count: {}".format(match_points.shape[1]))
 
     if match_points.shape[0] == 0 or match_points.shape[1] == 0:
         return (None, 0, 0, 0, len(allpoints1), len(allpoints2))
@@ -148,9 +149,11 @@ def compare_features(section1_pts_resps_descs, section2_pts_resps_descs, actual_
     min_inlier_ratio = actual_params["min_inlier_ratio"]
     min_num_inlier = actual_params["min_num_inlier"]
     max_trust = actual_params["max_trust"]
-    model, filtered_matches = ransac.filter_matches(match_points, model_index, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, max_trust)
+    det_delta = actual_params["det_delta"]
+    model, filtered_matches = ransac.filter_matches(match_points, model_index, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, max_trust, det_delta)
     if filtered_matches is None:
         filtered_matches = np.zeros((0, 0))
+    print("post-ransac matches count: {}".format(filtered_matches.shape[1]))
     return (model, filtered_matches.shape[1], float(filtered_matches.shape[1]) / match_points.shape[1], match_points.shape[1], len(allpoints1), len(allpoints2))
 
 
@@ -225,7 +228,7 @@ def iterative_search(actual_params, layer1, layer2, indexed_ts1, indexed_ts2, fe
             print("Could not find a valid model between Sec{} and Sec{} in iteration {}".format(layer1, layer2, match_iteration))
         else:
             print("Found a model {} (with {} matches) between Sec{} and Sec{} in iteration {}, need to verify cutoff".format(model.to_str(), num_filtered, layer1, layer2, match_iteration))
-            if num_filtered > saved_model['num_filtered']:
+            if num_filtered >= saved_model['num_filtered']:
                 saved_model['model'] = model
                 saved_model['num_filtered'] = num_filtered
                 saved_model['filter_rate'] = filter_rate
@@ -418,6 +421,7 @@ def match_layers_sift_features(tiles_fname1, features_dir1, tiles_fname2, featur
     actual_params["min_inlier_ratio"] = params.get("min_inlier_ratio", 0.01)
     actual_params["min_num_inlier"] = params.get("min_num_inliers", 7)
     actual_params["max_trust"] = params.get("max_trust", 3)
+    actual_params["det_delta"] = params.get("det_delta", 0.7)
 
     print("Matching layers: {} and {}".format(tiles_fname1, tiles_fname2))
 

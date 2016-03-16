@@ -6,7 +6,7 @@ from scipy.misc import comb
 def array_to_string(arr):
     return '_'.join(map(str, arr))
 
-def ransac(matches, target_model_type, iterations, epsilon, min_inlier_ratio, min_num_inlier):
+def ransac(matches, target_model_type, iterations, epsilon, min_inlier_ratio, min_num_inlier, det_delta):
     # model = Model.create_model(target_model_type)
     assert(len(matches[0]) == len(matches[1]))
 
@@ -34,6 +34,10 @@ def ransac(matches, target_model_type, iterations, epsilon, min_inlier_ratio, mi
         prev_min_matches_idxs[min_matches_idxs_str] = True
         # Try to fit them to the model
         if proposed_model.fit(matches[0][min_matches_idxs], matches[1][min_matches_idxs]) == False:
+            continue
+        # if the proposed model distorts the image too much, skip the model
+        det = np.linalg.det(proposed_model.get_matrix()[:2, :2])
+        if det < 1.0 - det_delta or det > 1.0 + det_delta:
             continue
         # print "proposed_model", proposed_model.to_str()
         # Verify the new model 
@@ -101,7 +105,7 @@ def filter_after_ransac(candidates, model, max_trust, min_num_inliers):
     return new_model, candidates_mask, np.mean(dists)
 
 
-def filter_matches(matches, target_model_type, iterations, epsilon, min_inlier_ratio, min_num_inlier, max_trust):
+def filter_matches(matches, target_model_type, iterations, epsilon, min_inlier_ratio, min_num_inlier, max_trust, det_delta):
     """Perform a RANSAC filtering given all the matches"""
     new_model = None
     filtered_matches = None
@@ -109,7 +113,7 @@ def filter_matches(matches, target_model_type, iterations, epsilon, min_inlier_r
 
     # Apply RANSAC
     # print "Filtering {} matches".format(matches.shape[1])
-    inliers_mask, model, _ = ransac(matches, target_model_type, iterations, epsilon, min_inlier_ratio, min_num_inlier)
+    inliers_mask, model, _ = ransac(matches, target_model_type, iterations, epsilon, min_inlier_ratio, min_num_inlier, det_delta)
 
     # Apply further filtering
     if inliers_mask is not None:

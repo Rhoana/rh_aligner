@@ -66,7 +66,7 @@ def dist_after_model(model, p1_l, p2_l):
     delta = p1_l_new - p2_l
     return np.sqrt(np.sum(np.dot(delta, delta)))
 
-def match_single_pair(ts1, ts2, features_file1, features_file2, out_fname, rod, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, model_index, max_trust):
+def match_single_pair(ts1, ts2, features_file1, features_file2, out_fname, rod, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, model_index, max_trust, det_delta):
     # load feature files
     print "Loading sift features"
     _, pts1, _, _, descs1 = load_features_hdf5(features_file1)
@@ -121,7 +121,7 @@ def match_single_pair(ts1, ts2, features_file1, features_file2, out_fname, rod, 
         np.array([pts1[[m[0].queryIdx for m in matches]]][0]),
         np.array([pts2[[m[0].trainIdx for m in matches]]][0]) ])
 
-    model, filtered_matches = ransac.filter_matches(match_points, model_index, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, max_trust)
+    model, filtered_matches = ransac.filter_matches(match_points, model_index, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, max_trust, det_delta)
 
     model_json = []
     if model is None:
@@ -161,6 +161,7 @@ def match_single_sift_features_and_filter(tiles_file, features_file1, features_f
     min_num_inlier = params.get("minNumInliers", 7)
     model_index = params.get("modelIndex", 1)
     max_trust = params.get("maxTrust", 3)
+    det_delta = params.get("detDelta", 0.3)
 
     print "Matching sift features of tilespecs file: {}, indices: {}".format(tiles_file, index_pair)
     # load tilespecs files
@@ -168,7 +169,7 @@ def match_single_sift_features_and_filter(tiles_file, features_file1, features_f
     ts1 = tilespecs[index_pair[0]]
     ts2 = tilespecs[index_pair[1]]
 
-    match_single_pair(ts1, ts2, features_file1, features_file2, out_fname, rod, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, model_index, max_trust)
+    match_single_pair(ts1, ts2, features_file1, features_file2, out_fname, rod, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, model_index, max_trust, det_delta)
 
 
 def match_multiple_sift_features_and_filter(tiles_file, features_files_lst1, features_files_lst2, out_fnames, index_pairs, conf_fname=None, processes_num=1):
@@ -183,6 +184,7 @@ def match_multiple_sift_features_and_filter(tiles_file, features_files_lst1, fea
     min_num_inlier = params.get("minNumInliers", 7)
     model_index = params.get("modelIndex", 1)
     max_trust = params.get("maxTrust", 3)
+    det_delta = params.get("detDelta", 0.3)
 
     assert(len(index_pairs) == len(features_files_lst1))
     assert(len(index_pairs) == len(features_files_lst2))
@@ -203,7 +205,7 @@ def match_multiple_sift_features_and_filter(tiles_file, features_files_lst1, fea
         ts1 = tilespecs[index_pair[0]]
         ts2 = tilespecs[index_pair[1]]
 
-        res = pool.apply_async(match_single_pair, (ts1, ts2, features_file1, features_file2, out_fname, rod, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, model_index, max_trust))
+        res = pool.apply_async(match_single_pair, (ts1, ts2, features_file1, features_file2, out_fname, rod, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, model_index, max_trust, det_delta))
         pool_results.append(res)
 
     pool.close()
