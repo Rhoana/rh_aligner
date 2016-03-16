@@ -3,7 +3,6 @@ from __future__ import print_function
 import os
 import numpy as np
 import json
-import math
 import time
 import sys
 from scipy.spatial import distance
@@ -18,13 +17,17 @@ import multiprocessing as mp
 import pyximport
 pyximport.install()
 import cv_wrap_module
-from scipy import spatial
+from renderer.tilespec_affine_renderer import TilespecAffineRenderer
+import logging
 
+logger = logging.getLogger(__name__)
+logger.setLevel("DEBUG")
+logger_handler = logging.StreamHandler()
+logger_handler.setLevel(logging.DEBUG)
+logger_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger_handler.setFormatter(logger_formatter)
+logger.addHandler(logger_handler)
 
-def get_image_top_left(ts, tile_index):
-    xloc = ts[tile_index]["bbox"][0]
-    yloc = ts[tile_index]["bbox"][2]
-    return [xloc, yloc]
 
 
 def get_mfov_centers_from_json(indexed_ts):
@@ -54,7 +57,7 @@ def get_best_transformations(pre_mfov_matches, tiles_fname1, tiles_fname2, mfov_
          tiles_fname2 == pre_mfov_matches["tilespec1"]:
         reversed = True
     else:
-        print("Error: could not find pre_matches between tilespecs {} and {} (found tilespecs {} and {} instead!).".format(tiles_fname1, tiles_fname2, pre_mfov_matches["tilespec1"], pre_mfov_matches["tilespec2"]), file=sys.stderr)
+        logger.error("Error: could not find pre_matches between tilespecs {} and {} (found tilespecs {} and {} instead!).".format(tiles_fname1, tiles_fname2, pre_mfov_matches["tilespec1"], pre_mfov_matches["tilespec2"]))
         return {}
 
     if reversed:
@@ -135,44 +138,6 @@ def get_closest_index_to_point(point, centerstree):
     distanc, closest_index = centerstree.query(point)
     return closest_index
 
-def get_closest_indices_to_point(point, centerstree, num):
-    _, closest_indices = centerstree.query(point, k=num)
-    return closest_indices
-
-def get_img_matches(ts1, tile_centers1, ts2, tile_centers2_kdtree, best_transformations, mfov_centers1):
-    """For each tile in section1 find the closest 10 tiles in the second image (after applying the preliminary transformation)"""
-    img_matches = []
-
-    # Iterate over the first section tiles, and get the approximated location on section 2 (after transformation)
-    # and then get the closest 10 tiles (according to their centers) to that location
-    for ind1, tile1 in enumerate(ts1):
-        center1 = tile_centers1[ind1]
-        trans_matrix = find_best_mfov_transformation(tile1["mfov"], best_transformations, mfov_centers1)
-        expected_new_center = np.array(np.dot(trans_matrix, np.append(center1, [1]))[0:2])
-        closest_indices = get_closest_indices_to_point(expected_new_center, tile_centers2_kdtree, 10)
-        img_matches.append(closest_indices)
-    return img_matches
-
-def get_mfov_img_matches(ts1, tile_centers1, ts2, tile_centers2_kdtree, best_transformations, mfov_centers1, targeted_mfov1):
-    """For each tile in the targeted_mfov1 of section1 find the closest 10 tiles in the second image (after applying the preliminary transformation)"""
-    img_matches = []
-
-    # Iterate over the first section tiles, and get the approximated location on section 2 (after transformation)
-    # and then get the closest 10 tiles (according to their centers) to that location
-    for ind1, tile1 in enumerate(ts1):
-        if tile1["mfov"] != targeted_mfov1:
-            img_matches.append([])
-            continue
-        center1 = tile_centers1[ind1]
-        trans_matrix = find_best_mfov_transformation(tile1["mfov"], best_transformations, mfov_centers1)
-        expected_new_center = np.array(np.dot(trans_matrix, np.append(center1, [1]))[0:2])
-        closest_indices = get_closest_indices_to_point(expected_new_center, tile_centers2_kdtree, 10)
-        img_matches.append(closest_indices)
-    return img_matches
-
-
-
-
 def is_point_in_img(tile_ts, point):
     """Returns True if the given point lies inside the image as denoted by the given tile_tilespec"""
     # TODO - instead of checking inside the bbox, need to check inside the polygon after transformation
@@ -184,172 +149,71 @@ def is_point_in_img(tile_ts, point):
     return False
 
 
-def get_images_from_indices(ts, img_indices):
-    """Returns all the images at the given img_indices that are overlapping with the given point"""
-    img_arr = []
-    for img_ind in img_indices:
-        img_url = ts[img_ind]["mipmapLevels"]["0"]["imageUrl"]
-        img_url = img_url.replace("file://", "")
-        img = cv2.imread(img_url, 0)
-        if img is None or img.shape == (0,0):
-            print("Error: could not read image {} - Aborting!".format(img_url), file=sys.stderr)
-            sys.exit(1)
-        #img = cv2.equalizeHist(img)
-        img_arr.append((img, img_ind))
-    return img_arr
+def execute_pmcc_matching(img1_center_point, img1_to_img2_transform, scaling, template_size, search_window_size, img1_scaled_renderer, img2_scaled_renderer, min_corr, max_curvature, max_rod, debug_save_matches=False, debug_dir=None):
+    # Assumes that img1_renderer already has the transformation to img2 applied, and is scaled down,
+    # and that img2_renderer is already scaled down,
+    # and img1_center_point is w/o the transformation to img2 and w/o the scaling
+
+    # Compute the estimated point on img2 with scaling
+    img1_center_point_on_img2 = (np.dot(img1_to_img2_transform[:2,:2], img1_center_point) + img1_to_img2_transform[:2,2]) * scaling
+
+    # Fetch the template around img1_point (after transformation)
+    template_scaled_side = template_size * scaling / 2
+    from_x1, from_y1 = img1_center_point_on_img2 - template_scaled_side
+    to_x1, to_y1 = img1_center_point_on_img2 + template_scaled_side
+    img1_template, img1_template_start_point = img1_scaled_renderer.crop(from_x1, from_y1, to_x1, to_y1)
+    
+    # Fetch a large sub-image around img2_point (using search_window_scaled_size)
+    search_window_scaled_side = search_window_size * scaling / 2
+    from_x2, from_y2 = img1_center_point_on_img2 - search_window_scaled_side
+    to_x2, to_y2 = img1_center_point_on_img2 + search_window_scaled_side
+    img2_search_window, img2_search_window_start_point = img2_scaled_renderer.crop(from_x2, from_y2, to_x2, to_y2)
+
+    # execute the PMCC match
+    # Do template matching
+    result, reason, match_val = PMCC_filter_example.PMCC_match(img2_search_window, img1_template, min_correlation=min_corr, maximal_curvature_ratio=max_curvature, maximal_ROD=max_rod)
+    if result is not None:
+        # Compute the location of the matched point on img2 in non-scaled coordinates
+        #matched_location_scaled = np.array([reason[1], reason[0]]) + template_scaled_side
+        #img2_center_point = (matched_location_scaled + img1_center_point_on_img2) / scaling 
+        matched_location_scaled = np.array([reason[1], reason[0]]) + np.array([from_x2, from_y2]) + template_scaled_side
+        img2_center_point = matched_location_scaled / scaling 
+        logger.debug("{}: match found: {} and {} (orig assumption: {})".format(os.getpid(), img1_center_point, img2_center_point, img1_center_point_on_img2 / scaling))
+        if debug_save_matches:
+            #debug_out_fname1 = os.path.join(debug_dir, "debug_match_sec1{}-{}_sec2{}-{}_image1.png".format(hexgr_point[0], hexgr_point[1], reasonx, reasony))
+            #debug_out_fname2 = os.path.join(debug_dir, "debug_match_sec1{}-{}_sec2{}-{}_image2.png".format(hexgr_point[0], hexgr_point[1], reasonx, reasony))
+            debug_out_fname1 = os.path.join(debug_dir, "debug_match_sec1{}-{}_sec2{}-{}_image1.png".format(int(img1_center_point[0]), int(img1_center_point[1]), int(img2_center_point[0]), int(img2_center_point[1])))
+            debug_out_fname2 = os.path.join(debug_dir, "debug_match_sec1{}-{}_sec2{}-{}_image2.png".format(int(img1_center_point[0]), int(img1_center_point[1]), int(img2_center_point[0]), int(img2_center_point[1])))
+            cv2.imwrite(debug_out_fname1, img1_template)
+            img2_cut_out = img2_search_window[reason[0]:reason[0] + 2 * template_scaled_side, reason[1]:reason[1] + 2 * template_scaled_side]
+            cv2.imwrite(debug_out_fname2, img2_cut_out)
+        return img1_center_point, img2_center_point, match_val
+
+    # When there are no matches save template and search window
+#    if debug_save_matches:
+#        debug_out_fname1 = os.path.join(debug_dir, "debug_no_match_sec1{}-{}_sec2{}-{}_image1.png".format(int(img1_center_point[0]), int(img1_center_point[1]), int(img1_center_point_on_img2[0] / scaling), int(img1_center_point_on_img2[1] / scaling)))
+#        debug_out_fname2 = os.path.join(debug_dir, "debug_no_match_sec1{}-{}_sec2{}-{}_image2_window.png".format(int(img1_center_point[0]), int(img1_center_point[1]), int(img1_center_point_on_img2[0] / scaling), int(img1_center_point_on_img2[1] / scaling)))
+#        cv2.imwrite(debug_out_fname1, img1_template)
+#        cv2.imwrite(debug_out_fname2, img2_search_window)
+
+    #return img1_center_point, None, None
+    return None
 
 
-def get_images_indices_from_indices_and_point(ts, img_indices, point):
-    """Returns all the images at the given img_indices that are overlapping with the given point"""
-    img_arr = [img_ind for img_ind in img_indices if is_point_in_img(ts[img_ind], point)]
-    return img_arr
+def fetch_and_run(q_jobs, add_result_func, img1_to_img2_transform, scaling, template_size, search_window_size, img1_scaled_renderer, img2_scaled_renderer, min_corr, max_curvature, max_rod, debug_save_matches=False, deubg_dir=None):
+    while True:
+        job = q_jobs.get(block=True)
+        if job is None:
+            break
+        #logger.debug("Working on point: {}".format(job))
+        r = execute_pmcc_matching(job, img1_to_img2_transform, scaling, template_size, search_window_size, img1_scaled_renderer, img2_scaled_renderer, min_corr, max_curvature, max_rod, debug_save_matches, deubg_dir)
+        if r is not None:
+            add_result_func(r)
+    logger.info("Process {} is finished".format(os.getpid()))
 
-
-def get_template_from_img_and_point(img1resized, template_size, centerpoint):
-    imgheight = img1resized.shape[1]
-    imgwidth = img1resized.shape[0]
-    notonmesh = False
-
-    xstart = centerpoint[0] - template_size / 2
-    ystart = centerpoint[1] - template_size / 2
-    xend = centerpoint[0] + template_size / 2
-    yend = centerpoint[1] + template_size / 2
-
-    if (xstart < 0):
-        xend = 1 + xstart
-        xstart = 1
-        notonmesh = True
-    if (ystart < 0):
-        yend = 1 + ystart
-        ystart = 1
-        notonmesh = True
-    if (xend >= imgwidth):
-        diff = xend - imgwidth
-        xstart -= diff + 1
-        xend -= diff + 1
-        notonmesh = True
-    if (yend >= imgwidth):
-        diff = yend - imgwidth
-        ystart -= diff + 1
-        yend -= diff + 1
-        notonmesh = True
-
-    if (xstart < 0) or (ystart < 0) or (xend >= imgwidth) or (yend >= imgheight):
-        return None
-    return (img1resized[xstart:(xstart + template_size), ystart:(ystart + template_size)].copy(), xstart, ystart, notonmesh)
-
-
-def get_blank_template_from_img_and_point(imgwidth, imgheight, template_size, centerpoint):
-    notonmesh = False
-
-    xstart = centerpoint[0] - template_size / 2
-    ystart = centerpoint[1] - template_size / 2
-    xend = centerpoint[0] + template_size / 2
-    yend = centerpoint[1] + template_size / 2
-
-    if (xstart < 0):
-        xend = 1 + xstart
-        xstart = 1
-        notonmesh = True
-    if (ystart < 0):
-        yend = 1 + ystart
-        ystart = 1
-        notonmesh = True
-    if (xend >= imgwidth):
-        diff = xend - imgwidth
-        xstart -= diff + 1
-        xend -= diff + 1
-        notonmesh = True
-    if (yend >= imgwidth):
-        diff = yend - imgwidth
-        ystart -= diff + 1
-        yend -= diff + 1
-        notonmesh = True
-
-    if (xstart < 0) or (ystart < 0) or (xend >= imgwidth) or (yend >= imgheight):
-        return None
-    return (xstart, ystart, template_size, template_size, notonmesh)
-
-
-
-def perform_pmcc(ts1, ts2, template_size, scaling, img1_ind, best_transformations, mfov_centers1, prelimdict, min_corr, max_curvature, max_rod, debug_save_matches=False, debug_dir=None):
-
-    point_matches = []
-    img1_url = ts1[img1_ind]["mipmapLevels"]["0"]["imageUrl"]
-    img1_url = img1_url.replace("file://", "")
-    img1 = cv2.imread(img1_url, 0)
-    if img1 is None or img1.shape == (0,0):
-        print("Error: could not read image {} - Aborting!".format(img1_url), file=sys.stderr)
-        sys.exit(1)
-    #img1 = cv2.equalizeHist(img1)
-    img1_resized = cv2.resize(img1, (0, 0), fx=scaling, fy=scaling)
-    img1_offset = get_image_top_left(ts1, img1_ind)
-    expected_transform = find_best_mfov_transformation(ts1[img1_ind]["mfov"], best_transformations, mfov_centers1)
-
-    # Loop over all expected img2 indices
-    img2_inds = prelimdict[img1_ind].keys()
-    img2s = get_images_from_indices(ts2, img2_inds)
-
-    for (img2, img2_ind) in img2s:
-        # Resize and find information on the second image
-        img2_resized = cv2.resize(img2, (0, 0), fx=scaling/1, fy=scaling/1)
-        # img2_offset = get_image_top_left(ts2, img2_ind) - UNUSED
-
-        for hexgr_point in prelimdict[img1_ind][img2_ind]:
-            # Get the template for the first Image
-            img1_template = get_template_from_img_and_point(img1_resized, template_size, (np.array(hexgr_point) - img1_offset) * scaling)
-            if (img1_template is None):
-                continue
-            # Find the template coordinates and rotate the template to match preliminary transformation
-            chosen_template, startx, starty, not_on_mesh = img1_template
-            w, h = chosen_template.shape
-            # center_point1 = np.array([startx + w / 2, starty + h / 2]) / scaling + img1_offset - UNUSED
-            # expected_new_center = np.dot(expected_transform, np.append(center_point1, [1]))[0:2] - UNUSED
-            ro, col = chosen_template.shape
-            rad2deg = -180 / math.pi
-            # TODO - assumes only rigid transformation, should be more general
-            angle_of_rot = rad2deg * math.atan2(expected_transform[1][0], expected_transform[0][0])
-            rotation_matrix = cv2.getRotationMatrix2D((h / 2, w / 2), angle_of_rot, 1)
-            rotated_temp1 = cv2.warpAffine(chosen_template, rotation_matrix, (col, ro))
-            xaa = int(w / 2.9)
-            rotated_and_cropped_temp1 = rotated_temp1[(w / 2 - xaa):(w / 2 + xaa), (h / 2 - xaa):(h / 2 + xaa)]
-            neww, newh = rotated_and_cropped_temp1.shape
-            # TODO - assumes a single transformation, but there might be more
-            img1_model = models.Transforms.from_tilespec(ts1[img1_ind]["transforms"][0])
-            img1_center_point = img1_model.apply(np.array([starty + h / 2, startx + w / 2]) / scaling)  # + imgoffset1
-
-            # Do template matching
-            result, reason, match_val = PMCC_filter_example.PMCC_match(img2_resized, rotated_and_cropped_temp1, min_correlation=min_corr, maximal_curvature_ratio=max_curvature, maximal_ROD=max_rod)
-            if result is not None:
-                reasonx, reasony = reason
-                # TODO - assumes a single transformation, but there might be more
-                img2_model = models.Transforms.from_tilespec(ts2[img2_ind]["transforms"][0])
-                img2_center_point = img2_model.apply(np.array([reasony + newh / 2, reasonx + neww / 2]) / scaling)  # + imgoffset2
-                point_matches.append((img1_center_point, img2_center_point, not_on_mesh, match_val))
-                if debug_save_matches:
-                    #debug_out_fname1 = os.path.join(debug_dir, "debug_match_sec1{}-{}_sec2{}-{}_image1.png".format(hexgr_point[0], hexgr_point[1], reasonx, reasony))
-                    #debug_out_fname2 = os.path.join(debug_dir, "debug_match_sec1{}-{}_sec2{}-{}_image2.png".format(hexgr_point[0], hexgr_point[1], reasonx, reasony))
-                    debug_out_fname1 = os.path.join(debug_dir, "debug_match_sec1{}-{}_sec2{}-{}_image1.png".format(int(img1_center_point[0]), int(img1_center_point[1]), int(img2_center_point[0]), int(img2_center_point[1])))
-                    debug_out_fname2 = os.path.join(debug_dir, "debug_match_sec1{}-{}_sec2{}-{}_image2.png".format(int(img1_center_point[0]), int(img1_center_point[1]), int(img2_center_point[0]), int(img2_center_point[1])))
-                    cv2.imwrite(debug_out_fname1, rotated_and_cropped_temp1)
-                    temp1_final_sizex = rotated_and_cropped_temp1.shape[0]
-                    temp1_final_sizey = rotated_and_cropped_temp1.shape[1]
-                    img2_cut_out = img2_resized[reasonx:(reasonx + temp1_final_sizex), reasony:(reasony + temp1_final_sizey)]
-                    cv2.imwrite(debug_out_fname2, img2_cut_out)
-                # no need to find another possible point
-    return point_matches
-
-
-def perform_pmcc_unwrapper(arg):
-    ts1, ts2, template_size, scaling, img1_ind, best_transformations, mfov_centers1, prelimdict, min_corr, max_curvature, max_rod, debug_save_matches, debug_dir = arg
-    sys.stdout = sys.__stdout__
-    return perform_pmcc(ts1, ts2, template_size, scaling, img1_ind, best_transformations, mfov_centers1, prelimdict, min_corr, max_curvature, max_rod, debug_save_matches, debug_dir)
-
-
-def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, out_fname, targeted_mfov=-1, conf_fname=None, processes_num=1):
+def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, out_fname, targeted_mfov, conf_fname=None, processes_num=1):
     starttime = time.time()
-    print("Loading tilespecs, parameters, and other preliminary information")
-    print("Block-Matching+PMCC layers: {} with {} targeted mfov: {}".format(tiles_fname1, tiles_fname2, 'all' if targeted_mfov==-1 else targeted_mfov))
+    logger.info("Block-Matching+PMCC layers: {} with {} targeted mfov: {}".format(tiles_fname1, tiles_fname2, targeted_mfov))
 
     # Load parameters file
     params = utils.conf_from_file(conf_fname, 'MatchLayersBlockMatching')
@@ -361,8 +225,8 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
     hex_spacing = params.get("hex_spacing", 1500)
     scaling = params.get("scaling", 0.2)
     template_size = params.get("template_size", 200)
-    template_size *= scaling
-    print("Actual template size (after scaling): {}".format(template_size))
+    search_window_size = params.get("search_window_size", 8 * template_size)
+    logger.info("Actual template size: {} and window search size: {} (after scaling)".format(template_size * scaling, search_window_size * scaling))
 
     # Parameters for PMCC filtering
     min_corr = params.get("min_correlation", 0.2)
@@ -372,7 +236,7 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
     debug_save_matches = False
     debug_dir = None
     if "debug_save_matches" in params.keys():
-        print("Debug mode - on")
+        logger.info("Debug mode - on")
         debug_save_matches = True
         if debug_save_matches:
             # Create a debug directory
@@ -401,7 +265,7 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
     with open(pre_matches_fname, 'r') as data_matches:
         mfov_pre_matches = json.load(data_matches)
     if len(mfov_pre_matches["matches"]) == 0:
-        print("No matches were found in pre-matching, aborting Block-Matching proces between layers: {} and {}".format(tiles_fname1, tiles_fname2))
+        logger.warn("No matches were found in pre-matching, aborting Block-Matching proces between layers: {} and {}".format(tiles_fname1, tiles_fname2))
         return
     best_transformations = get_best_transformations(mfov_pre_matches, tiles_fname1, tiles_fname2, mfov_centers1, mfov_centers2, sorted_mfovs1, sorted_mfovs2)
 
@@ -410,95 +274,90 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
     out_jsonfile['tilespec1'] = tiles_fname1
     out_jsonfile['tilespec2'] = tiles_fname2
 
-    # Get width and height of a resized template (using the first image size)
-    img1height = ts1[0]["width"] * scaling
-    img1width = ts1[0]["height"] * scaling
-    #img1width = ts1[0]["width"] * scaling
-    #img1height = ts1[0]["height"] * scaling
-    #img1_url = ts1[0]["mipmapLevels"]["0"]["imageUrl"]
-    #img1_url = img1_url.replace("file://", "")
-    #img1 = cv2.imread(img1_url, 0)
-    #if img1 is None or img1.shape == (0,0):
-    #    print("Error: could not read image {} - Aboritng!".format(img1_url), file=sys.stderr)
-    #    sys.exit(1)
-    #
-    #img1_resized = cv2.resize(img1, (0, 0), fx=scaling, fy=scaling)
-    #img1width = img1_resized.shape[0]
-    #img1height = img1_resized.shape[1]
+    # Create the (lazy) renderers for the two sections
+    img1_renderer = TilespecAffineRenderer(ts1)
+    img2_renderer = TilespecAffineRenderer(ts2)
 
     # Generate an hexagonal grid according to the first section's bounding box
-    print("Generating Hexagonal Grid")
+    logger.info("Generating Hexagonal Grid")
     bb = BoundingBox.read_bbox(tiles_fname1)
-    print("bounding_box: ", bb)
+    logger.info("bounding_box: {}".format(bb))
     hexgr = utils.generate_hexagonal_grid(bb, hex_spacing)
     #print(hexgr)
-    # if a single mfov is targeted, restrict the hexagonal grid to that mfov locations
-    if targeted_mfov != -1:
-        mfov_tiles = indexed_ts1[targeted_mfov]
-        bb_mfov = BoundingBox.read_bbox_from_ts(mfov_tiles.values())
-        print("Trimming bounding box grid points to {} (mfov {})".format(bb_mfov.toArray(), targeted_mfov))
-        hexgr = [p for p in hexgr if bb_mfov.contains(np.array([p]))]
+    # a single mfov is targeted, so restrict the hexagonal grid to that mfov locations
+    mfov_tiles = indexed_ts1[targeted_mfov]
+    bb_mfov = BoundingBox.read_bbox_from_ts(mfov_tiles.values())
+    logger.info("Trimming bounding box grid points to {} (mfov {})".format(bb_mfov.toArray(), targeted_mfov))
+    hexgr = [p for p in hexgr if bb_mfov.contains(np.array([p]))]
+    logger.info("Found {} possible points in bbox".format(len(hexgr)))
 
-    # Iterate over the hexagonal points to find preliminary matches
-    print("Starting finding preliminary matches for each point ({} possible points)".format(len(hexgr)))
-    if targeted_mfov == -1:
-        img_matches = get_img_matches(ts1, tile_centers1, ts2, tile_centers2tree, best_transformations, mfov_centers1)
-    else:
-        img_matches = get_mfov_img_matches(ts1, tile_centers1, ts2, tile_centers2tree, best_transformations, mfov_centers1, targeted_mfov)
-    # Store all the possible matching tiles between the sections
-    # (1 tile from section1 to a list of tiles in section2): tile1 (of section1) -> [tile2_a, tile2_b, ...] (of section2)
-    prelimdict = {}
-    actual_matches_num = 0
+    # Use the mfov exepected transform (from section 1 to section 2) to transform img1
+    img1_to_img2_transform = np.array(find_best_mfov_transformation(targeted_mfov, best_transformations, mfov_centers1)[:2])
+    img1_renderer.add_transformation(img1_to_img2_transform)
+
+    # Scale down the rendered images
+    scale_transformation = np.array([
+                                [ scaling, 0., 0. ],
+                                [ 0., scaling, 0. ]
+                            ])
+    img1_renderer.add_transformation(scale_transformation)
+    img2_renderer.add_transformation(scale_transformation)
+
+    # Execute PMCC Matching
+    logger.info("Performing PMCC Matching with {} processes".format(processes_num))
+    # Allocate processes_num-1 other processes and initialize with the "static" data, and a queue for jobs and a queue for results
+    q_jobs = mp.Queue(maxsize=len(hexgr))
+    # Creating the results queue using a manager, or otherwise we enter a deadlock because buffers aren't flushed
+    mp_manager = mp.Manager()
+    q_res = mp_manager.Queue(maxsize=len(hexgr))
+
+    all_processes = [mp.Process(target=fetch_and_run, args=(q_jobs, lambda x: q_res.put(x), img1_to_img2_transform, scaling, template_size, search_window_size, img1_renderer, img2_renderer, min_corr, max_curvature, max_rod, debug_save_matches, debug_dir)) for i in range(processes_num - 1)]
+    for p in all_processes:
+        p.start()
+
+    # Iterate over the hexagonal grid points, and only check those that are part of the targeted mfov
+    on_section_points_num = 0
     for i in range(len(hexgr)):
         # Find the tile image where the point from the hexagonal is in the first section
         img1_ind = get_closest_index_to_point(hexgr[i], tile_centers1tree)
-        #print(img1_ind)
         if img1_ind is None:
             continue
-        if targeted_mfov != -1 and ts1[img1_ind]["mfov"] != targeted_mfov:
+        if ts1[img1_ind]["mfov"] != targeted_mfov:
             continue
         if not is_point_in_img(ts1[img1_ind], hexgr[i]):
             continue
-        # Get expected point of hexgr[i] in the second section
-        #img1_offset = get_image_top_left(ts1, img1_ind)
-        expected_transform = find_best_mfov_transformation(ts1[img1_ind]["mfov"], best_transformations, mfov_centers1)
-        #img1_template = get_blank_template_from_img_and_point(img1width, img1height, template_size, (np.array(hexgr[i]) - img1_offset) * scaling)
-        #if img1_template is None:
-        #    continue
-        #startx, starty, w, h, not_on_mesh = img1_template
-        #center_point1 = np.array([startx + w / 2, starty + h / 2]) / scaling + img1_offset
-        center_point1 = np.array(hexgr[i])
-        expected_new_center = np.dot(expected_transform, np.append(center_point1, [1]))[0:2]
-        img2_inds = img_matches[img1_ind]
-        img2s = get_images_indices_from_indices_and_point(ts2, img2_inds, expected_new_center)
 
-        actual_matches_num += 1
-        if img1_ind not in prelimdict:
-            prelimdict[img1_ind] = {}
-        newdi = prelimdict[img1_ind]
-        for img2_ind in img2s:
-            # Build dictionary here
-            if img2_ind not in newdi:
-                newdi[img2_ind] = []
-            newdi[img2_ind].append(hexgr[i])
+        img1_point = np.array(hexgr[i])
+        on_section_points_num += 1
+        
+        # Perform matching of that point
+        q_jobs.put(img1_point)
+ 
+    # Add empty jobs to end the execution of each process
+    for i in range(processes_num):
+        q_jobs.put(None)
 
-    # Generate arguments for PMCC matchingf
-    print("Generating PMCC Matching Arguments")
-    commandlist = []
+    # Used to store the results of the main process (and then all the results)
     point_matches = []
-    for img1_ind in prelimdict.keys():
-        commandlist.append((ts1, ts2, template_size, scaling, img1_ind, best_transformations, mfov_centers1, prelimdict, min_corr, max_curvature, max_rod, debug_save_matches, debug_dir))
 
-    # Execute PMCC Matching
-    print("Performing PMCC Matching with {} processes".format(processes_num))
-    pool = mp.Pool(processes=processes_num)
-    results = pool.map(perform_pmcc_unwrapper, commandlist)
-    point_matches = [item for sublist in results for item in sublist]
+    # Use the main process to run jobs like any other process
+    fetch_and_run(q_jobs, lambda x: point_matches.append(x), img1_to_img2_transform, scaling, template_size, search_window_size, img1_renderer, img2_renderer, min_corr, max_curvature, max_rod, debug_save_matches, debug_dir)
 
-    print("Found {} matches out of possible {} points (on section points: {})".format(len(point_matches), len(hexgr), actual_matches_num))
+    # Wait for the termination of all other processes
+    logger.info("Waiting for other processes to finish")
+    for p in all_processes:
+        p.join()
+
+    logger.info("Collecting results")
+    while not q_res.empty():
+        r = q_res.get(block=True)
+        point_matches.append(r)
+
+    logger.info("Found {} matches out of possible {} points (on section points: {})".format(len(point_matches), len(hexgr), on_section_points_num))
+
 
     # Save the output
-    print("Saving output to: {}".format(out_fname))
+    logger.info("Saving output to: {}".format(out_fname))
     out_jsonfile['runtime'] = time.time() - starttime
     out_jsonfile['mesh'] = hexgr
     if targeted_mfov != -1:
@@ -506,11 +365,11 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
 
     final_point_matches = []
     for pm in point_matches:
-        p1, p2, nmesh, match_val = pm
+        p1, p2, match_val = pm
         record = {}
         record['point1'] = p1.tolist()
         record['point2'] = p2.tolist()
-        record['isvirtualpoint'] = nmesh
+        #record['isvirtualpoint'] = nmesh
         record['match_val'] = float(match_val)
         final_point_matches.append(record)
 
@@ -518,11 +377,10 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
     with open(out_fname, 'w') as out:
         json.dump(out_jsonfile, out, indent=4)
 
-    print("Done")
+    logger.info("Done")
 
 
 def main():
-    # print(sys.argv)
     # Command line parser
     parser = argparse.ArgumentParser(description='Given two tilespecs of two sections, and a preliminary matches list, generates a grid the image, and performs block matching (with PMCC filtering).')
     parser.add_argument('tiles_file1', metavar='tiles_file1', type=str,
@@ -531,6 +389,8 @@ def main():
                         help='the second layer json file containing tilespecs')
     parser.add_argument('pre_matches_file', metavar='pre_matches_file', type=str,
                         help='a json file that contains the preliminary matches')
+    parser.add_argument('mfov', type=int,
+                        help='the mfov number of compare')
     parser.add_argument('-o', '--output_file', type=str,
                         help='an output correspondent_spec file, that will include the matches between the sections (default: ./matches.json)',
                         default='./matches.json')
@@ -540,14 +400,11 @@ def main():
     parser.add_argument('-t', '--threads_num', type=int,
                         help='the number of threads (processes) to use (default: 1)',
                         default=1)
-    parser.add_argument('-m', '--mfov', type=int,
-                        help='the mfov number of compare (default: all)',
-                        default=-1)
 
     args = parser.parse_args()
     match_layers_pmcc_matching(args.tiles_file1, args.tiles_file2,
                                args.pre_matches_file, args.output_file,
-                               targeted_mfov=args.mfov,
+                               args.mfov,
                                conf_fname=args.conf_file_name, processes_num=args.threads_num)
 
 if __name__ == '__main__':

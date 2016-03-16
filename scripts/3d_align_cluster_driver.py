@@ -59,8 +59,8 @@ class MatchLayersByMaxPMCCMfov(Job):
         self.tiles_fname1 = '"{0}"'.format(tiles_fname1)
         self.tiles_fname2 = '"{0}"'.format(tiles_fname2)
         self.pre_match_fname = '"{0}"'.format(pre_match_fname)
+        self.targeted_mfov = '{0}'.format(targeted_mfov)
         self.output_fname = '-o "{0}"'.format(output_fname)
-        self.targeted_mfov = '-m {0}'.format(targeted_mfov)
         if conf_fname is None:
             self.conf_fname = ''
         else:
@@ -72,7 +72,7 @@ class MatchLayersByMaxPMCCMfov(Job):
         self.threads = threads_num
         self.threads_str = '-t {0}'.format(threads_num)
         self.dependencies = dependencies
-        self.memory = 3000
+        self.memory = 10000
         self.time = 800
         self.output = output_fname
         #self.already_done = os.path.exists(self.output_file)
@@ -82,8 +82,7 @@ class MatchLayersByMaxPMCCMfov(Job):
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'match_images_between_slices_optimized.py'),
                 self.output_fname, self.conf_fname,
                 self.threads_str, #self.auto_add_model,
-                self.targeted_mfov,
-                self.tiles_fname1, self.tiles_fname2, self.pre_match_fname]
+                self.tiles_fname1, self.tiles_fname2, self.pre_match_fname, self.targeted_mfov]
 
 
 class OptimizeLayersElastic(Job):
