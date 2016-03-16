@@ -225,6 +225,9 @@ def iterative_search(actual_params, layer1, layer2, indexed_ts1, indexed_ts2, fe
         (model, num_filtered, filter_rate, num_rod, num_m1, num_m2) = compare_features(section1_pts_resps_descs, current_features, actual_params)
 
         if model is None:
+            if saved_model['model'] is not None:
+                print("Could not find a valid model between Sec{} and Sec{} in iteration {}, but found one before, so stopping search".format(layer1, layer2, match_iteration))
+                break
             print("Could not find a valid model between Sec{} and Sec{} in iteration {}".format(layer1, layer2, match_iteration))
         else:
             print("Found a model {} (with {} matches) between Sec{} and Sec{} in iteration {}, need to verify cutoff".format(model.to_str(), num_filtered, layer1, layer2, match_iteration))
