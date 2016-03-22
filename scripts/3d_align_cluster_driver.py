@@ -248,7 +248,7 @@ if __name__ == '__main__':
         matched_after_layers = 0
         j = 1
         while matched_after_layers < args.max_layer_distance:
-            if layer1_ind + j >= len(all_layers):
+            if layer1 + j > all_layers[-1]:
                 break
 
             layer2 = layer1 + j
