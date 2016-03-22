@@ -138,7 +138,6 @@ def compare_features(section1_pts_resps_descs, section2_pts_resps_descs, actual_
     # print("lengths: len(allpoints2): {}, alldescs2.shape: {}".format(len(allpoints2), alldescs2.shape))
     #match_points = generatematches_cv2(allpoints1, allpoints2, alldescs1, alldescs2, actual_params)
     match_points = generatematches_crosscheck_cv2(allpoints1, allpoints2, alldescs1, alldescs2, actual_params)
-    print("pre-ransac matches count: {}".format(match_points.shape[1]))
 
     if match_points.shape[0] == 0 or match_points.shape[1] == 0:
         return (None, 0, 0, 0, len(allpoints1), len(allpoints2))
@@ -153,7 +152,6 @@ def compare_features(section1_pts_resps_descs, section2_pts_resps_descs, actual_
     model, filtered_matches = ransac.filter_matches(match_points, model_index, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, max_trust, det_delta)
     if filtered_matches is None:
         filtered_matches = np.zeros((0, 0))
-    print("post-ransac matches count: {}".format(filtered_matches.shape[1]))
     return (model, filtered_matches.shape[1], float(filtered_matches.shape[1]) / match_points.shape[1], match_points.shape[1], len(allpoints1), len(allpoints2))
 
 
@@ -168,7 +166,7 @@ def load_mfovs_features(indexed_ts, features_dir, mfovs_idx):
  
 
 
-def iterative_search(actual_params, layer1, layer2, indexed_ts1, indexed_ts2, features_dir1, features_dir2, mfovs_nums1, centers_mfovs_nums2, section2_mfov_bboxes, sorted_mfovs2, assumed_model=None):
+def iterative_search(actual_params, layer1, layer2, indexed_ts1, indexed_ts2, features_dir1, features_dir2, mfovs_nums1, centers_mfovs_nums2, section2_mfov_bboxes, sorted_mfovs2, assumed_model=None, is_initial_search=False):
     # Load the features from the mfovs in section 1
     all_points1, all_resps1, all_descs1 = load_mfovs_features(indexed_ts1, features_dir1, mfovs_nums1)
     section1_pts_resps_descs = [all_points1, np.concatenate(all_resps1), np.vstack(all_descs1)]
@@ -275,6 +273,9 @@ def iterative_search(actual_params, layer1, layer2, indexed_ts1, indexed_ts2, fe
             current_features = (current_features_pts, np.concatenate(current_features_resps), np.vstack(current_features_descs))
             current_mfovs = overlapping_mfovs
 
+        if not is_initial_search and match_iteration == actual_params["max_attempts"]:
+            print("Reached maximal number of attempts in iterative search, stopping search")
+
     if best_transform is None and saved_model['model'] is not None:
         best_transform = saved_model['model']
         num_filtered = saved_model['num_filtered']
@@ -332,7 +333,7 @@ def analyze_slices(tiles_fname1, tiles_fname2, features_dir1, features_dir2, act
     initial_search_start_time = time.time()
     # Do an iterative search of the mfovs closest to the center of section 1 to the mfovs of section2 (starting from the center)
     best_transform, num_filtered, filter_rate, _, _, _, initial_search_iters_num = iterative_search(actual_params, layer1, layer2, indexed_ts1, indexed_ts2,
-                         features_dir1, features_dir2, closest_mfovs_nums1, centers_mfovs_nums2, section2_mfov_bboxes, sorted_mfovs2)
+                         features_dir1, features_dir2, closest_mfovs_nums1, centers_mfovs_nums2, section2_mfov_bboxes, sorted_mfovs2, is_initial_search=True)
     initial_search_end_time = time.time()
 
 
@@ -377,7 +378,7 @@ def analyze_slices(tiles_fname1, tiles_fname2, features_dir1, features_dir2, act
         # Do an iterative search of the mfov from section 1 to the "corresponding" mfov of section2
         mfov_search_start_time = time.time()
         mfov_transform, num_filtered, filter_rate, num_rod, num_m1, num_m2, match_iterations = iterative_search(actual_params, layer1, layer2, indexed_ts1, indexed_ts2,
-                             features_dir1, features_dir2, [sorted_mfovs1[i]], relevant_mfovs_nums2, section2_mfov_bboxes, sorted_mfovs2, assumed_model=best_transform)
+                             features_dir1, features_dir2, [sorted_mfovs1[i]], relevant_mfovs_nums2, section2_mfov_bboxes, sorted_mfovs2, assumed_model=best_transform, is_initial_search=False)
         mfov_search_end_time = time.time()
         if mfov_transform is None:
             # Could not find a transformation for the given mfov
