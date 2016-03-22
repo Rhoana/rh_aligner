@@ -8,6 +8,15 @@ import numpy as np
 from models import Transforms
 import ransac
 import multiprocessing as mp
+import logging
+
+logger = logging.getLogger(__name__)
+logger.setLevel("DEBUG")
+logger_handler = logging.StreamHandler()
+logger_handler.setLevel(logging.DEBUG)
+logger_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger_handler.setFormatter(logger_formatter)
+logger.addHandler(logger_handler)
 
 # common functions
 
@@ -52,7 +61,7 @@ def save_empty_matches_file(out_fname, image_url1, image_url2):
         "model": []
     }]
 
-    print "Saving matches into {}".format(out_fname)
+    logger.info("Saving matches into {}".format(out_fname))
     with open(out_fname, 'w') as out:
         json.dump(out_data, out, sort_keys=True, indent=4)
 
@@ -68,31 +77,31 @@ def dist_after_model(model, p1_l, p2_l):
 
 def match_single_pair(ts1, ts2, features_file1, features_file2, out_fname, rod, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, model_index, max_trust, det_delta):
     # load feature files
-    print "Loading sift features"
+    logger.info("Loading sift features")
     _, pts1, _, _, descs1 = load_features_hdf5(features_file1)
     _, pts2, _, _, descs2 = load_features_hdf5(features_file2)
 
-    print "Loaded {} features from file: {}".format(pts1.shape[0], features_file1)
-    print "Loaded {} features from file: {}".format(pts2.shape[0], features_file2)
+    logger.info("Loaded {} features from file: {}".format(pts1.shape[0], features_file1))
+    logger.info("Loaded {} features from file: {}".format(pts2.shape[0], features_file2))
 
     min_features_num = 5
     if pts1.shape[0] < min_features_num or pts2.shape[0] < min_features_num:
-        print "Less than {} features (even before overlap) of one of the tiles, saving an empty match file"
+        logger.info("Less than {} features (even before overlap) of one of the tiles, saving an empty match file")
         save_empty_matches_file(out_fname, ts1["mipmapLevels"]["0"]["imageUrl"], ts2["mipmapLevels"]["0"]["imageUrl"])
         return
 
     # Get the tilespec transformation
-    print "Getting transformation"
+    logger.info("Getting transformation")
     ts1_transform = get_tilespec_transformation(ts1)
     ts2_transform = get_tilespec_transformation(ts2)
 
     # filter the features, so that only features that are in the overlapping tile will be matches
     bbox1 = BoundingBox.fromList(ts1["bbox"])
-    print "bbox1", bbox1.toStr()
+    logger.info("bbox1 {}".format(bbox1.toStr()))
     bbox2 = BoundingBox.fromList(ts2["bbox"])
-    print "bbox2", bbox2.toStr()
+    logger.info("bbox2 {}".format(bbox2.toStr()))
     overlap_bbox = bbox1.intersect(bbox2).expand(offset=50)
-    print "overlap_bbox", overlap_bbox.toStr()
+    logger.info("overlap_bbox {}".format(overlap_bbox.toStr()))
 
     features_mask1 = overlap_bbox.contains(ts1_transform.apply(pts1))
     features_mask2 = overlap_bbox.contains(ts2_transform.apply(pts2))
@@ -101,20 +110,20 @@ def match_single_pair(ts1, ts2, features_file1, features_file2, out_fname, rod, 
     pts2 = pts2[features_mask2]
     descs1 = descs1[features_mask1]
     descs2 = descs2[features_mask2]
-    print "Found {} features in the overlap from file: {}".format(pts1.shape[0], features_file1)
-    print "Found {} features in the overlap from file: {}".format(pts2.shape[0], features_file2)
+    logger.info("Found {} features in the overlap from file: {}".format(pts1.shape[0], features_file1))
+    logger.info("Found {} features in the overlap from file: {}".format(pts2.shape[0], features_file2))
 
     min_features_num = 5
     if pts1.shape[0] < min_features_num or pts2.shape[0] < min_features_num:
-        print "Less than {} features in the overlap of one of the tiles, saving an empty match file"
+        logger.info("Less than {} features in the overlap of one of the tiles, saving an empty match file")
         save_empty_matches_file(out_fname, ts1["mipmapLevels"]["0"]["imageUrl"], ts2["mipmapLevels"]["0"]["imageUrl"])
         return
 
     # Match the features
-    print "Matching sift features"
+    logger.info("Matching sift features")
     matches = match_features(descs1, descs2, rod)
 
-    print "Found {} possible matches between {} and {}".format(len(matches), features_file1, features_file2)
+    logger.info("Found {} possible matches between {} and {}".format(len(matches), features_file1, features_file2))
 
     # filter the matched features
     match_points = np.array([
@@ -143,7 +152,7 @@ def match_single_pair(ts1, ts2, features_file1, features_file2, out_fname, rod, 
         "model": model_json
     }]
 
-    print "Saving matches into {}".format(out_fname)
+    logger.info("Saving matches into {}".format(out_fname))
     with open(out_fname, 'w') as out:
         json.dump(out_data, out, sort_keys=True, indent=4)
 
@@ -163,7 +172,7 @@ def match_single_sift_features_and_filter(tiles_file, features_file1, features_f
     max_trust = params.get("maxTrust", 3)
     det_delta = params.get("detDelta", 0.3)
 
-    print "Matching sift features of tilespecs file: {}, indices: {}".format(tiles_file, index_pair)
+    logger.info("Matching sift features of tilespecs file: {}, indices: {}".format(tiles_file, index_pair))
     # load tilespecs files
     tilespecs = utils.load_tilespecs(tiles_file)
     ts1 = tilespecs[index_pair[0]]
@@ -190,7 +199,7 @@ def match_multiple_sift_features_and_filter(tiles_file, features_files_lst1, fea
     assert(len(index_pairs) == len(features_files_lst2))
     assert(len(index_pairs) == len(out_fnames))
 
-    print("Creating a pool of {} processes".format(processes_num))
+    logger.info("Creating a pool of {} processes".format(processes_num))
     pool = mp.Pool(processes=processes_num)
 
     tilespecs = utils.load_tilespecs(tiles_file)
@@ -200,7 +209,7 @@ def match_multiple_sift_features_and_filter(tiles_file, features_files_lst1, fea
         features_file2 = features_files_lst2[i]
         out_fname = out_fnames[i]
 
-        print "Matching sift features of tilespecs file: {}, indices: {}".format(tiles_file, index_pair)
+        logger.info("Matching sift features of tilespecs file: {}, indices: {}".format(tiles_file, index_pair))
         # load tilespecs files
         ts1 = tilespecs[index_pair[0]]
         ts2 = tilespecs[index_pair[1]]
