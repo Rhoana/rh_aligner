@@ -4,7 +4,63 @@ from models import Transforms
 from scipy.misc import comb
 
 def array_to_string(arr):
-    return '_'.join(map(str, arr))
+    return arr.tostring()
+    #return '_'.join(map(str, arr))
+
+def tri_area(p1, p2, p3):
+    area = (p1[0]*(p2[1] - p3[1]) + p2[0]*(p3[1] - p1[1]) + p3[0]*(p1[1] - p2[1]))/2.0
+    # area might be negative
+    return area
+
+#def choose_forward(n, k):
+#    low = 0
+#    cur_k = k
+#    numbers = np.empty((k, ), dtype=np.int32)
+#    while True:
+#        num = np.random.randint(low, n)
+#        # if no more numbers are left, restart from the beginning
+#        if n - num < cur_k:
+#            low = 0
+#            cur_k = k
+#            continue
+#        numbers[k - cur_k] = num
+#        low = num + 1
+#        cur_k -= 1
+#        if cur_k == 0:
+#            return numbers
+
+#def choose_forward(numbers, n, k):
+#    low = 0
+#    i = 0
+#    while i < k:
+#        numbers[i] = np.random.randint(low, n - k + i + 1)
+#        low = numbers[i] + 1
+#        i += 1
+
+def choose_forward(numbers, n, k):
+    low = 0
+    cur_k = k
+    while True:
+        num = np.random.randint(low, n)
+        # if no more numbers are left, restart from the beginning
+        if n - num < cur_k:
+            low = 0
+            cur_k = k
+            continue
+        numbers[k - cur_k] = num
+        low = num + 1
+        cur_k -= 1
+        if cur_k == 0:
+            return
+
+def check_model_stretch(model_matrix, delta=0.25):
+    # check the diagonals sizes using [0,50], [50,0], [0,-50], [-50,0]
+    points = np.array([[0, 50], [50, 0]])
+    transformed_points = np.dot(points, model_matrix)
+    dists_ratio = [np.linalg.norm(2*p)/100.0 for p in transformed_points]
+    valid_dists = [d for d in dists_ratio if d >= 1.0-delta and d <= 1.0+delta]
+    return len(valid_dists) == 2
+    
 
 def ransac(matches, target_model_type, iterations, epsilon, min_inlier_ratio, min_num_inlier, det_delta):
     # model = Model.create_model(target_model_type)
@@ -21,24 +77,52 @@ def ransac(matches, target_model_type, iterations, epsilon, min_inlier_ratio, mi
         return None, None, None
 
     # Avoiding repeated indices permutations using a dictionary
-    prev_min_matches_idxs = {}
+    prev_min_matches_idxs = set()
     # Limit the number of possible matches that we can search for using n choose k
     max_combinations = int(comb(len(matches[0]), proposed_model.MIN_MATCHES_NUM))
-    for i in xrange(min(iterations, max_combinations)):
+    iter = 0
+    max_iterations = min(iterations, max_combinations)
+    # Allocate space once for min_match_idxs
+    min_matches_idxs = np.empty((proposed_model.MIN_MATCHES_NUM, ), dtype=np.int32)
+    while iter < max_iterations and len(prev_min_matches_idxs) < max_combinations:
+        iter += 1
         # choose a minimal number of matches randomly
-        min_matches_idxs = np.random.choice(xrange(len(matches[0])), size=proposed_model.MIN_MATCHES_NUM, replace=False)
+        #min_matches_idxs = np.random.choice(xrange(len(matches[0])), size=proposed_model.MIN_MATCHES_NUM, replace=False)
+        choose_forward(min_matches_idxs, len(matches[0]), proposed_model.MIN_MATCHES_NUM)
         min_matches_idxs_str = array_to_string(min_matches_idxs)
         while min_matches_idxs_str in prev_min_matches_idxs:
-            min_matches_idxs = np.random.choice(xrange(len(matches[0])), size=proposed_model.MIN_MATCHES_NUM, replace=False)
+            choose_forward(min_matches_idxs, len(matches[0]), proposed_model.MIN_MATCHES_NUM)
+            #min_matches_idxs = np.random.choice(xrange(len(matches[0])), size=proposed_model.MIN_MATCHES_NUM, replace=False)
             min_matches_idxs_str = array_to_string(min_matches_idxs)
-        prev_min_matches_idxs[min_matches_idxs_str] = True
+        prev_min_matches_idxs.add(min_matches_idxs_str)
+
+        if proposed_model.MIN_MATCHES_NUM == 3:
+            # validate if the given matches points create two triangles (a and b) with similar areas
+            p1a, p2a, p3a = matches[0][min_matches_idxs]
+            p1b, p2b, p3b = matches[1][min_matches_idxs]
+            area1 = tri_area(p1a, p2a, p3a)
+            if abs(area1) < 1:
+                continue
+            area2 = tri_area(p1b, p2b, p3b)
+            if abs(area2) < 1:
+                continue
+            area_ratio = area1 / area2
+            # if one is negative and the other is positive then the ration will be negative, and we want to avoid flipping, so skip this configuration
+            # TODO - make this a parameter?
+            if area_ratio < 0.8 or area_ratio > 1.2:
+                continue
         # Try to fit them to the model
         if proposed_model.fit(matches[0][min_matches_idxs], matches[1][min_matches_idxs]) == False:
             continue
-        # if the proposed model distorts the image too much, skip the model
-        det = np.linalg.det(proposed_model.get_matrix()[:2, :2])
-        if det < 1.0 - det_delta or det > 1.0 + det_delta:
-            continue
+        model_matrix = proposed_model.get_matrix()[:2, :2]
+        if proposed_model.MIN_MATCHES_NUM == 3:
+            # check the stretch of the new transformation
+            if not check_model_stretch(model_matrix):
+                continue
+            # if the proposed model distorts the image too much, skip the model
+            det = np.linalg.det(model_matrix)
+            if det < 1.0 - det_delta or det > 1.0 + det_delta:
+                continue
         # print "proposed_model", proposed_model.to_str()
         # Verify the new model 
         proposed_model_score, inlier_mask, proposed_model_mean = proposed_model.score(matches[0], matches[1], epsilon, min_inlier_ratio, min_num_inlier)
@@ -113,7 +197,12 @@ def filter_matches(matches, target_model_type, iterations, epsilon, min_inlier_r
 
     # Apply RANSAC
     # print "Filtering {} matches".format(matches.shape[1])
+    print "pre-ransac matches count: {}".format(matches.shape[1])
     inliers_mask, model, _ = ransac(matches, target_model_type, iterations, epsilon, min_inlier_ratio, min_num_inlier, det_delta)
+    if inliers_mask is None:
+        print "post-ransac matches count: 0"
+    else:
+        print "post-ransac matches count: {}".format(inliers_mask.shape[0])
 
     # Apply further filtering
     if inliers_mask is not None:
@@ -129,5 +218,9 @@ def filter_matches(matches, target_model_type, iterations, epsilon, min_inlier_r
         # filtered_matches = np.array([matches[0][filtered_matches], matches[1][filtered_matches]])
         print "Model found after robust regression: {}, applies to {} out of {} matches.".format(new_model.to_str(), filtered_matches.shape[1], matches.shape[1])
     '''
+    if filtered_matches is None:
+        print "post-ransac-filter matches count: 0"
+    else:
+        print "post-ransac-filter matches count: {}".format(filtered_matches.shape[1])
     return new_model, filtered_matches
 
