@@ -9,6 +9,7 @@ from models import Transforms
 import ransac
 import multiprocessing as mp
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 logger.setLevel("DEBUG")
@@ -172,11 +173,26 @@ def match_single_sift_features_and_filter(tiles_file, features_file1, features_f
     max_trust = params.get("maxTrust", 3)
     det_delta = params.get("detDelta", 0.3)
 
-    logger.info("Matching sift features of tilespecs file: {}, indices: {}".format(tiles_file, index_pair))
+    logger.info("Matching sift features of tilespecs file: {}, mfovs-indices: {}".format(tiles_file, index_pair))
     # load tilespecs files
-    tilespecs = utils.load_tilespecs(tiles_file)
-    ts1 = tilespecs[index_pair[0]]
-    ts2 = tilespecs[index_pair[1]]
+    indexed_tilespecs = utils.index_tilespec(utils.load_tilespecs(tiles_file))
+    # Verify that the tiles are in the tilespecs (should be the case, unless they were filtered out)
+    if index_pair[0] not in indexed_tilespecs:
+        logger.info("The given mfov {} was not found in the tilespec: {}".format(index_pair[0], tiles_file))
+        return
+    if index_pair[1] not in indexed_tilespecs[index_pair[0]]:
+        logger.info("The given tile_index {} in mfov {} was not found in the tilespec: {}".format(index_pair[1], index_pair[0], tiles_file))
+        return
+    if index_pair[2] not in indexed_tilespecs:
+        logger.info("The given mfov {} was not found in the tilespec: {}".format(index_pair[2], tiles_file))
+        return
+    if index_pair[3] not in indexed_tilespecs[index_pair[2]]:
+        logger.info("The given tile_index {} in mfov {} was not found in the tilespec: {}".format(index_pair[3], index_pair[2], tiles_file))
+        return
+
+    # The tiles should be part of the tilespecs, match them
+    ts1 = indexed_tilespecs[index_pair[0]][index_pair[1]]
+    ts2 = indexed_tilespecs[index_pair[2]][index_pair[3]]
 
     match_single_pair(ts1, ts2, features_file1, features_file2, out_fname, rod, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, model_index, max_trust, det_delta)
 
@@ -202,7 +218,7 @@ def match_multiple_sift_features_and_filter(tiles_file, features_files_lst1, fea
     logger.info("Creating a pool of {} processes".format(processes_num))
     pool = mp.Pool(processes=processes_num)
 
-    tilespecs = utils.load_tilespecs(tiles_file)
+    indexed_tilespecs = utils.index_tilespec(utils.load_tilespecs(tiles_file))
     pool_results = []
     for i, index_pair in enumerate(index_pairs):
         features_file1 = features_files_lst1[i]
@@ -210,9 +226,23 @@ def match_multiple_sift_features_and_filter(tiles_file, features_files_lst1, fea
         out_fname = out_fnames[i]
 
         logger.info("Matching sift features of tilespecs file: {}, indices: {}".format(tiles_file, index_pair))
-        # load tilespecs files
-        ts1 = tilespecs[index_pair[0]]
-        ts2 = tilespecs[index_pair[1]]
+        # Verify that the tiles are in the tilespecs (should be the case, unless they were filtered out)
+        if index_pair[0] not in indexed_tilespecs:
+            logger.info("The given mfov {} was not found in the tilespec: {}".format(index_pair[0], tiles_file))
+            continue
+        if index_pair[1] not in indexed_tilespecs[index_pair[0]]:
+            logger.info("The given tile_index {} in mfov {} was not found in the tilespec: {}".format(index_pair[1], index_pair[0], tiles_file))
+            continue
+        if index_pair[2] not in indexed_tilespecs:
+            logger.info("The given mfov {} was not found in the tilespec: {}".format(index_pair[2], tiles_file))
+            continue
+        if index_pair[3] not in indexed_tilespecs[index_pair[2]]:
+            logger.info("The given tile_index {} in mfov {} was not found in the tilespec: {}".format(index_pair[3], index_pair[2], tiles_file))
+            continue
+
+        # The tiles should be part of the tilespecs, match them
+        ts1 = indexed_tilespecs[index_pair[0]][index_pair[1]]
+        ts2 = indexed_tilespecs[index_pair[2]][index_pair[3]]
 
         res = pool.apply_async(match_single_pair, (ts1, ts2, features_file1, features_file2, out_fname, rod, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, model_index, max_trust, det_delta))
         pool_results.append(res)
@@ -233,7 +263,7 @@ def main():
     parser.add_argument('features_file2', metavar='features_file2', type=str,
                         help='a file that contains the features json file of the second tile (if a single pair is matched) or a list of features json files (if multiple pairs are matched)')
     parser.add_argument('--index_pairs', metavar='index_pairs', type=str, nargs='+',
-                        help='a colon separated indices of the tiles in the tilespec file that correspond to the feature files that need to be matched')
+                        help='a colon separated indices of the tiles in the tilespec file that correspond to the feature files that need to be matched. The format is [mfov1_index]_[tile_index]:[mfov2_index]_[tile_index]')
     parser.add_argument('-o', '--output_file', type=str,
                         help='an output file name where the correspondent_spec file will be (if a single pair is matched, default: ./matched_sifts.json) or a list of output files (if multiple pairs are matched, default: ./matched_siftsX.json)',
                         default='./matched_sifts.json')
@@ -254,7 +284,9 @@ def main():
     if len(args.index_pairs) == 1:
         utils.wait_after_file(args.features_file1, args.wait_time)
         utils.wait_after_file(args.features_file2, args.wait_time)
-        index_pair = [int(i) for i in args.index_pair.split(':')]
+        
+        m = re.match('([0-9]+)_([0-9]+):([0-9]+)_([0-9]+)', args.index_pairs[0])
+        index_pair = (int(m.group(1)), int(m.group(2)), int(m.group(3)), int(m.group(4)))
         match_single_sift_features_and_filter(args.tiles_file, args.features_file1, args.features_file2,
                                               args.output_file, index_pair, conf_fname=args.conf_file_name)
     else: # More than one pair
@@ -269,7 +301,10 @@ def main():
         with open(args.output_file, 'r') as f_fnames:
             output_files_lst = [fname.strip() for fname in f_fnames.readlines()]
 
-        index_pairs = [[int(i) for i in index_pair.split(':')] for index_pair in args.index_pairs]
+        index_pairs = []
+        for index_pair in args.index_pairs:
+            m = re.match('([0-9]+)_([0-9]+):([0-9]+)_([0-9]+)', index_pair)
+            index_pairs.append( (int(m.group(1)), int(m.group(2)), int(m.group(3)), int(m.group(4))) )
         match_multiple_sift_features_and_filter(args.tiles_file, features_files_lst1, features_files_lst2,
                                                 output_files_lst, index_pairs, conf_fname=args.conf_file_name,
                                                 processes_num=args.threads_num)

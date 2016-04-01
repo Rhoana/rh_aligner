@@ -16,7 +16,7 @@ import itertools
 import argparse
 import glob
 import json
-from utils import path2url, create_dir, read_layer_from_file, parse_range, load_tilespecs, write_list_to_file
+from utils import path2url, create_dir, read_layer_from_file, parse_range, load_tilespecs, write_list_to_file, conf_from_file
 from bounding_box import BoundingBox
 from job import Job
 
@@ -87,6 +87,34 @@ class CreateMultipleSiftFeatures(Job):
                 os.path.join(os.environ['ALIGNER'], 'scripts', 'create_sift_features_cv2.py'),
                 self.output_files, self.tile_indices, self.conf_fname, self.tiles_fname]
 
+
+class FilterEmptyTiles(Job):
+    def __init__(self, dependencies, tiles_fname, features_dir, output_tile_fname, wait_time=None, conf_fname=None, callback=None):
+        Job.__init__(self)
+        self.already_done = False
+        self.tiles_fname = '"{0}"'.format(tiles_fname)
+        self.features_dir = '"{0}"'.format(features_dir)
+        self.output_file = '-o "{0}"'.format(output_tile_fname)
+        if conf_fname is None:
+            self.conf_fname = ''
+        else:
+            self.conf_fname = '-c "{0}"'.format(conf_fname)
+        if wait_time is None:
+            self.wait_time = ''
+        else:
+            self.wait_time = '-w {0}'.format(wait_time)
+        self.callback = callback
+        self.dependencies = dependencies
+        self.memory = 400
+        self.time = 20
+        self.output = output_tile_fname
+        #self.already_done = os.path.exists(self.output_file)
+
+    def command(self):
+        return ['python -u',
+                os.path.join(os.environ['ALIGNER'], 'scripts', 'filter_tilespec_using_features.py'),
+                self.output_file, self.wait_time, self.conf_fname,
+                self.tiles_fname, self.features_dir]
 
 
 
@@ -212,6 +240,118 @@ class OptimizeMontageTransform(Job):
 
 
 
+
+
+# Jobs that are dynimcally set (we don't know in advance what will be the output of previous steps,
+# and the jobs can only be created after some other step is finished)
+def create_post_filter_jobs(slayer, filtered_ts_fname, layers_data, jobs, matched_sifts_dir, workspace_dir, output_dir, conf_file_name):
+
+    layer_matched_sifts_intra_dir = os.path.join(matched_sifts_dir, os.path.join(layers_data[slayer]['prefix'], 'intra'))
+    layer_matched_sifts_inter_dir = os.path.join(matched_sifts_dir, os.path.join(layers_data[slayer]['prefix'], 'inter'))
+    create_dir(layer_matched_sifts_intra_dir)
+    create_dir(layer_matched_sifts_inter_dir)
+
+    # Read the filtered tilespec
+    tiles_fname_prefix = os.path.splitext(os.path.basename(filtered_ts_fname))[0]
+    cur_tilespec = load_tilespecs(filtered_ts_fname)
+
+    mfovs = set()
+
+    for ts in cur_tilespec:
+        mfovs.add(ts["mfov"])
+
+    # create the intra matched sifts directories
+    for mfov in mfovs:
+        mfov_intra_dir = os.path.join(layer_matched_sifts_intra_dir, str(mfov))
+        create_dir(mfov_intra_dir)
+
+    # A map between layer to a list of multiple matches 
+    multiple_match_jobs = {}
+    # read every pair of overlapping tiles, and match their sift features
+    jobs_match_intra_mfovs = {}
+    jobs_match_inter_mfovs = []
+    indices = []
+    # TODO - use some other method to detect overlapping tiles
+    for pair in itertools.combinations(xrange(len(cur_tilespec)), 2):
+        idx1 = pair[0]
+        idx2 = pair[1]
+        ts1 = cur_tilespec[idx1]
+        ts2 = cur_tilespec[idx2]
+        # if the two tiles intersect, match them
+        bbox1 = BoundingBox.fromList(ts1["bbox"])
+        bbox2 = BoundingBox.fromList(ts2["bbox"])
+        if bbox1.overlap(bbox2):
+            imageUrl1 = ts1["mipmapLevels"]["0"]["imageUrl"]
+            imageUrl2 = ts2["mipmapLevels"]["0"]["imageUrl"]
+            tile_fname1 = os.path.basename(imageUrl1).split('.')[0]
+            tile_fname2 = os.path.basename(imageUrl2).split('.')[0]
+            index_pair = ["{}_{}".format(ts1["mfov"], ts1["tile_index"]), "{}_{}".format(ts2["mfov"], ts2["tile_index"])]
+            if ts1["mfov"] == ts2["mfov"]:
+                # Intra mfov job
+                cur_match_dir = os.path.join(layer_matched_sifts_intra_dir, str(ts1["mfov"]))
+            else:
+                # Inter mfov job
+                cur_match_dir = layer_matched_sifts_inter_dir
+            match_json = os.path.join(cur_match_dir, "{0}_sift_matches_{1}_{2}.json".format(tiles_fname_prefix, tile_fname1, tile_fname2))
+            # match the features of overlapping tiles
+            if not os.path.exists(match_json):
+                print "Matching sift of tiles: {0} and {1}".format(imageUrl1, imageUrl2)
+                # The filter is done, so assumes no dependencies
+                dependencies = [ ]
+
+                # Check if the job already exists
+                if ts1["mfov"] == ts2["mfov"]:
+                    # Intra mfov job
+                    if ts1["mfov"] in jobs[slayer]['matched_sifts']['intra'].keys():
+                        job_match = jobs[slayer]['matched_sifts']['intra'][ts1["mfov"]]
+                    else:
+                        job_match = MatchMultipleSiftFeaturesAndFilter(cur_match_dir, filtered_ts_fname,
+                                "intra_l{}_{}".format(slayer,ts1["mfov"]),
+                                threads_num=4, wait_time=None, conf_fname=conf_file_name)
+                        jobs[slayer]['matched_sifts']['intra'][ts1["mfov"]] = job_match
+                else:
+                    # Inter mfov job
+                    if jobs[slayer]['matched_sifts']['inter'] is None:
+                        job_match = MatchMultipleSiftFeaturesAndFilter(cur_match_dir, filtered_ts_fname,
+                                "inter_{}".format(slayer),
+                                threads_num=4, wait_time=None, conf_fname=conf_file_name)
+                        jobs[slayer]['matched_sifts']['inter'] = job_match
+                    else:
+                        job_match = jobs[slayer]['matched_sifts']['inter']
+                job_match.add_job(dependencies, layers_data[slayer]['sifts'][imageUrl1], layers_data[slayer]['sifts'][imageUrl2],
+                        match_json, index_pair)
+
+
+                #jobs[slayer]['matched_sifts'].append(job_match)
+            layers_data[slayer]['matched_sifts'].append(match_json)
+
+
+
+
+    # Create a single file that lists all tilespecs and a single file that lists all pmcc matches (the os doesn't support a very long list)
+    matches_list_file = os.path.join(workspace_dir, "{}_matched_sifts_files.txt".format(tiles_fname_prefix))
+    write_list_to_file(matches_list_file, layers_data[slayer]['matched_sifts'])
+
+
+    # optimize (affine) the 2d layer matches (affine)
+    opt_montage_json = os.path.join(output_dir, "{0}_montaged.json".format(tiles_fname_prefix))
+    if not os.path.exists(opt_montage_json):
+        print "Optimizing (affine) layer matches: {0}".format(slayer)
+        dependencies = [ ]
+        if jobs[slayer]['matched_sifts']['inter'] is not None:
+            dependencies.append(jobs[slayer]['matched_sifts']['inter'])
+        if jobs[slayer]['matched_sifts']['intra'] is not None and len(jobs[slayer]['matched_sifts']['intra']) > 0:
+            dependencies.extend(jobs[slayer]['matched_sifts']['intra'].values())
+        job_opt_montage = OptimizeMontageTransform(dependencies, filtered_ts_fname,
+            matches_list_file, opt_montage_json,
+            conf_fname=conf_file_name)
+    layers_data[slayer]['optimized_montage'] = opt_montage_json
+
+    #if args.multicore_keeprunning:
+    #    # Bundle jobs for multicore nodes, and run the ones that are ready at the moment
+    #    Job.multicore_keep_running(run_partial=True)
+ 
+
 ###############################
 # Driver
 ###############################
@@ -248,12 +388,13 @@ if __name__ == '__main__':
     assert 'ALIGNER' in os.environ
     #assert 'VIRTUAL_ENV' in os.environ
 
-
     # create a workspace directory if not found
     create_dir(args.workspace_dir)
 
     sifts_dir = os.path.join(args.workspace_dir, "sifts")
     create_dir(sifts_dir)
+    filtered_tilespecs_dir = os.path.join(args.workspace_dir, "filtered_ts")
+    create_dir(filtered_tilespecs_dir)
     matched_sifts_dir = os.path.join(args.workspace_dir, "matched_sifts")
     create_dir(matched_sifts_dir)
     create_dir(args.output_dir)
@@ -287,6 +428,7 @@ if __name__ == '__main__':
                 sys.exit(1)
             if layer is None:
                 layer = int(tile['layer'])
+                break
             if layer != tile['layer']:
                 print "Error when reading tiles from {0} found inconsistent layers numbers: {1} and {2}".format(f, layer, tile['layer'])
                 sys.exit(1)
@@ -305,19 +447,17 @@ if __name__ == '__main__':
             layers_data[slayer] = {}
             jobs[slayer] = {}
             jobs[slayer]['sifts'] = {}
+            jobs[slayer]['filtered_ts'] = None
             jobs[slayer]['matched_sifts'] = {}
             jobs[slayer]['matched_sifts']['intra'] = {}
             jobs[slayer]['matched_sifts']['inter'] = None
-            layers_data[slayer]['ts'] = f
+            layers_data[slayer]['orig_ts'] = f
             layers_data[slayer]['sifts'] = {}
+            layers_data[slayer]['filtered_ts'] = os.path.join(filtered_tilespecs_dir, os.path.basename(f))
             layers_data[slayer]['prefix'] = tiles_fname_prefix
             layers_data[slayer]['matched_sifts'] = []
 
         layer_sifts_dir = os.path.join(sifts_dir, layers_data[slayer]['prefix'])
-        layer_matched_sifts_intra_dir = os.path.join(matched_sifts_dir, os.path.join(layers_data[slayer]['prefix'], 'intra'))
-        layer_matched_sifts_inter_dir = os.path.join(matched_sifts_dir, os.path.join(layers_data[slayer]['prefix'], 'inter'))
-        create_dir(layer_matched_sifts_intra_dir)
-        create_dir(layer_matched_sifts_inter_dir)
 
         all_layers.append(layer)
 
@@ -328,6 +468,7 @@ if __name__ == '__main__':
             continue
 
         #job_sift = None
+        job_filter_ts = None
         job_multi_sift = None
         job_match = None
         job_opt_montage = None
@@ -353,7 +494,7 @@ if __name__ == '__main__':
                 prev_mfov = ts["mfov"]
             
             # create the sift features of these tiles
-            sifts_json = os.path.join(mfov_sifts_dir, "{0}_sifts_{1}.h5py".format(tiles_fname_prefix, tile_fname))
+            sifts_json = os.path.join(mfov_sifts_dir, "{0}_sifts_{1}.hdf5".format(tiles_fname_prefix, tile_fname))
             if not os.path.exists(sifts_json):
                 print "Computing tile  sifts: {0}".format(tile_fname)
                 job_multi_sift.add_job(sifts_json, i)
@@ -361,99 +502,17 @@ if __name__ == '__main__':
                 jobs[slayer]['sifts'][imgurl] = job_multi_sift
             layers_data[slayer]['sifts'][imgurl] = sifts_json
 
-        # create the intra matched sifts directories
-        for mfov in mfovs:
-            mfov_intra_dir = os.path.join(layer_matched_sifts_intra_dir, str(mfov))
-            create_dir(mfov_intra_dir)
 
-        # A map between layer to a list of multiple matches 
-        multiple_match_jobs = {}
-        # read every pair of overlapping tiles, and match their sift features
-        jobs_match_intra_mfovs = {}
-        jobs_match_inter_mfovs = []
-        indices = []
-        for pair in itertools.combinations(xrange(len(cur_tilespec)), 2):
-            idx1 = pair[0]
-            idx2 = pair[1]
-            ts1 = cur_tilespec[idx1]
-            ts2 = cur_tilespec[idx2]
-            # if the two tiles intersect, match them
-            bbox1 = BoundingBox.fromList(ts1["bbox"])
-            bbox2 = BoundingBox.fromList(ts2["bbox"])
-            if bbox1.overlap(bbox2):
-                imageUrl1 = ts1["mipmapLevels"]["0"]["imageUrl"]
-                imageUrl2 = ts2["mipmapLevels"]["0"]["imageUrl"]
-                tile_fname1 = os.path.basename(imageUrl1).split('.')[0]
-                tile_fname2 = os.path.basename(imageUrl2).split('.')[0]
-                index_pair = ["{}_{}".format(ts1["mfov"], ts1["tile_index"]), "{}_{}".format(ts2["mfov"], ts2["tile_index"])]
-                if ts1["mfov"] == ts2["mfov"]:
-                    # Intra mfov job
-                    cur_match_dir = os.path.join(layer_matched_sifts_intra_dir, str(ts1["mfov"]))
-                else:
-                    # Inter mfov job
-                    cur_match_dir = layer_matched_sifts_inter_dir
-                match_json = os.path.join(cur_match_dir, "{0}_sift_matches_{1}_{2}.json".format(tiles_fname_prefix, tile_fname1, tile_fname2))
-                # match the features of overlapping tiles
-                if not os.path.exists(match_json):
-                    print "Matching sift of tiles: {0} and {1}".format(imageUrl1, imageUrl2)
-                    dependencies = [ ]
-                    if imageUrl1 in jobs[slayer]['sifts'].keys():
-                        if jobs[slayer]['sifts'][imageUrl1] not in dependencies: # needed because of multiple-sift job
-                            dependencies.append(jobs[slayer]['sifts'][imageUrl1])
-                    if imageUrl2 in jobs[slayer]['sifts'].keys():
-                        if jobs[slayer]['sifts'][imageUrl2] not in dependencies: # needed because of multiple-sift job
-                            dependencies.append(jobs[slayer]['sifts'][imageUrl2])
-
-                    # Check if the job already exists
-                    if ts1["mfov"] == ts2["mfov"]:
-                        # Intra mfov job
-                        if ts1["mfov"] in jobs[slayer]['matched_sifts']['intra'].keys():
-                            job_match = jobs[slayer]['matched_sifts']['intra'][ts1["mfov"]]
-                        else:
-                            job_match = MatchMultipleSiftFeaturesAndFilter(cur_match_dir, layers_data[slayer]['ts'],
-                                    "intra_l{}_{}".format(slayer,ts1["mfov"]),
-                                    threads_num=4, wait_time=30, conf_fname=args.conf_file_name)
-                            jobs[slayer]['matched_sifts']['intra'][ts1["mfov"]] = job_match
-                    else:
-                        # Inter mfov job
-                        if jobs[slayer]['matched_sifts']['inter'] is None:
-                            job_match = MatchMultipleSiftFeaturesAndFilter(cur_match_dir, layers_data[slayer]['ts'],
-                                    "inter_{}".format(slayer),
-                                    threads_num=4, wait_time=30, conf_fname=args.conf_file_name)
-                            jobs[slayer]['matched_sifts']['inter'] = job_match
-                        else:
-                            job_match = jobs[slayer]['matched_sifts']['inter']
-                    job_match.add_job(dependencies, layers_data[slayer]['sifts'][imageUrl1], layers_data[slayer]['sifts'][imageUrl2],
-                            match_json, index_pair)
-
-
-                    #jobs[slayer]['matched_sifts'].append(job_match)
-                layers_data[slayer]['matched_sifts'].append(match_json)
-
-        # Create a single file that lists all tilespecs and a single file that lists all pmcc matches (the os doesn't support a very long list)
-        matches_list_file = os.path.join(args.workspace_dir, "{}_matched_sifts_files.txt".format(tiles_fname_prefix))
-        write_list_to_file(matches_list_file, layers_data[slayer]['matched_sifts'])
-
-
-        # optimize (affine) the 2d layer matches (affine)
-        opt_montage_json = os.path.join(args.output_dir, "{0}_montaged.json".format(tiles_fname_prefix))
-        if not os.path.exists(opt_montage_json):
-            print "Optimizing (affine) layer matches: {0}".format(slayer)
+        if not os.path.exists(layers_data[slayer]['filtered_ts']):
             dependencies = [ ]
             if len(jobs[slayer]['sifts']) > 0:
                 dependencies.extend(jobs[slayer]['sifts'].values())
-            if jobs[slayer]['matched_sifts']['inter'] is not None:
-                dependencies.append(jobs[slayer]['matched_sifts']['inter'])
-            if jobs[slayer]['matched_sifts']['intra'] is not None and len(jobs[slayer]['matched_sifts']['intra']) > 0:
-                dependencies.extend(jobs[slayer]['matched_sifts']['intra'].values())
-            job_opt_montage = OptimizeMontageTransform(dependencies, layers_data[slayer]['ts'],
-                matches_list_file, opt_montage_json,
-                conf_fname=args.conf_file_name)
-        layers_data[slayer]['optimized_montage'] = opt_montage_json
+            
+            job_filter_ts = FilterEmptyTiles(jobs[slayer]['sifts'].values(), layers_data[slayer]['orig_ts'], layer_sifts_dir, layers_data[slayer]['filtered_ts'], wait_time=30, conf_fname=args.conf_file_name, callback=(create_post_filter_jobs, (slayer, layers_data[slayer]['filtered_ts'], layers_data, jobs, matched_sifts_dir, args.workspace_dir, args.output_dir, args.conf_file_name)))
+            jobs[slayer]['filtered_ts'] = job_filter_ts
+        else:
+            create_post_filter_jobs(slayer, layers_data[slayer]['filtered_ts'], layers_data, jobs, matched_sifts_dir, args.workspace_dir, args.output_dir, args.conf_file_name)
 
-        #if args.multicore_keeprunning:
-        #    # Bundle jobs for multicore nodes, and run the ones that are ready at the moment
-        #    Job.multicore_keep_running(run_partial=True)
  
 
 

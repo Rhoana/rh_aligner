@@ -24,7 +24,7 @@ SBATCH_ACCOUNT = 'lichtman_lab'
 
 #SBATCH_EXCLUDED = None
 # SBATCH_EXCLUDED = 'regal01,regal02,regal03,regal04,regal10,regal09,regal08,regal11,regal13,regal18,hsph05,hsph06,regal14'
-SBATCH_EXCLUDED = 'holygiribet06'
+SBATCH_EXCLUDED = 'holygiribet06,atlast3a01,atlast3a02'
 
 # Make sure the logs directory exists
 if not os.path.exists(LOGS_DIR) or not os.path.isdir(os.path.dirname(LOGS_DIR)):
@@ -56,6 +56,7 @@ class Job(object):
         self.memory = 1000
         self.threads = 1
         self.is_java_job = False
+        self.callback = None
         Job.all_jobs.append(self)
 
     def get_threads_num(self):
@@ -83,11 +84,22 @@ class Job(object):
 
                     if s_jobid == job_id and job_status == 'COMPLETED':
                         self.already_done = True
+                        # If there's a callback to the job, execute it (will only be called once due to the already_done flag
+                        if self.callback is not None:
+                            func, args = self.callback
+                            func(*args)
                         return True
             else:
                 self.already_done = True
+                # If there's a callback to the job, execute it (will only be called once due to the already_done flag
+                if self.callback is not None:
+                    func, args = self.callback
+                    func(*args)
                 return True
         return False
+
+    def set_callback(self, func, args):
+        self.callback = (func, args)
 
     def dependendencies_done(self):
         for d in self.dependencies:
@@ -252,6 +264,10 @@ class Job(object):
                             elif job_status == 'RUNNING':
                                 running += 1
                             elif job_status == 'COMPLETED':
+                                # Make sure that the callback of the jobs (if there is one) is called
+                                job_block_list = cls.submitted_job_blocks[job_name]
+                                for job in job_block_list:
+                                    job.get_done()
                                 complete += 1
                     elif job_status in ['FAILED', 'NODE_FAIL']:
                         failed += 1
