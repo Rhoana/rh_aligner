@@ -102,7 +102,12 @@ class TranslationModel(AbstractAffineModel):
         self.delta = np.array([float(d) for d in s.split()])
 
     def get_matrix(self):
-        return np.dot(np.eye(3), np.append(self.delta, [1]))
+        return np.array([
+                            [1.0, 0.0, self.delta[0]],
+                            [0.0, 1.0, self.delta[1]],
+                            [0.0, 0.0, 1.0]
+                        ])
+        #return np.dot(np.eye(3), np.append(self.delta, [1]))
 
     def fit(self, X, y):
         """

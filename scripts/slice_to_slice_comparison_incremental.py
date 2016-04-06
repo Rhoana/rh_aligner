@@ -149,7 +149,8 @@ def compare_features(section1_pts_resps_descs, section2_pts_resps_descs, actual_
     min_num_inlier = actual_params["min_num_inlier"]
     max_trust = actual_params["max_trust"]
     det_delta = actual_params["det_delta"]
-    model, filtered_matches = ransac.filter_matches(match_points, model_index, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, max_trust, det_delta)
+    max_stretch = actual_params["max_stretch"]
+    model, filtered_matches = ransac.filter_matches(match_points, model_index, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, max_trust, det_delta, max_stretch)
     if filtered_matches is None:
         filtered_matches = np.zeros((0, 0))
     return (model, filtered_matches.shape[1], float(filtered_matches.shape[1]) / match_points.shape[1], match_points.shape[1], len(allpoints1), len(allpoints2))
@@ -166,7 +167,7 @@ def load_mfovs_features(indexed_ts, features_dir, mfovs_idx):
  
 
 
-def iterative_search(actual_params, layer1, layer2, indexed_ts1, indexed_ts2, features_dir1, features_dir2, mfovs_nums1, centers_mfovs_nums2, section2_mfov_bboxes, sorted_mfovs2, assumed_model=None, is_initial_search=False):
+def iterative_search(actual_params, layer1, layer2, indexed_ts1, indexed_ts2, features_dir1, features_dir2, mfovs_nums1, centers_mfovs_nums2, section2_mfov_bboxes, sorted_mfovs2, assumed_model=None, is_initial_search=False, point1=None):
     # Load the features from the mfovs in section 1
     all_points1, all_resps1, all_descs1 = load_mfovs_features(indexed_ts1, features_dir1, mfovs_nums1)
     section1_pts_resps_descs = [all_points1, np.concatenate(all_resps1), np.vstack(all_descs1)]
@@ -229,6 +230,14 @@ def iterative_search(actual_params, layer1, layer2, indexed_ts1, indexed_ts2, fe
             print("Could not find a valid model between Sec{} and Sec{} in iteration {}".format(layer1, layer2, match_iteration))
         else:
             print("Found a model {} (with {} matches) between Sec{} and Sec{} in iteration {}, need to verify cutoff".format(model.to_str(), num_filtered, layer1, layer2, match_iteration))
+
+            ## Verify that this model is actually similar to the assumed model, by using the center point
+            #if assumed_model is not None and point1 is not None:
+            #    diff_dist = np.linalg.norm(assumed_model.apply(point1) - model.apply(point1))
+            #    if diff_dist > 1000:
+            #        print("Found model is too different than the initial search model, skipping model and iteration")
+            #        continue
+
             if num_filtered >= saved_model['num_filtered']:
                 saved_model['model'] = model
                 saved_model['num_filtered'] = num_filtered
@@ -378,7 +387,7 @@ def analyze_slices(tiles_fname1, tiles_fname2, features_dir1, features_dir2, act
         # Do an iterative search of the mfov from section 1 to the "corresponding" mfov of section2
         mfov_search_start_time = time.time()
         mfov_transform, num_filtered, filter_rate, num_rod, num_m1, num_m2, match_iterations = iterative_search(actual_params, layer1, layer2, indexed_ts1, indexed_ts2,
-                             features_dir1, features_dir2, [sorted_mfovs1[i]], relevant_mfovs_nums2, section2_mfov_bboxes, sorted_mfovs2, assumed_model=best_transform, is_initial_search=False)
+                             features_dir1, features_dir2, [sorted_mfovs1[i]], relevant_mfovs_nums2, section2_mfov_bboxes, sorted_mfovs2, assumed_model=best_transform, is_initial_search=False, point1=center1)
         mfov_search_end_time = time.time()
         if mfov_transform is None:
             # Could not find a transformation for the given mfov
@@ -426,6 +435,7 @@ def match_layers_sift_features(tiles_fname1, features_dir1, tiles_fname2, featur
     actual_params["min_num_inlier"] = params.get("min_num_inliers", 7)
     actual_params["max_trust"] = params.get("max_trust", 3)
     actual_params["det_delta"] = params.get("det_delta", 0.7)
+    actual_params["max_stretch"] = params.get("max_stretch", 0.25)
 
     print("Matching layers: {} and {}".format(tiles_fname1, tiles_fname2))
 

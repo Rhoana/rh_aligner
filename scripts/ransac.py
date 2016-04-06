@@ -53,16 +53,15 @@ def choose_forward(numbers, n, k):
         if cur_k == 0:
             return
 
-def check_model_stretch(model_matrix, delta=0.25):
-    # check the diagonals sizes using [0,50], [50,0], [0,-50], [-50,0]
-    points = np.array([[0, 50], [50, 0]])
-    transformed_points = np.dot(points, model_matrix)
-    dists_ratio = [np.linalg.norm(2*p)/100.0 for p in transformed_points]
-    valid_dists = [d for d in dists_ratio if d >= 1.0-delta and d <= 1.0+delta]
-    return len(valid_dists) == 2
-    
+def check_model_stretch(model_matrix, max_stretch=0.25):
+    # Use the eigen values to validate the stretch
+    assert(max_stretch >= 0.0 and max_stretch <= 1.0)
+    eig_vals, _ = np.linalg.eig(model_matrix)
+    # Note that this also takes flipping as an incorrect transformation
+    valid_eig_vals = [eig_val for eig_val in eig_vals if eig_val >= 1.0 - max_stretch and eig_val <= 1.0 + max_stretch]
+    return len(valid_eig_vals) == 2
 
-def ransac(matches, target_model_type, iterations, epsilon, min_inlier_ratio, min_num_inlier, det_delta):
+def ransac(matches, target_model_type, iterations, epsilon, min_inlier_ratio, min_num_inlier, det_delta=0.35, max_stretch=0.25):
     # model = Model.create_model(target_model_type)
     assert(len(matches[0]) == len(matches[1]))
 
@@ -117,7 +116,7 @@ def ransac(matches, target_model_type, iterations, epsilon, min_inlier_ratio, mi
         model_matrix = proposed_model.get_matrix()[:2, :2]
         if proposed_model.MIN_MATCHES_NUM == 3:
             # check the stretch of the new transformation
-            if not check_model_stretch(model_matrix):
+            if not check_model_stretch(model_matrix, max_stretch):
                 continue
             # if the proposed model distorts the image too much, skip the model
             det = np.linalg.det(model_matrix)
@@ -189,7 +188,7 @@ def filter_after_ransac(candidates, model, max_trust, min_num_inliers):
     return new_model, candidates_mask, np.mean(dists)
 
 
-def filter_matches(matches, target_model_type, iterations, epsilon, min_inlier_ratio, min_num_inlier, max_trust, det_delta):
+def filter_matches(matches, target_model_type, iterations, epsilon, min_inlier_ratio, min_num_inlier, max_trust, det_delta=0.35, max_stretch=0.25):
     """Perform a RANSAC filtering given all the matches"""
     new_model = None
     filtered_matches = None
@@ -198,7 +197,7 @@ def filter_matches(matches, target_model_type, iterations, epsilon, min_inlier_r
     # Apply RANSAC
     # print "Filtering {} matches".format(matches.shape[1])
     print "pre-ransac matches count: {}".format(matches.shape[1])
-    inliers_mask, model, _ = ransac(matches, target_model_type, iterations, epsilon, min_inlier_ratio, min_num_inlier, det_delta)
+    inliers_mask, model, _ = ransac(matches, target_model_type, iterations, epsilon, min_inlier_ratio, min_num_inlier, det_delta, max_stretch)
     if inliers_mask is None:
         print "post-ransac matches count: 0"
     else:
