@@ -347,9 +347,6 @@ def create_post_filter_jobs(slayer, filtered_ts_fname, layers_data, jobs, matche
             conf_fname=conf_file_name)
     layers_data[slayer]['optimized_montage'] = opt_montage_json
 
-    #if args.multicore_keeprunning:
-    #    # Bundle jobs for multicore nodes, and run the ones that are ready at the moment
-    #    Job.multicore_keep_running(run_partial=True)
  
 
 ###############################
@@ -512,8 +509,10 @@ if __name__ == '__main__':
             jobs[slayer]['filtered_ts'] = job_filter_ts
         else:
             create_post_filter_jobs(slayer, layers_data[slayer]['filtered_ts'], layers_data, jobs, matched_sifts_dir, args.workspace_dir, args.output_dir, args.conf_file_name)
-
  
+        if args.multicore_keeprunning:
+            # Bundle jobs for multicore nodes, and run the ones that are ready at the moment
+            Job.multicore_keep_running(run_partial=True)
 
 
 

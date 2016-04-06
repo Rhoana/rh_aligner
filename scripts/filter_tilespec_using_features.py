@@ -12,10 +12,14 @@ def wait_for_feature_files(features_fname, wait_time):
 
 def check_tile_sift_file(sift_file, threshold):
     # load the h5py file
-    with h5py.File(sift_file, 'r') as data:
-        descs_count = data['descs'].shape[0]
+    try:
+        with h5py.File(sift_file, 'r') as data:
+            descs_count = data['descs'].shape[0]
 
-    return descs_count >= threshold
+        return descs_count >= threshold
+    except:
+        print "Error when parsing: {}".format(sift_file)
+        raise
 
 def get_tilespec_sift_files(ts, ts_sifts_dir):
     # Fetch all the sift files, per mfov directory
