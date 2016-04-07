@@ -1,24 +1,19 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Apr 07 16:07:34 2016
-
-@author: Raahil
-"""
-
 import sys
 import argparse
 import cv2
 import numpy as np
 
+
 def determineempty(fname, thresh):
-    imgf = cv2.imread(fname,0)
+    imgf = cv2.imread(fname, 0)
     clahe = cv2.createCLAHE()
     claheimg = clahe.apply(imgf)
-    
-    gradientimg = np.gradient(np.array(claheimg,dtype='float32'))
+
+    gradientimg = np.gradient(np.array(claheimg, dtype='float32'))
     vargrad = np.var(gradientimg)
     return vargrad > thresh
     # if vargrad > thresh, then the image is empty
+
 
 def main():
     print(sys.argv)
