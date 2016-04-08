@@ -5,6 +5,7 @@ import os.path
 import numpy as np
 import cPickle
 from scipy.spatial import Delaunay
+from sklearn.utils.extmath import randomized_svd
 #import matplotlib
 #matplotlib.use('GTK')
 import pylab
@@ -199,9 +200,6 @@ def Haffine_from_points(fp, tp):
     fp = fp.T
     tp = tp.T
 
-    fp = np.vstack([fp[0], fp[1], np.ones(len(fp[0]))])
-    tp = np.vstack([tp[0], tp[1], np.ones(len(tp[0]))])
-
     # condition points
     # --- from points ---
     m = fp.mean(axis=1, keepdims=True)
@@ -209,18 +207,22 @@ def Haffine_from_points(fp, tp):
     C1 = np.diag([1.0/maxstd, 1.0/maxstd, 1.0])
     C1[0][2] = -m[0] / maxstd
     C1[1][2] = -m[1] / maxstd
-    fp_cond = np.dot(C1, fp)
-
+    fp_cond = np.dot(C1[:2, :2], fp) + np.asarray(C1[:2, 2]).reshape((2, 1))
+    
     # --- to points ---
     m = tp.mean(axis=1, keepdims=True)
     C2 = C1.copy() # must use same scaling for both point sets
     C2[0][2] = -m[0] / maxstd
     C2[1][2] = -m[1] / maxstd
-    tp_cond = np.dot(C2, tp)
+    tp_cond = np.dot(C2[:2, :2], tp) + np.asarray(C2[:2, 2]).reshape((2, 1))
 
     # conditioned points have mean zero, so translation is zero
-    A = np.concatenate((fp_cond[:2], tp_cond[:2]), axis=0)
-    U,S,V = np.linalg.svd(A.T)
+    A = np.concatenate((fp_cond, tp_cond), axis=0)
+    #U,S,V = np.linalg.svd(A.T, full_matrices=True)
+    #U,S,V = spLA.svd(A.T)
+    #U,S,V = spLA.svds(A.T, k=3, ncv=50, maxiter=1e9, return_singular_vectors='vh') # doesn't work well
+    # Randomized svd uses much less memory and is much faster than the numpy/scipy versions
+    U, S, V = randomized_svd(A.T, 4)
 
     # create B and C matrices as Hartley-Zisserman (2:nd ed) p 130.
     tmp = V[:2].T
@@ -235,6 +237,8 @@ def Haffine_from_points(fp, tp):
 
     m = H / H[2][2]
     return m[:2,:2].T, m[:2, 2] # rotation part (transposed) and translation
+
+
 
 def get_transform_matrix(pts1, pts2, type):
     if type == 1:
