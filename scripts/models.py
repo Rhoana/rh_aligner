@@ -1,6 +1,9 @@
 import numpy as np
 import sys
 import copy
+from scipy.spatial import Delaunay
+import scipy.interpolate
+import cv2
 
 
 
@@ -44,6 +47,8 @@ class AbstractModel(object):
     def set_from_modelspec(self, s):
         raise RuntimeError, "Not implemented, but probably should be"
 
+    def is_affine(self):
+        return False
 
 
 class AbstractAffineModel(AbstractModel):
@@ -66,6 +71,8 @@ class AbstractAffineModel(AbstractModel):
             return np.vstack([np.dot(m, np.append(p_i, [1]))[:2] for p_i in p])
         raise RuntimeError, "Invalid points input"
 
+    def is_affine(self):
+        return True
 
 
 class TranslationModel(AbstractAffineModel):
@@ -107,7 +114,6 @@ class TranslationModel(AbstractAffineModel):
                             [0.0, 1.0, self.delta[1]],
                             [0.0, 0.0, 1.0]
                         ])
-        #return np.dot(np.eye(3), np.append(self.delta, [1]))
 
     def fit(self, X, y):
         """
@@ -467,6 +473,123 @@ class AffineModel(AbstractAffineModel):
 
 
 
+class RestrictedMovingLeastSquaresTransform2(AbstractModel):
+    class_name = "mpicbg.trakem2.transform.RestrictedMovingLeastSquaresTransform2"
+
+    def __init__(self, radius=None, point_map=None):
+        assert((radius is None and point_map is None) or (radius is not None and point_map is not None))
+        self.radius = radius
+        self.point_map = point_map
+        self.interpolator = None
+
+    def apply(self, p):
+        return None
+#        self.compute_interpolator()
+#        
+#        self.compute_affine_transforms()
+#
+#        # Find an index of a simplex that contains p
+#        simplex_index = self.triang.find_simplex(p)[0]
+#        assert(simplex_index != -1)
+#
+#        # compute the barycentric weights for point p in the simplex
+#        b = self.triang.transform[simplex_index, :2].dot(p - self.triang.transform[simplex_index, 2])
+#        bary = np.c_[b, 1 - b.sum(axis=1)]
+#
+#        # Compute the weighted average of the affine transformations of the simplex vertices
+#        simplex = self.triang.simplices[simplex_index]
+#        final_affine = np.average(self.point_avg_affine[simplex], axis=0, weights=bary)
+#
+#        return np.dot(final_affine[:2,:2], p.T).T + np.asarray(final_affine.T[2][:2]).reshape((1, 2))
+ 
+    def apply_special(self, pts):
+        return None
+#        # Computes the affine transformation for many points
+#        self.compute_affine_transforms()
+#
+#        # Find the indices of all simplices, for each of the points in pts
+#        simplex_indices = self.triang.find_simplex(p)
+#        assert not np.any(simplex_indices == -1)
+#
+#        # http://codereview.stackexchange.com/questions/41024/faster-computation-of-barycentric-coordinates-for-many-points
+#        X = self.triang.transform[simplex_indices, :2]
+#        Y = pts - self.triang.transform[simplex_indices, 2]
+#        b = np.einsum('ijk,ik->ij', X, Y)
+#        barys = np.c_[b, 1 - b.sum(axis=1)] # shape: (pts#, 3) --> for each point its 3 barycentric values
+#
+#        # apply for each point in pts the 3 affine transformations around it
+#        pt_indices = self.triangulation.simplices[simplex_indices].astype(np.uint32)
+#        all_affine_transfroms = self.point_avg_affine[pt_indices] # shape: (pts#, 3, 2, 3) --> three 2x3 affine transform matrices for each point in pts
+#        
+#        # TODO - need to improve speed
+#        res = np.array((pts.shape[0], 3, 2), dtype=np.float) # will store for each point the three coordinates after affine transform
+#        for p_i, p in enumerate(pts):
+#            pt_affine_transforms = all_affine_transforms[p_i] # three affine transfrom matrices (2x3)
+#            for a_i, pt_affine_transform in enumerate(pt_affine_transforms):
+#                res[p_i][a_i] = np.dot(pt_affine_transform[:2,:2], p.T).T + np.asarray(pt_affine_transform.T[2][:2]).reshape((1, 2))
+#        
+#        global_res = np.array((pts.shape[0], 2), dtype=np.float)
+#        for res_i, pt_affines in enumerate(res):
+#            global_res[res_i] = np.average(res_i, axis=0, weights=barys[res_i])
+#
+#        return global_res
+
+    def set_from_modelspec(self, s):
+        data = s.split()
+        assert(data[0] == 'affine')
+        assert(data[1] == '2')
+        assert(data[2] == '2.0')
+        self.radius = float(data[3])
+        points_data = data[4:] # format is: p1_src_x p1_src_y p1_dest_x p1_dest_y 1.0 ... (1.0 is the weight of the match)
+        src = np.array(
+                        [np.array(points_data[0::5], dtype=np.float32),
+                         np.array(points_data[1::5], dtype=np.float32)]
+                      ).T
+        dest = np.array(
+                        [np.array(points_data[2::5], dtype=np.float32),
+                         np.array(points_data[3::5], dtype=np.float32)]
+                      ).T
+        self.point_map = (src, dest)
+        self.interpolator = None
+
+    def get_point_map(self):
+        return self.point_map
+
+#    def compute_interpolator(self):
+#        """Uses griddata to interpolate all the pixels in the output window"""
+#        if self.interpolator is not None:
+#            return
+#
+#        # Compute the interpolator using scipy.interpolate.LinearNDInterpolator
+#        self.interpolator = LinearNDInterpolator(#TODO)
+
+#    def compute_affine_transforms(self):
+#        """Computes an average affine transformation for each point from the source points,
+#           using the affine trasnformations of all neighboring triangles"""
+#        if self.point_avg_affine is not None:
+#            return
+#
+#        # Create the triangulation of the source points
+#        src = self.point_map[0]
+#        dest = self.point_map[1]
+#        self.triang = Delaunay(src)
+#        # Compute a per simplex affine transformation
+#        simplex_transforms = np.array((len(self.triang.simplices), 2, 3), dtype=np.float)
+#        # Also, set a per-point list of all simplices around it
+#        point_neighboring_simplices = [] * src.shape[0]
+#        for simplex_i, simplex in enumerate(self.triang.simplices):
+#            simplex_src_points = src[simplex]
+#            simplex_dest_points = dest[simplex]
+#            affine_transform = cv2.getAffineTransform(simplex_src_points, simplex_dest_points)
+#            simplex_transforms[simplex_i] = affine_transform
+#            # add the simplex as a neighbor to all of its points
+#            point_neighboring_simplices.append(simplex_i)
+#            
+#        # Compute a per-point average affine transform
+#        self.point_avg_affine = np.array((src.shape[0], 2, 3), dtype=np.float)
+#        for p_i, _ in enumerate(src):
+#            self.point_avg_affine[p_i] = np.mean(simplex_transforms[np.array(point_neighboring_simplices[p_i])], axis=0)
+
 
 class Transforms(object):
     transformations = [ TranslationModel(), RigidModel(), SimilarityModel(), AffineModel() ]
@@ -475,6 +598,7 @@ class Transforms(object):
         RigidModel.class_name : RigidModel(),
         SimilarityModel.class_name : SimilarityModel(),
         AffineModel.class_name : AffineModel(),
+        RestrictedMovingLeastSquaresTransform2.class_name : RestrictedMovingLeastSquaresTransform2(),
         }
 
     @classmethod

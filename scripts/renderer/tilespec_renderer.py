@@ -5,7 +5,7 @@ import json
 import numpy as np
 import sys
 sys.path.append('../')
-import models_testing as models
+import models
 
 
 class TilespecRenderer:
