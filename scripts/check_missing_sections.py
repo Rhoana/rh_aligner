@@ -102,7 +102,7 @@ def read_image_files(folder):
     for fname in glob.glob(os.path.join(folder, '*.bmp')):
         fstat = os.stat(fname)
         # Verify that it is a bmp file, non-thumbnail, that is actually a file, and non-empty
-        if not fname.startswith('thumbnail') and stat.S_ISREG(fstat.st_mode) and fstat.st_size > 0:
+        if (not os.path.basename(fname).startswith('thumbnail')) and stat.S_ISREG(fstat.st_mode) and fstat.st_size > 0:
             yield fname
 
 def verify_mfov_folder(folder):
@@ -197,7 +197,7 @@ def parse_batch_dir(batch_dir, wafer_dir, wafer_dir_normalized, prev_section_dir
                                    section_num, batch_section_data[section_num]['errors'])
         batch_section_data[section_num]['parsed_folder_id'] = row_id
 
-    return batch_section_data, last_section_dir
+    return batch_section_data
 
 
 
