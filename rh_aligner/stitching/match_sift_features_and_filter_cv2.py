@@ -1,12 +1,12 @@
+from ..common.bounding_box import BoundingBox
+from ..common import utils
+from ..common import ransac
 import argparse
-from bounding_box import BoundingBox
 import json
-import utils
 import cv2
 import h5py
 import numpy as np
-from models import Transforms
-import ransac
+from rh_renderer.models import Transforms
 import multiprocessing as mp
 import logging
 import re
@@ -74,7 +74,7 @@ def dist_after_model(model, p1_l, p2_l):
     p2_l = np.array(p2_l)
     p1_l_new = model.apply(p1_l)
     delta = p1_l_new - p2_l
-    return np.sqrt(np.sum(np.dot(delta, delta)))
+    return np.sqrt(np.sum(delta ** 2))
 
 def match_single_pair(ts1, ts2, features_file1, features_file2, out_fname, rod, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, model_index, max_trust, det_delta):
     # load feature files
@@ -157,6 +157,7 @@ def match_single_pair(ts1, ts2, features_file1, features_file2, out_fname, rod, 
     with open(out_fname, 'w') as out:
         json.dump(out_data, out, sort_keys=True, indent=4)
 
+    return True
 
 
 def match_single_sift_features_and_filter(tiles_file, features_file1, features_file2, out_fname, index_pair, conf_fname=None):
@@ -247,9 +248,12 @@ def match_multiple_sift_features_and_filter(tiles_file, features_files_lst1, fea
         res = pool.apply_async(match_single_pair, (ts1, ts2, features_file1, features_file2, out_fname, rod, iterations, max_epsilon, min_inlier_ratio, min_num_inlier, model_index, max_trust, det_delta))
         pool_results.append(res)
 
+    # Verify that the returned values are okay (otherwise an exception will be shown)
+    for res in pool_results:
+        res.get()
+
     pool.close()
     pool.join()
-
 
 
 

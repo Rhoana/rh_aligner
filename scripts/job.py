@@ -24,7 +24,7 @@ SBATCH_ACCOUNT = 'lichtman_lab'
 
 #SBATCH_EXCLUDED = None
 # SBATCH_EXCLUDED = 'regal01,regal02,regal03,regal04,regal10,regal09,regal08,regal11,regal13,regal18,hsph05,hsph06,regal14'
-SBATCH_EXCLUDED = 'holygiribet06,atlast3a01,atlast3a02'
+SBATCH_EXCLUDED = 'holygiribet06,atlast3a01,atlast3a02,atlast3b01,atlast3b02'
 
 # Make sure the logs directory exists
 if not os.path.exists(LOGS_DIR) or not os.path.isdir(os.path.dirname(LOGS_DIR)):
@@ -129,7 +129,13 @@ class Job(object):
             account_str = "--account={}".format(SBATCH_ACCOUNT)
 
         if RUN_LOCAL:
-            subprocess.check_call(self.command())
+            log_out = open(LOGS_DIR + "/out." + self.name, 'w')
+            log_err = open(LOGS_DIR + "/error." + self.name, 'w')
+            try:
+                subprocess.check_call(' '.join(self.command()), stdout=log_out, stderr=log_err, shell=True)
+            finally:
+                log_out.close()
+                log_err.close()
         elif USE_SBATCH:
             command_list = ["sbatch",
                             "-J", self.name,                   # Job name

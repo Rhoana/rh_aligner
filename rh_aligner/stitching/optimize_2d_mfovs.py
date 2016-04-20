@@ -1,8 +1,8 @@
+from ..common import utils
 import sys
 import os.path
 import os
 import argparse
-import utils
 import random
 
 from collections import defaultdict
@@ -82,6 +82,7 @@ def create_new_tilespec(old_ts_fname, rotations, translations, centers, out_fnam
         # print "tile 4 coordinates after_trans", after_trans
 
         # Set the transformation in the tilespec
+        # TODO - use the models module from rh_renderer instead
         ts["transforms"] = [{
                 "className": "mpicbg.trakem2.transform.RigidModel2D",
                 "dataString": new_transformation

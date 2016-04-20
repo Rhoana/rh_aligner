@@ -3,11 +3,10 @@ import os
 import glob
 import argparse
 from subprocess import call
-from bounding_box import BoundingBox
+from ..common.bounding_box import BoundingBox
 import json
 import itertools
-import utils
-import export_mesh
+from ..common import utils
 from optimize_mesh import optimize_meshes
 import math
 import numpy as np

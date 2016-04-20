@@ -1,11 +1,11 @@
 from __future__ import print_function
 import sys
 import cv2
-from renderer.tilespec_affine_renderer import TilespecAffineRenderer
+from rh_renderer.tilespec_affine_renderer import TilespecAffineRenderer
 import argparse
 import utils
 from bounding_box import BoundingBox
-import models
+from rh_renderer import models
 import numpy as np
 import json
 from scipy.spatial import distance

@@ -1,6 +1,6 @@
 import numpy as np
 import copy
-from models import Transforms
+from rh_renderer.models import Transforms
 from scipy.misc import comb
 
 def array_to_string(arr):
@@ -172,7 +172,7 @@ def filter_after_ransac(candidates, model, max_trust, min_num_inliers):
             break
 
         # get the meidan error (after transforming the points)
-        pts_after_transform = new_model.apply_special(inliers)
+        pts_after_transform = new_model.apply(inliers)
         dists = np.sqrt(np.sum((pts_after_transform - to_image_candidates) ** 2, axis=1))
         median = np.median(dists)
         # print "dists mean", np.mean(dists)

@@ -16,8 +16,8 @@ import itertools
 import argparse
 import glob
 import json
-from utils import path2url, create_dir, read_layer_from_file, parse_range, load_tilespecs, write_list_to_file
-from bounding_box import BoundingBox
+from utils import create_dir, read_layer_from_file, parse_range, load_tilespecs, write_list_to_file
+from rh_aligner.common.bounding_box import BoundingBox
 from job import Job
 
 
@@ -42,7 +42,7 @@ class CreateSiftFeatures(Job):
 
     def command(self):
         return ['python -u',
-                os.path.join(os.environ['ALIGNER'], 'scripts', 'create_sift_features_cv2.py'),
+                os.path.join(os.environ['ALIGNER'], 'scripts', 'wrappers', 'create_sift_features_cv2.py'),
                 self.output_file, self.conf_fname, self.tiles_fname, self.tile_index]
 
 class CreateMultipleSiftFeatures(Job):
@@ -84,7 +84,7 @@ class CreateMultipleSiftFeatures(Job):
     def command(self):
         self.prepare_files()
         return ['python -u',
-                os.path.join(os.environ['ALIGNER'], 'scripts', 'create_sift_features_cv2.py'),
+                os.path.join(os.environ['ALIGNER'], 'scripts', 'wrappers', 'create_sift_features_cv2.py'),
                 self.output_files, self.tile_indices, self.conf_fname, self.tiles_fname]
 
 
@@ -115,7 +115,7 @@ class MatchSiftFeaturesAndFilter(Job):
 
     def command(self):
         return ['python -u',
-                os.path.join(os.environ['ALIGNER'], 'scripts', 'match_sift_features_and_filter_cv2.py'),
+                os.path.join(os.environ['ALIGNER'], 'scripts', 'wrappers', 'match_sift_features_and_filter_cv2.py'),
                 self.output_file, self.wait_time, self.conf_fname,
                 self.tiles_fname, self.features_fname1, self.features_fname2, self.index_pair]
 
@@ -175,7 +175,7 @@ class MatchMultipleSiftFeaturesAndFilter(Job):
     def command(self):
         self.prepare_files()
         return ['python -u',
-                os.path.join(os.environ['ALIGNER'], 'scripts', 'match_sift_features_and_filter_cv2.py'),
+                os.path.join(os.environ['ALIGNER'], 'scripts', 'wrappers', 'match_sift_features_and_filter_cv2.py'),
                 self.output_files, self.wait_time, self.conf_fname, self.threads_str,
                 self.tiles_fname, self.features_fnames1, self.features_fnames2, self.index_pairs]
 
@@ -206,7 +206,7 @@ class OptimizeMontageTransform(Job):
 
     def command(self):
         return ['python -u',
-                os.path.join(os.environ['ALIGNER'], 'scripts', 'optimize_2d_mfovs.py'),
+                os.path.join(os.environ['ALIGNER'], 'scripts', 'wrappers', 'optimize_2d_mfovs.py'),
                 self.output_file, self.conf_fname, self.tiles_fname, self.matches_list_file]
 
 
@@ -340,8 +340,7 @@ if __name__ == '__main__':
             imgurl = ts["mipmapLevels"]["0"]["imageUrl"]
             tile_fname = os.path.basename(imgurl).split('.')[0]
 
-            tile_fname_sep = tile_fname.split('_') # eg: 002_000001_044_2015-03-06T1106521073289.bmp
-            cur_wafer_mfov = tile_fname_sep[1]
+            cur_wafer_mfov = str(ts["mfov"]).zfill(6)
             mfov_sifts_dir = os.path.join(layer_sifts_dir, cur_wafer_mfov)
             create_dir(mfov_sifts_dir)
 
@@ -451,9 +450,9 @@ if __name__ == '__main__':
                 conf_fname=args.conf_file_name)
         layers_data[slayer]['optimized_montage'] = opt_montage_json
 
-        #if args.multicore_keeprunning:
-        #    # Bundle jobs for multicore nodes, and run the ones that are ready at the moment
-        #    Job.multicore_keep_running(run_partial=True)
+        if args.multicore_keeprunning:
+            # Bundle jobs for multicore nodes, and run the ones that are ready at the moment
+            Job.multicore_keep_running(run_partial=True)
  
 
 
@@ -472,5 +471,6 @@ if __name__ == '__main__':
         # Bundle jobs for multicore nodes
         Job.multicore_keep_running()
     else:
+        # Run all jobs locally
         Job.run_all()
 

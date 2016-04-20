@@ -9,15 +9,15 @@ from scipy.spatial import distance
 from scipy import spatial
 import cv2
 import argparse
-import utils
-from bounding_box import BoundingBox
-import models
-import PMCC_filter_example
+from ..common import utils
+from ..common.bounding_box import BoundingBox
+from rh_renderer import models
+import PMCC_filter
 import multiprocessing as mp
-import pyximport
-pyximport.install()
-import cv_wrap_module
-from renderer.tilespec_affine_renderer import TilespecAffineRenderer
+#import pyximport
+#pyximport.install()
+from ..common import cv_wrap_module
+from rh_renderer.tilespec_affine_renderer import TilespecAffineRenderer
 import logging
 
 logger = logging.getLogger(__name__)
@@ -171,7 +171,7 @@ def execute_pmcc_matching(img1_center_point, img1_to_img2_transform, scaling, te
 
     # execute the PMCC match
     # Do template matching
-    result, reason, match_val = PMCC_filter_example.PMCC_match(img2_search_window, img1_template, min_correlation=min_corr, maximal_curvature_ratio=max_curvature, maximal_ROD=max_rod)
+    result, reason, match_val = PMCC_filter.PMCC_match(img2_search_window, img1_template, min_correlation=min_corr, maximal_curvature_ratio=max_curvature, maximal_ROD=max_rod)
     if result is not None:
         # Compute the location of the matched point on img2 in non-scaled coordinates
         #matched_location_scaled = np.array([reason[1], reason[0]]) + template_scaled_side
@@ -245,6 +245,8 @@ def match_layers_pmcc_matching(tiles_fname1, tiles_fname2, pre_matches_fname, ou
             os.mkdir(debug_dir)
 
     # Read the tilespecs
+    tiles_fname1 = os.path.abspath(tiles_fname1)
+    tiles_fname2 = os.path.abspath(tiles_fname2)
     ts1 = utils.load_tilespecs(tiles_fname1)
     ts2 = utils.load_tilespecs(tiles_fname2)
     indexed_ts1 = utils.index_tilespec(ts1)

@@ -4,7 +4,7 @@ import sys
 import json
 import os
 import h5py
-import utils
+from ..common import utils
 import argparse
 
 def wait_for_feature_files(features_fname, wait_time):

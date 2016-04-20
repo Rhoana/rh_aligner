@@ -6,9 +6,8 @@
 import sys
 import os
 import argparse
-import utils
+from ..common import utils
 import cv2
-import json
 import numpy as np
 import h5py
 

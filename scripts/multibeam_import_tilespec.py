@@ -148,7 +148,9 @@ def parse_wafer(wafer_folder, output_folder, wafer_name=1, start_layer=1):
             print("Parsing subfolder: {}".format(sub_folder))
             coords_file = os.path.join(sub_folder, "full_image_coordinates.txt")
             if os.path.exists(coords_file):
-                layer = int(sub_folder.split(os.path.sep)[-1])
+                section_dir_name = sub_folder.split(os.path.sep)[-1]
+                m = re.match('([0-9]+)_S([0-9]+)R.*', section_dir_name)
+                layer = int(m.group(2))
                 output_json_fname = os.path.join(output_folder, "{0}_Sec{1:03d}.json".format(wafer_name, layer))
 
                 if os.path.exists(output_json_fname):
@@ -224,7 +226,11 @@ def main():
 
     print input_folder
     m = re.match('.*[W|w]([0-9]+).*', input_folder)
-    wafer_name = 'W' + str(int(m.group(1))).zfill(2)
+    if m is None:
+        print "Could not find a wafer number, assuming it is in wafer 01"
+        wafer_name = 'W01'
+    else:
+        wafer_name = 'W' + str(int(m.group(1))).zfill(2)
 
     print "wafer_name", wafer_name, "start_layer", start_layer
     parse_wafer(input_folder, output_folder, wafer_name, start_layer)

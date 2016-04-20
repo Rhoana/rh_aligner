@@ -17,9 +17,9 @@ from collections import defaultdict
 import argparse
 import glob
 import json
-from utils import path2url, write_list_to_file, create_dir, read_layer_from_file, parse_range
+from utils import write_list_to_file, create_dir, read_layer_from_file, parse_range
 from job import Job
-from bounding_box import BoundingBox
+from rh_aligner.common.bounding_box import BoundingBox
 
 
 
@@ -48,7 +48,7 @@ class PreliminaryMatchLayersMfovs(Job):
 
     def command(self):
         return ['python -u',
-                os.path.join(os.environ['ALIGNER'], 'scripts', 'slice_to_slice_comparison_incremental.py'),
+                os.path.join(os.environ['ALIGNER'], 'scripts', 'wrappers', 'pre_match_3d_incremental.py'),
                 self.output_fname, self.conf_fname, self.tiles_fname1, self.features_dir1, self.tiles_fname2, self.features_dir2]
 
 
@@ -79,7 +79,7 @@ class MatchLayersByMaxPMCCMfov(Job):
 
     def command(self):
         return ['python -u',
-                os.path.join(os.environ['ALIGNER'], 'scripts', 'match_images_between_slices_optimized.py'),
+                os.path.join(os.environ['ALIGNER'], 'scripts', 'wrappers', 'block_match_3d_multiprocess.py'),
                 self.output_fname, self.conf_fname,
                 self.threads_str, #self.auto_add_model,
                 self.tiles_fname1, self.tiles_fname2, self.pre_match_fname, self.targeted_mfov]
@@ -111,7 +111,7 @@ class OptimizeLayersElastic(Job):
 
     def command(self):
         return ['python -u',
-                os.path.join(os.environ['ALIGNER'], 'scripts', 'optimize_layers_elastic.py'),
+                os.path.join(os.environ['ALIGNER'], 'scripts', 'wrappers', 'optimize_layers_elastic.py'),
                 self.output_dir, self.conf_fname, self.threads_str,
                 self.max_layer_distance, self.skip_layers, self.tiles_fnames, self.corr_fnames]
 

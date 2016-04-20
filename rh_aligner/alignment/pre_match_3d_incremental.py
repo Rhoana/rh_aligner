@@ -1,7 +1,7 @@
 # Setup
 from __future__ import print_function
-import models
-import ransac
+from rh_renderer import models
+from ..common import ransac
 import os
 import numpy as np
 import h5py
@@ -13,9 +13,9 @@ import cv2
 import time
 import glob
 import argparse
-import utils
+from ..common import utils
 from scipy.spatial import Delaunay
-from bounding_box import BoundingBox
+from ..common.bounding_box import BoundingBox
 
 TILES_PER_MFOV = 61
 
@@ -64,7 +64,7 @@ def load_features(feature_file, tile_ts):
 
     # Apply the transformation to each point
     newmodel = models.Transforms.from_tilespec(tile_ts["transforms"][0])
-    points = newmodel.apply_special(points)
+    points = newmodel.apply(points)
 
     return (points, resps, descs)
 
@@ -438,6 +438,8 @@ def match_layers_sift_features(tiles_fname1, features_dir1, tiles_fname2, featur
     actual_params["max_stretch"] = params.get("max_stretch", 0.25)
 
     print("Matching layers: {} and {}".format(tiles_fname1, tiles_fname2))
+    tiles_fname1 = os.path.abspath(tiles_fname1)
+    tiles_fname2 = os.path.abspath(tiles_fname2)
 
     starttime = time.time()
 

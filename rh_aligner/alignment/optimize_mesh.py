@@ -11,8 +11,8 @@ from sklearn.utils.extmath import randomized_svd
 import pylab
 from matplotlib import collections as mc
 import gc
-from bounding_box import BoundingBox
-import utils
+from ..common.bounding_box import BoundingBox
+from ..common import utils
 import datetime
 
 import pyximport
