@@ -12,13 +12,12 @@ import math
 import numpy as np
 from scipy import spatial
 import multiprocessing as mp
+from rh_renderer import models
 
 SAMPLED_POINTS_NUM = 50
 
-def compute_restricted_moving_ls_radius(url_optimized_mesh0, points_tree):
-
-    # TODO - verify that the radius is dependent only on the mesh (not on the matches)
-    print "Computing restricted MLS radius"
+def compute_points_model_halo(url_optimized_mesh0, points_tree):
+    print "Computing Points Transform Model Halo"
 
     # Sample SAMPLED_POINTS_NUM points to find the closest neighbors to these points
     sampled_points_indices = np.random.choice(url_optimized_mesh0.shape[0], SAMPLED_POINTS_NUM, replace=False)
@@ -28,58 +27,69 @@ def compute_restricted_moving_ls_radius(url_optimized_mesh0, points_tree):
     # and take the minimum among the distances
     distances, _ = points_tree.query(sampled_points, 2)
     min_point_dist = np.min(distances[:,1])
-    radius = 2 * min_point_dist
-    print "Restricted MLS radius: {}".format(radius)
+    halo = 2 * min_point_dist
+    print "Points model halo: {}".format(halo)
 
-    return radius
+    return halo
 
 
-def get_restricted_moving_ls_transform(url_optimized_mesh, bbox, points_tree, radius):
-    # Find the tile bbox with a halo of radius around it
+def get_points_transform_model(url_optimized_mesh, bbox, points_tree, halo):
+    # Find the tile bbox with a halo around it
     bbox_with_halo = list(bbox)
-    bbox_with_halo[0] -= radius
-    bbox_with_halo[2] -= radius
-    bbox_with_halo[1] += radius
-    bbox_with_halo[3] += radius
+    bbox_with_halo[0] -= halo
+    bbox_with_halo[2] -= halo
+    bbox_with_halo[1] += halo
+    bbox_with_halo[3] += halo
 
     # filter the matches according to the new bounding box
-    # (first pre-filter entire mesh using a radius of "diagonal + 2*RMLS_radius + 1) around the top-left point)
+    # (first pre-filter entire mesh using a halo of "diagonal + 2*halo + 1) around the top-left point)
     top_left = np.array([bbox[0], bbox[2]])
     bottom_right = np.array([bbox[1], bbox[3]])
-    pre_filtered_indices = points_tree.query_ball_point(top_left, np.linalg.norm(bottom_right - top_left) + 2 * radius + 1)
+    pre_filtered_indices = points_tree.query_ball_point(top_left, np.linalg.norm(bottom_right - top_left) + 2 * halo + 1)
     #print bbox_with_halo, "with filtered_indices:", pre_filtered_indices
 
     if len(pre_filtered_indices) == 0:
         print "Could not find any mesh points in bbox {}, skipping the tile"
         return None
 
-    filtered_matches = [m for m in zip(url_optimized_mesh[0][np.array(pre_filtered_indices)], url_optimized_mesh[1][np.array(pre_filtered_indices)])
-                                if (bbox_with_halo[0] <= m[0][0] <= bbox_with_halo[1]) and (bbox_with_halo[2] <= m[0][1] <= bbox_with_halo[3])]
+    filtered_src_points = []
+    filtered_dest_points = []
+    for p_src, p_dest in zip(url_optimized_mesh[0][np.array(pre_filtered_indices)], url_optimized_mesh[1][np.array(pre_filtered_indices)]):
+        if (bbox_with_halo[0] <= p_src[0] <= bbox_with_halo[1]) and (bbox_with_halo[2] <= p_src[1] <= bbox_with_halo[3]):
+            filtered_src_points.append(p_src)
+            filtered_dest_points.append(p_dest)
 
-    if len(filtered_matches) == 0:
+    if len(filtered_src_points) == 0:
         print "Could not find any mesh points in bbox {}, skipping the tile"
         return None
 
-    matches_str = " ".join(["{0} {1} {2} {3} 1.0".format(m[0][0], m[0][1], m[1][0], m[1][1])
-                            for m in filtered_matches])
-
     # print bbox_with_halo, "with pre_filtered_indices len:", len(pre_filtered_indices), "with matches_str:", matches_str
     # create the tile transformation
-    transform = {
-            "className" : "mpicbg.trakem2.transform.RestrictedMovingLeastSquaresTransform2",
-            "dataString" : "affine 2 2.0 {0} {1}".format(radius, matches_str)
-        }
-    return transform
+    model = models.PointsTransformModel((filtered_src_points, filtered_dest_points))
+    return model
 
-def get_moving_ls_transform(url_optimized_mesh):
-    all_matches_str = " ".join(["{0} {1} {2} {3} 1.0".format(m[0][0], m[0][1], m[1][0], m[1][1]) for m in zip(url_optimized_mesh[0], url_optimized_mesh[1])])
-# change the transfromation
-    transform = {
-            "className" : "mpicbg.trakem2.transform.MovingLeastSquaresTransform2",
-            "dataString" : "affine 2 2.0 {0}".format(all_matches_str)
-        }
-    return transform
+def compute_new_bounding_box(tile_ts):
+    """Computes a bounding box given the tile's transformations (if any),
+       and the new model to be applied last"""
+    # We must have a non-affine transformation, so compute the transformation of all the boundary pixels
+    # using a forward transformation from the boundaries of the source image to the destination
+    # Assumption: There won't be a pixel inside an image that goes out of the boundary
+    boundary1 = np.array([[float(p), 0.] for p in np.arange(tile_ts["width"])])
+    boundary2 = np.array([[float(p), float(tile_ts["height"] - 1)] for p in np.arange(tile_ts["width"])])
+    boundary3 = np.array([[0., float(p)] for p in np.arange(tile_ts["height"])])
+    boundary4 = np.array([[float(tile_ts["width"] - 1), float(p)] for p in np.arange(tile_ts["height"])])
+    boundaries = np.concatenate((boundary1, boundary2, boundary3, boundary4))
 
+    for modelspec in tile_ts.get("transforms", []):
+        model = models.Transforms.from_tilespec(modelspec)
+        boundaries = model.apply(boundaries)
+
+    # Find the bounding box of the boundaries
+    min_XY = np.min(boundaries, axis=0)
+    max_XY = np.max(boundaries, axis=0)
+    # Rounding to avoid float precision errors due to representation
+    new_bbox = [int(math.floor(round(min_XY[0], 5))), int(math.ceil(round(max_XY[0], 5))), int(math.floor(round(min_XY[1], 5))), int(math.ceil(round(max_XY[1], 5)))]
+    return ' '.join([str(coord) for coord in new_bbox])
 
 def save_json_file(out_fname, data):
     with open(out_fname, 'w') as outjson:
@@ -88,11 +98,11 @@ def save_json_file(out_fname, data):
         sys.stdout.flush()
 
 def save_optimized_mesh(ts_fname, url_optimized_mesh, out_dir):
-    # pre-compute the restricted MLS radius for that section
     print "Working on:", ts_fname
 
+    # Use the first tile to find the halo for the entire section
     points_tree = spatial.KDTree(url_optimized_mesh[0])
-    radius = compute_restricted_moving_ls_radius(url_optimized_mesh[0], points_tree)
+    halo = compute_points_model_halo(url_optimized_mesh[0], points_tree)
 
     ts_base = os.path.basename(ts_fname)
     out_fname = os.path.join(out_dir, ts_base)
@@ -105,12 +115,16 @@ def save_optimized_mesh(ts_fname, url_optimized_mesh, out_dir):
         tiles_to_remove = []
         # change the transfromation
         for tile_index, tile in enumerate(data):
-            # Used for restricting the restricted_moving_ls_transform to a specific bbox
-            tile_transform = get_restricted_moving_ls_transform(url_optimized_mesh, tile["bbox"], points_tree, radius)
-            if tile_transform is None:
+            # Create the PointsTransformModel for the current tile
+            tile_model = get_points_transform_model(url_optimized_mesh, tile["bbox"], points_tree, halo)
+            if tile_model is None:
                 tiles_to_remove.append(tile_index)
             else:
+                # Add the model to the tile
+                tile_transform = tile_model.to_modelspec()
                 tile.get("transforms", []).append(tile_transform)
+                # Compute new bounding box
+                tile["bbox"] = compute_new_bounding_box(tile)
 
         for tile_index in sorted(tiles_to_remove, reverse=True):
             print "Removing tile {} from {}".format(data[tile_index]["mipmapLevels"]["0"]["imageUrl"], out_fname)
@@ -128,10 +142,15 @@ def save_optimized_meshes(all_tile_urls, optimized_meshes, out_dir, processes_nu
     pool = mp.Pool(processes=processes_num)
     print("Using {} processes to save the output jsons".format(processes_num))
 
+    all_results = []
     for ts_url in all_tile_urls:
         ts_fname = ts_url.replace('file://', '')
-        #res = pool.apply_async(save_optimized_mesh, (ts_fname, optimized_meshes[ts_fname], out_dir))
-        save_optimized_mesh(ts_fname, optimized_meshes[ts_fname], out_dir)
+        res = pool.apply_async(save_optimized_mesh, (ts_fname, optimized_meshes[ts_fname], out_dir))
+        all_results.append(res)
+
+    for res in all_results:
+        res.get()
+
     pool.close()
     pool.join()
         
