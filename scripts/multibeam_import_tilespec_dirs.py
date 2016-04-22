@@ -270,6 +270,9 @@ def parse_section_folder(wafer_name, section_num_str, layer, section_folder, out
 
 
         images, x, y = parse_coordinates_file(coords_file, csv_file, section_folder)
+        if len(images) == 0:
+            print "Couldn't find any data in section {}, skipping".format(section_folder)
+            return
         # Reset top left to 0,0
         x = offset_list(x)
         y = offset_list(y)
