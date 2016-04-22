@@ -89,7 +89,7 @@ def compute_new_bounding_box(tile_ts):
     max_XY = np.max(boundaries, axis=0)
     # Rounding to avoid float precision errors due to representation
     new_bbox = [int(math.floor(round(min_XY[0], 5))), int(math.ceil(round(max_XY[0], 5))), int(math.floor(round(min_XY[1], 5))), int(math.ceil(round(max_XY[1], 5)))]
-    return ' '.join([str(coord) for coord in new_bbox])
+    return new_bbox
 
 def save_json_file(out_fname, data):
     with open(out_fname, 'w') as outjson:

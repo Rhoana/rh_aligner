@@ -115,6 +115,25 @@ class OptimizeLayersElastic(Job):
                 self.output_dir, self.conf_fname, self.threads_str,
                 self.max_layer_distance, self.skip_layers, self.tiles_fnames, self.corr_fnames]
 
+class NormalizeCoordinates(Job):
+    def __init__(self, dependencies, outputs, input_dir, output_dir):
+        Job.__init__(self)
+        #### TODO - stopped here!
+        self.already_done = False
+        self.input_dir = '{0}'.format(input_dir)
+        self.output_dir = '-o "{0}"'.format(output_dir)
+        self.dependencies = dependencies
+        self.memory = 3000
+        self.time = 400
+        self.output = outputs
+        #self.already_done = os.path.exists(self.output_file)
+
+    def command(self):
+        return ['python -u',
+                os.path.join(os.environ['ALIGNER'], 'scripts', 'wrappers', 'normalize_coordinates.py'),
+                self.output_dir, self.input_dir]
+
+
 
 
 
@@ -169,6 +188,8 @@ if __name__ == '__main__':
     create_dir(pre_matches_dir)
     matched_pmcc_dir = os.path.join(args.workspace_dir, "matched_pmcc")
     create_dir(matched_pmcc_dir)
+    post_optimization_dir = os.path.join(args.workspace_dir, "post_optimization")
+    create_dir(post_optimization_dir)
 
 
 
@@ -332,17 +353,25 @@ if __name__ == '__main__':
 
 
     # Optimize all layers to a single 3d image
-    create_dir(args.output_dir)
-    sections_outputs = []
+    sections_opt_outputs = []
     for i in all_layers:
-        out_section = os.path.join(args.output_dir, os.path.basename(layers_data[str(i)]['ts']))
-        sections_outputs.append(out_section)
+        out_section = os.path.join(post_optimization_dir, '{}_{}'.format(str(i).zfill(4), os.path.basename(layers_data[str(i)]['ts'])))
+        sections_opt_outputs.append(out_section)
 
-    dependencies = all_running_jobs
-    job_optimize = OptimizeLayersElastic(dependencies, sections_outputs, [ ts_list_file ], [ pmcc_list_file ],
-        args.output_dir, args.max_layer_distance, conf_fname=args.conf_file_name,
+    dependencies = list(all_running_jobs)
+    job_optimize = OptimizeLayersElastic(dependencies, sections_opt_outputs, [ ts_list_file ], [ pmcc_list_file ],
+        post_optimization_dir, args.max_layer_distance, conf_fname=args.conf_file_name,
         skip_layers=args.skip_layers, threads_num=4)
+    all_running_jobs.append(job_optimize)
 
+    create_dir(args.output_dir)
+    # Normalize the output files to the (0, 0) coordinates
+    sections_outputs = []
+    for section_opt_output in sections_opt_outputs:
+        out_section = os.path.join(args.output_dir, os.path.basename(section_opt_output))
+        sections_outputs.append(out_section)
+    dependencies = all_running_jobs
+    job_normalize = NormalizeCoordinates(dependencies, sections_outputs, post_optimization_dir, args.output_dir)
 
     # Run all jobs
     if args.keeprunning:
