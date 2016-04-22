@@ -98,11 +98,11 @@ def match_single_pair(ts1, ts2, features_file1, features_file2, out_fname, rod, 
 
     # filter the features, so that only features that are in the overlapping tile will be matches
     bbox1 = BoundingBox.fromList(ts1["bbox"])
-    logger.info("bbox1 {}".format(bbox1.toStr()))
+    logger.info("bbox1 {}".format(bbox1))
     bbox2 = BoundingBox.fromList(ts2["bbox"])
-    logger.info("bbox2 {}".format(bbox2.toStr()))
+    logger.info("bbox2 {}".format(bbox2))
     overlap_bbox = bbox1.intersect(bbox2).expand(offset=50)
-    logger.info("overlap_bbox {}".format(overlap_bbox.toStr()))
+    logger.info("overlap_bbox {}".format(overlap_bbox))
 
     features_mask1 = overlap_bbox.contains(ts1_transform.apply(pts1))
     features_mask2 = overlap_bbox.contains(ts2_transform.apply(pts2))

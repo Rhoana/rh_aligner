@@ -362,7 +362,7 @@ def analyze_slices(tiles_fname1, tiles_fname2, features_dir1, features_dir2, act
         # Find the location of all mfovs in section 2 that "overlap" the current mfov from section 1
         # (according to the estimated transform)
         #section1_mfov_bbox = BoundingBox.read_bbox_from_ts(indexed_ts1[i + 1].values())
-        #print("section1_mfov_bbox: {}".format(section1_mfov_bbox.toStr()))
+        #print("section1_mfov_bbox: {}".format(section1_mfov_bbox))
         #bbox_points = np.array([[section1_mfov_bbox.from_x, section1_mfov_bbox.from_y, 1.0],
         #                        [section1_mfov_bbox.from_x, section1_mfov_bbox.to_y, 1.0],
         #                        [section1_mfov_bbox.to_x, section1_mfov_bbox.from_y, 1.0],
@@ -371,7 +371,7 @@ def analyze_slices(tiles_fname1, tiles_fname2, features_dir1, features_dir2, act
         #projected_min_x, projected_min_y = np.min(bbox_points_projected, axis=0)
         #projected_max_x, projected_max_y = np.max(bbox_points_projected, axis=0)
         #projected_mfov_bbox = BoundingBox(projected_min_x, projected_max_x, projected_min_y, projected_max_y)
-        #print("projected_mfov_bbox: {}".format(projected_mfov_bbox.toStr()))
+        #print("projected_mfov_bbox: {}".format(projected_mfov_bbox))
         #relevant_mfovs_nums2 = []
         #for j, section2_mfov_bbox in enumerate(section2_mfov_bboxes):
         #    if projected_mfov_bbox.overlap(section2_mfov_bbox):

@@ -1,6 +1,7 @@
 
 import sys
 import json
+import subprocess
 
 # bounding box - represents a bounding box in an image
 class BoundingBox:
@@ -51,7 +52,7 @@ class BoundingBox:
         if self.to_y < other_bbox.to_y:
             self.to_y = other_bbox.to_y
 
-    def toStr(self):
+    def __str__(self):
         return '{0} {1} {2} {3}'.format(self.from_x, self.to_x, self.from_y, self.to_y)
 
     def toArray(self):
@@ -77,6 +78,39 @@ class BoundingBox:
                 ret_val.extend(bbox)
             return ret_val.toArray()
         return None
+
+    @classmethod
+    def parse_bbox_lines(cls, bbox_lines):
+        str = ''.join(bbox_lines)
+        str = str[str.find('[') + 1:str.find(']')]
+        str = str.replace(',', ' ')
+        return str
+
+    @classmethod
+    def read_bbox_grep(cls, tiles_spec_fname):
+        cmd = "grep -A 5 \"bbox\" {}".format(tiles_spec_fname)
+        p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+        # Parse all bounding boxes in the given json file
+        ret_val = None
+        cur_bbox_lines = []
+        for line in iter(p.stdout.readline, ''):
+            if line.startswith("--"):
+                cur_bbox = BoundingBox.fromStr(BoundingBox.parse_bbox_lines(cur_bbox_lines))
+                if ret_val is None:
+                    ret_val = cur_bbox
+                else:
+                    ret_val.extend(cur_bbox)
+                cur_bbox_lines = []
+            else:
+                cur_bbox_lines.append(line.strip(' \n'))
+        if len(cur_bbox_lines) > 0:
+            cur_bbox = BoundingBox.fromStr(BoundingBox.parse_bbox_lines(cur_bbox_lines))
+            if ret_val is None:
+                ret_val = cur_bbox
+            else:
+                ret_val.extend(cur_bbox)
+        return ret_val
 
     @classmethod
     def read_bbox_from_ts(cls, tilespec):
@@ -117,3 +151,6 @@ class BoundingBox:
         else:
             return BoundingBox(self.from_x - offset, self.to_x + offset,
                                self.from_y - offset, self.to_y + offset)
+
+    def __getitem__(self, i):
+        return [self.from_x, self.to_x, self.from_y, self.to_y][i]
