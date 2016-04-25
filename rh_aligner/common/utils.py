@@ -6,7 +6,6 @@ import json
 import time
 import math
 
-
 def conf_from_file(conf_fname, tool):
     ''' Read the tool configuration from conf file name (json format), and return the parameters in a dictionary format '''
     res = None
@@ -95,3 +94,25 @@ def generate_hexagonal_grid(boundingbox, spacing):
             pointsret.append([int(xpos + boundingbox[0]), int(ypos + boundingbox[2])])
     return pointsret
 
+
+def is_cv2():
+    """Taken from: https://github.com/jrosebr1/imutils/blob/master/imutils/convenience.py"""
+    # if we are using OpenCV 2, then our cv2.__version__ will start
+    # with '2.'
+    return check_opencv_version("2.")
+
+def is_cv3():
+    """Taken from: https://github.com/jrosebr1/imutils/blob/master/imutils/convenience.py"""
+    # if we are using OpenCV 3.X, then our cv2.__version__ will start
+    # with '3.'
+    return check_opencv_version("3.")
+
+def check_opencv_version(major, lib=None):
+    """Taken from: https://github.com/jrosebr1/imutils/blob/master/imutils/convenience.py"""
+    # if the supplied library is None, import OpenCV
+    if lib is None:
+        import cv2 as lib
+        
+    # return whether or not the current OpenCV version matches the
+    # major version number
+    return lib.__version__.startswith(major)

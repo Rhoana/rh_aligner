@@ -22,7 +22,10 @@ def create_sift_features(tilespecs, out_fname, index, conf_fname=None):
         import glymur
         img_gray = glymur.Jp2k(image_path)[:] # load in full resolution
     else:
-        img_gray = cv2.imread(image_path, cv2.CV_LOAD_IMAGE_GRAYSCALE)
+        if utils.is_cv2():
+            img_gray = cv2.imread(image_path, cv2.CV_LOAD_IMAGE_GRAYSCALE)
+        else: # OpenCV 3.*
+            img_gray = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
 
     print "Computing sift features for image: {}".format(image_path)
 
@@ -33,7 +36,10 @@ def create_sift_features(tilespecs, out_fname, index, conf_fname=None):
     # kp = detector.detect(img_gray)
     # #print("Computing descriptions...")
     # pts, descs = extractor.compute(img_gray, kp)
-    sift = cv2.SIFT()
+    if utils.is_cv2():
+        sift = cv2.SIFT()
+    else: # OpenCV 3.*
+        sift = cv2.xfeatures2d.SIFT_create()
     pts, descs = sift.detectAndCompute(img_gray, None)
     if descs is None:
         descs = []
