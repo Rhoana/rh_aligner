@@ -446,16 +446,20 @@ def match_layers_sift_features(tiles_fname1, features_dir1, tiles_fname2, featur
     # Match the two sections
     retval, initial_search_iters_num, initial_search_time = analyze_slices(tiles_fname1, tiles_fname2, features_dir1, features_dir2, actual_params)
 
-    # Save the output
-    jsonfile = {}
-    jsonfile['tilespec1'] = tiles_fname1
-    jsonfile['tilespec2'] = tiles_fname2
-    jsonfile['matches'] = retval
-    jsonfile['runtime'] = time.time() - starttime
-    jsonfile['initial_search_iterations_num'] = initial_search_iters_num
-    jsonfile['initial_search_time'] = initial_search_time
-    with open(out_fname, 'w') as out:
-        json.dump(jsonfile, out, indent=4)
+    if len(retval) == 0:
+        print("Could not find a match, avoiding any output to: {}".format(out_fname))
+    else:
+        # Save the output
+        jsonfile = {}
+        jsonfile['tilespec1'] = tiles_fname1
+        jsonfile['tilespec2'] = tiles_fname2
+        jsonfile['matches'] = retval
+        jsonfile['runtime'] = time.time() - starttime
+        jsonfile['initial_search_iterations_num'] = initial_search_iters_num
+        jsonfile['initial_search_time'] = initial_search_time
+        with open(out_fname, 'w') as out:
+            json.dump(jsonfile, out, indent=4)
+
     print("Done.")
 
 
