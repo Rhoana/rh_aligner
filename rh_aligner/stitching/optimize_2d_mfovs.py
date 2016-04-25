@@ -122,7 +122,11 @@ def optimize_2d_mfovs(tiles_fname, match_list_file, out_fname, conf_fname=None):
     # load the matches
     pbar = progressbar.ProgressBar()
     for f in pbar(match_files):
-        data = json.load(open(f))
+        try:
+            data = json.load(open(f))
+        except:
+            print "Error when parsing: {}".format(f)
+            raise
         # point arrays are 2xN
         pts1 = np.array([c["p1"]["w"] for c in data[0]["correspondencePointPairs"]]).T
         pts2 = np.array([c["p2"]["w"] for c in data[0]["correspondencePointPairs"]]).T
