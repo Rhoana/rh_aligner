@@ -46,7 +46,7 @@ def main():
     print("args:", args)
 
 
-    if len(args.index_pairs) == 1:
+    if len(args.index_pairs) == 1 and not args.features_file1.endswith('.txt'):
         wait_after_file(args.features_file1, args.wait_time)
         wait_after_file(args.features_file2, args.wait_time)
         

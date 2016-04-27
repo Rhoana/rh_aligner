@@ -24,12 +24,16 @@ logger.addHandler(logger_handler)
 
 def load_features_hdf5(features_file):
     features_file = features_file.replace('file://', '')
-    with h5py.File(features_file, 'r') as m:
-        imageUrl = str(m["imageUrl"][...])
-        locations = m["pts/locations"][...]
-        responses = None  # m["pts/responses"][...]
-        scales = None  # m["pts/scales"][...]
-        descs = m["descs"][...]
+    try:
+        with h5py.File(features_file, 'r') as m:
+            imageUrl = str(m["imageUrl"][...])
+            locations = m["pts/locations"][...]
+            responses = None  # m["pts/responses"][...]
+            scales = None  # m["pts/scales"][...]
+            descs = m["descs"][...]
+    except:
+        logger.error("Error when reading file {}".format(features_file))
+        raise
     return imageUrl, locations, responses, scales, descs
 
 
