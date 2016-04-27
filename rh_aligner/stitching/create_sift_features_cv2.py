@@ -11,7 +11,7 @@ import cv2
 import numpy as np
 import h5py
 
-def create_sift_features(tilespecs, out_fname, index, conf_fname=None):
+def create_sift_features_single_tile(tilespecs, out_fname, index, initial_sigma=1.6):
 
     tilespec = tilespecs[index]
 
@@ -37,9 +37,9 @@ def create_sift_features(tilespecs, out_fname, index, conf_fname=None):
     # #print("Computing descriptions...")
     # pts, descs = extractor.compute(img_gray, kp)
     if utils.is_cv2():
-        sift = cv2.SIFT()
+        sift = cv2.SIFT(sigma=initial_sigma)
     else: # OpenCV 3.*
-        sift = cv2.xfeatures2d.SIFT_create()
+        sift = cv2.xfeatures2d.SIFT_create(sigma=initial_sigma)
     pts, descs = sift.detectAndCompute(img_gray, None)
     if descs is None:
         descs = []
@@ -60,15 +60,31 @@ def create_sift_features(tilespecs, out_fname, index, conf_fname=None):
         hf.create_dataset("descs", data=descs)
 
 
+def create_sift_features(tiles_fname, out_fname, index, conf_fname=None):
+
+    params = utils.conf_from_file(conf_fname, 'ComputeSiftFeatures')
+    if params is None:
+        params = {}
+    initial_sigma = params.get("initialSigma", 1.6)
+
+    # load tilespecs files
+    tilespecs = utils.load_tilespecs(tiles_fname)
+
+    create_sift_features_single_tile(tilespecs, out_fname, index, initial_sigma=initial_sigma)
 
 
 def create_multiple_sift_features(tiles_fname, out_fnames, indices, conf_fname=None):
+
+    params = utils.conf_from_file(conf_fname, 'ComputeSiftFeatures')
+    if params is None:
+        params = {}
+    initial_sigma = params.get("initialSigma", 1.6)
 
     # load tilespecs files
     tilespecs = utils.load_tilespecs(tiles_fname)
 
     for index, out_fname in zip(indices, out_fnames):
-        create_sift_features(tilespecs, out_fname, index, conf_fname)
+        create_sift_features_single_tile(tilespecs, out_fname, index, initial_sigma=initial_sigma)
 
 
 
