@@ -59,7 +59,7 @@ class CreateMultipleSiftFeatures(Job):
         self.dependencies = []
         # self.threads = threads_num
         # self.threads_str = "-t {0}".format(threads_num)
-        self.memory = 3000
+        self.memory = 2800
         self.time = 100
         self.sifts_work_dir = sifts_work_dir
         self.temp_output_list_file = temp_output_list_file
@@ -137,7 +137,7 @@ class MatchMultipleSiftFeaturesAndFilter(Job):
             self.wait_time = ''
         else:
             self.wait_time = '-w {0}'.format(wait_time)
-        self.memory = 3000
+        self.memory = 450
         self.time = 100
         self.threads = threads_num
         self.threads_str = "-t {0}".format(threads_num)
@@ -199,7 +199,7 @@ class OptimizeMontageTransform(Job):
         self.dependencies = dependencies
         # self.threads = threads_num
         # self.threads_str = "-t {0}".format(threads_num)
-        self.memory = 6000
+        self.memory = 4000
         self.time = 600
         self.output = opt_output_file
         #self.already_done = os.path.exists(self.output_file)

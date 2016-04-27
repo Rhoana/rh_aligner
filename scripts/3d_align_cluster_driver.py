@@ -104,7 +104,7 @@ class OptimizeLayersElastic(Job):
         self.threads = threads_num
         self.threads_str = '-t {0}'.format(threads_num)
         self.dependencies = dependencies
-        self.memory = 32000
+        self.memory = 10000
         self.time = 800
         self.output = outputs
         #self.already_done = os.path.exists(self.output_file)
@@ -123,7 +123,7 @@ class NormalizeCoordinates(Job):
         self.input_dir = '{0}'.format(input_dir)
         self.output_dir = '-o "{0}"'.format(output_dir)
         self.dependencies = dependencies
-        self.memory = 3000
+        self.memory = 2000
         self.time = 400
         self.output = outputs
         #self.already_done = os.path.exists(self.output_file)
