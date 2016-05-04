@@ -38,20 +38,14 @@ def tri_area(p1, p2, p3):
 #        i += 1
 
 def choose_forward(numbers, n, k):
-    low = 0
-    cur_k = k
-    while True:
-        num = np.random.randint(low, n)
-        # if no more numbers are left, restart from the beginning
-        if n - num < cur_k:
-            low = 0
-            cur_k = k
-            continue
-        numbers[k - cur_k] = num
-        low = num + 1
-        cur_k -= 1
-        if cur_k == 0:
-            return
+    '''Choose k without replacement from among N
+
+    returns a sorted array to make it easier to match against
+            previously seen combinations.
+    '''
+    if n == 0:
+        return
+    numbers[:n] = np.sort(np.random.choice(np.arange(n), k, replace=False))
 
 def check_model_stretch(model_matrix, max_stretch=0.25):
     # Use the eigen values to validate the stretch
