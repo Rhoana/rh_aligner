@@ -12,41 +12,122 @@ def tri_area(p1, p2, p3):
     # area might be negative
     return area
 
-#def choose_forward(n, k):
-#    low = 0
-#    cur_k = k
-#    numbers = np.empty((k, ), dtype=np.int32)
-#    while True:
-#        num = np.random.randint(low, n)
-#        # if no more numbers are left, restart from the beginning
-#        if n - num < cur_k:
-#            low = 0
-#            cur_k = k
-#            continue
-#        numbers[k - cur_k] = num
-#        low = num + 1
-#        cur_k -= 1
-#        if cur_k == 0:
-#            return numbers
-
-#def choose_forward(numbers, n, k):
-#    low = 0
-#    i = 0
-#    while i < k:
-#        numbers[i] = np.random.randint(low, n - k + i + 1)
-#        low = numbers[i] + 1
-#        i += 1
-
-def choose_forward(numbers, n, k):
+def choose_forward(n, k, n_draws):
     '''Choose k without replacement from among N
 
-    returns a sorted array to make it easier to match against
-            previously seen combinations.
+    :param n: number of samples to choose from
+    :param k: number of samples to choose
+    :param n_draws: number of tuples to return
+    
+    returns an n_draws by k array of k-tuples
     '''
     if n == 0:
-        return
-    numbers[:n] = np.sort(np.random.choice(np.arange(n), k, replace=False))
+        return np.zeros((0, k), int)
+    max_combinations = comb(n, k)
+    if max_combinations / 3 > n_draws:
+        return choose_forward_dense(n, k, n_draws)
+    else:
+        return choose_forward_sparse(n, k, n_draws)
 
+def enumerate_choices(n, k):
+    '''Enumerate all the ways to choose k from n
+
+    returns choices sorted lexigraphically, e.g.
+    0, 1
+    0, 2
+    1, 2
+    '''
+    if k == 1:
+        return np.arange(n).reshape(n, 1)
+    #
+    # Enumerate ways to choose k-1 from n-1 (there are no ways
+    # to choose the last, so n-1)
+    last = enumerate_choices(n-1, k-1)
+    #
+    # number of possible choices for each of the previous
+    # is from among the remaining.
+    #
+    n_choices = n - 1 - last[:, -1]
+    index = np.hstack([[0], np.cumsum(n_choices)])
+    #
+    # allocate memory for the result
+    #
+    result = np.zeros((index[-1], k), int)
+    #
+    # Create a back pointer into "last" for each element of the new array
+    #
+    back_ptr = np.zeros(result.shape[0], int)
+    back_ptr[index[:-1]] = 1
+    back_ptr = np.cumsum(back_ptr) - 1
+    #
+    # Broadcast the elements of the old array into the new one
+    # using the back pointer
+    result[:, :-1] = last[back_ptr, :]
+    #
+    # pull a cumsum trick: fill the last column with all "1" except
+    # for the first element which is - its place in the array
+    #
+    result[1:, -1] = 1
+    #
+    # Then we subtract the number of entries to get back to zero
+    result[index[1:-1], -1] = -n_choices[:-1]+1
+    #
+    # The last result has to start at the next to last + 1
+    # 0, 1 <-
+    # 0, 2
+    # 1, 2 <-
+    result[:, -1] = np.cumsum(result[:, -1]) + result[:, -2] + 1
+    return result
+    
+def choose_forward_dense(n, k, n_draws):
+    '''Choose k without replacement from among N where n_draws ~ # of combos
+
+    :param n: number of samples to choose from
+    :param k: number of samples to choose
+    :param n_draws: number of tuples to return
+    
+    returns an n_draws by k array of k-tuples
+    '''
+    all_possible = enumerate_choices(n, k)
+    choices = np.random.choice(np.arange(all_possible.shape[0]), n_draws, 
+                               replace=False)
+    return all_possible[choices]
+
+def choose_forward_sparse(n, k, n_draws):
+    '''Choose k without replacement from among N where n_draws << combos
+    
+    :param n: number of samples to choose from
+    :param k: number of samples to choose
+    :param n_draws: number of tuples to return
+    
+    returns an n_draws by k array of k-tuples
+    '''
+    #
+    # We assume that there is very little chance of collisions
+    # and we choose a few more than asked
+    #
+    extra = int(np.sqrt(n_draws)) + 1
+    n1_draws = n_draws + extra
+    choices = np.random.randint(0, n, (n1_draws, k))
+    while True:
+        #
+        # We sort in the k direction to get indices from low to high per draw
+        #
+        choices.sort(axis=1)
+        #
+        # We then argsort and duplicates should be adjacent in argsortland
+        #
+        order = np.lexsort([choices[:, k_] for k_ in range(k-1, -1, -1)])
+        to_remove = np.where(
+            np.all(choices[order[:-1]] == choices[order[1:]], axis=1))
+        result = np.delete(choices, order[to_remove], axis=0)
+        if len(result) >= n_draws:
+            return result
+        #
+        # Add some more choices if we didn't get enough
+        #
+        choices = np.vstack((result, np.random.randint(0, n, (extra, k))))
+    
 def check_model_stretch(model_matrix, max_stretch=0.25):
     # Use the eigen values to validate the stretch
     assert(max_stretch >= 0.0 and max_stretch <= 1.0)
@@ -73,21 +154,11 @@ def ransac(matches, target_model_type, iterations, epsilon, min_inlier_ratio, mi
     prev_min_matches_idxs = set()
     # Limit the number of possible matches that we can search for using n choose k
     max_combinations = int(comb(len(matches[0]), proposed_model.MIN_MATCHES_NUM))
-    iter = 0
     max_iterations = min(iterations, max_combinations)
-    # Allocate space once for min_match_idxs
-    min_matches_idxs = np.empty((proposed_model.MIN_MATCHES_NUM, ), dtype=np.int32)
-    while iter < max_iterations and len(prev_min_matches_idxs) < max_combinations:
-        iter += 1
-        # choose a minimal number of matches randomly
-        #min_matches_idxs = np.random.choice(xrange(len(matches[0])), size=proposed_model.MIN_MATCHES_NUM, replace=False)
-        choose_forward(min_matches_idxs, len(matches[0]), proposed_model.MIN_MATCHES_NUM)
-        min_matches_idxs_str = array_to_string(min_matches_idxs)
-        while min_matches_idxs_str in prev_min_matches_idxs:
-            choose_forward(min_matches_idxs, len(matches[0]), proposed_model.MIN_MATCHES_NUM)
-            #min_matches_idxs = np.random.choice(xrange(len(matches[0])), size=proposed_model.MIN_MATCHES_NUM, replace=False)
-            min_matches_idxs_str = array_to_string(min_matches_idxs)
-        prev_min_matches_idxs.add(min_matches_idxs_str)
+    choices = choose_forward(len(matches[0]),
+                             proposed_model.MIN_MATCHES_NUM,
+                             max_iterations)
+    for min_matches_idxs in choices:
 
         if proposed_model.MIN_MATCHES_NUM == 3:
             # validate if the given matches points create two triangles (a and b) with similar areas
