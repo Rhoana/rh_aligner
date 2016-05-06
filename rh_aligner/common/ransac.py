@@ -8,9 +8,16 @@ def array_to_string(arr):
     #return '_'.join(map(str, arr))
 
 def tri_area(p1, p2, p3):
-    area = (p1[0]*(p2[1] - p3[1]) + p2[0]*(p3[1] - p1[1]) + p3[0]*(p1[1] - p2[1]))/2.0
+    scalar = p1.ndim == 1
+    p1 = np.atleast_2d(p1)
+    p2 = np.atleast_2d(p2)
+    p3 = np.atleast_2d(p3)
+        
+    area = (p1[:, 0]*(p2[:, 1] - p3[:, 1]) +
+            p2[:, 0]*(p3[:, 1] - p1[:, 1]) + 
+            p3[:, 0]*(p1[:, 1] - p2[:, 1])) / 2.0
     # area might be negative
-    return area
+    return area[0] if scalar else area
 
 def choose_forward(n, k, n_draws):
     '''Choose k without replacement from among N
@@ -136,6 +143,74 @@ def check_model_stretch(model_matrix, max_stretch=0.25):
     valid_eig_vals = [eig_val for eig_val in eig_vals if eig_val >= 1.0 - max_stretch and eig_val <= 1.0 + max_stretch]
     return len(valid_eig_vals) == 2
 
+def filter_triangles(m0, m1, choices, 
+                     max_stretch=0.25, 
+                     max_area=.2):
+    '''Filter a set of match choices
+    
+    :param m0: set of points in one domain
+    :param m1: set of matching points to m0 in another domain
+    :param choices: an N x 3 array of triangles
+    :param max_stretch: filter out a choice if it shrinks by 1-max_stretch
+        or stretches by 1+max_stretch
+    :param max_area: filter out a choice if the area of m1's triangle is
+        less than 1-max_area or more than 1+max_area
+
+    If a triangle in m0 has a different absolute area than in m1, exclude it
+    If the eigenvalues of the affine transform array indicate a shrink of
+    a factor of 1-max_stretch or a stretch of a factor of 1+max_stretch,
+    exclude
+    '''
+    pt1a, pt2a, pt3a = [m0[choices][:, _, :] for _ in range(3)]
+    pt1b, pt2b, pt3b = [m1[choices][:, _, :] for _ in range(3)]
+    areas_a = tri_area(pt1a, pt2a, pt3a)
+    areas_b = tri_area(pt1b, pt2b, pt3b)
+    area_ratio = areas_a / (areas_b + np.finfo(areas_b.dtype).eps)
+    mask = (area_ratio <= 1+max_area) & (area_ratio >= 1-max_area)
+    choices = choices[mask]
+    X = m0[choices]
+    y = m1[choices]
+
+    pc = np.mean(X, axis=1)
+    qc = np.mean(y, axis=1)
+
+
+    delta1 = X - pc[:, np.newaxis, :]
+    delta2 = y - qc[:, np.newaxis, :]
+
+    a00 = np.sum(delta1[:,0] * delta1[:,0], axis=1)
+    a01 = np.sum(delta1[:,0] * delta1[:,1], axis=1)
+    a11 = np.sum(delta1[:,1] * delta1[:,1], axis=1)
+    b00 = np.sum(delta1[:,0] * delta2[:,0], axis=1)
+    b01 = np.sum(delta1[:,0] * delta2[:,1], axis=1)
+    b10 = np.sum(delta1[:,1] * delta2[:,0], axis=1)
+    b11 = np.sum(delta1[:,1] * delta2[:,1], axis=1)
+
+    det = a00 * a11 - a01 * a01 + np.finfo(a00.dtype).eps
+
+    m00 = (a11 * b00 - a01 * b10) / det
+    m01 = (a00 * b10 - a01 * b00) / det
+    m10 = (a11 * b01 - a01 * b11) / det
+    m11 = (a00 * b11 - a01 * b01) / det
+    det = m00 * m11 - m01*m10
+    #
+    # The eigenvalues, L, are the roots of
+    # L**2 - (m00 + m11) * L + det = 0
+    #
+    # L = ((m00 + m11) +/- sqrt((m00+m11) **2 - 4 * det)) / 2
+    #
+    b = m00 + m11
+    b2_minus_4ac = b*b + np.finfo(b.dtype).eps - 4 * det
+    mask = b2_minus_4ac >= 0
+    choices, b, b2_minus_4ac = choices[mask], b[mask], b2_minus_4ac[mask]
+    sb2_minus_4ac = np.sqrt(b2_minus_4ac)
+    l1 = (b + sb2_minus_4ac) / 2
+    l2 = (b - sb2_minus_4ac) / 2
+    
+    mask = (l1 <= 1+max_stretch) & (l2 >= 1-max_stretch)
+    return choices[mask]
+    
+
 def ransac(matches, target_model_type, iterations, epsilon, min_inlier_ratio, min_num_inlier, det_delta=0.35, max_stretch=0.25):
     # model = Model.create_model(target_model_type)
     assert(len(matches[0]) == len(matches[1]))
@@ -151,30 +226,16 @@ def ransac(matches, target_model_type, iterations, epsilon, min_inlier_ratio, mi
         return None, None, None
 
     # Avoiding repeated indices permutations using a dictionary
-    prev_min_matches_idxs = set()
     # Limit the number of possible matches that we can search for using n choose k
     max_combinations = int(comb(len(matches[0]), proposed_model.MIN_MATCHES_NUM))
     max_iterations = min(iterations, max_combinations)
     choices = choose_forward(len(matches[0]),
                              proposed_model.MIN_MATCHES_NUM,
                              max_iterations)
+    if proposed_model.MIN_MATCHES_NUM == 3:
+        choices = filter_triangles(matches[0], matches[1], choices, 
+                                   max_stretch=max_stretch)
     for min_matches_idxs in choices:
-
-        if proposed_model.MIN_MATCHES_NUM == 3:
-            # validate if the given matches points create two triangles (a and b) with similar areas
-            p1a, p2a, p3a = matches[0][min_matches_idxs]
-            p1b, p2b, p3b = matches[1][min_matches_idxs]
-            area1 = tri_area(p1a, p2a, p3a)
-            if abs(area1) < 1:
-                continue
-            area2 = tri_area(p1b, p2b, p3b)
-            if abs(area2) < 1:
-                continue
-            area_ratio = area1 / area2
-            # if one is negative and the other is positive then the ration will be negative, and we want to avoid flipping, so skip this configuration
-            # TODO - make this a parameter?
-            if area_ratio < 0.8 or area_ratio > 1.2:
-                continue
         # Try to fit them to the model
         if proposed_model.fit(matches[0][min_matches_idxs], matches[1][min_matches_idxs]) == False:
             continue

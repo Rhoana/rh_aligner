@@ -54,6 +54,36 @@ class TestChooseForwardSparse(unittest.TestCase):
             a = a[order]
             self.assertFalse(np.any(np.all(a[:-1] == a[1:], 1)))
 
+class TestFilterTriangles(unittest.TestCase):
+    def test_01_filter_positive(self):
+        m0 = np.array([[[0.0, 0.0], [3.0, 0.0], [0.0, 4.0]]] * 6)\
+            .reshape(18, 2)
+        m1 = np.array([[[1.0, 2.0], [4.0, 2.0], [1.0, 6.0]], # translation
+                       [[0.0, 0.0], [3.0, 0.0], [0.0, 4.0]], # rotation
+                       [[0.0, 0.0], [3.0 * .9, 0.0], [0.0, 4.0 * .9]], # shrink
+                       [[0.0, 0.0], [3.0 * 1.1, 0.0], [0.0, 4.0 * 1.1]], # stretch
+                       [[0.0, 0.0], [3.0 * .9, 0.0], [0.0, 4.0]], # distort
+                       [[0.0, 0.0], [3.0 * 1.1, 0.0], [0.0, 4.0]], # distort
+                       ]).reshape(18, 2)
+        choices = np.arange(18).reshape(6, 3)
+        result = R.filter_triangles(
+            m0, m1, choices, .25, .3)
+        np.testing.assert_array_equal(choices, result)
+        
+    def test_02_filter_negative(self):
+        m0 = np.array([[[0.0, 0.0], [3.0, 0.0], [0.0, 4.0]]] * 5)\
+            .reshape(15, 2)
+        m1 = np.array([[[3.0, 0.0], [0.0, 4.0], [0.0, 0.0]], # complex eigenvalue
+                       [[0.0, 0.0], [3.0 * .9, 0.0], [0.0, 4.0 * .9]], # shrink
+                       [[0.0, 0.0], [3.0 * 1.1, 0.0], [0.0, 4.0 * 1.1]], # stretch
+                       [[0.0, 0.0], [3.0 * .9, 0.0], [0.0, 4.0]], # distort
+                       [[0.0, 0.0], [3.0 * 1.1, 0.0], [0.0, 4.0]], # distort
+                       ]).reshape(15, 2)
+        choices = np.arange(15).reshape(5, 3)
+        result = R.filter_triangles(
+            m0, m1, choices, .099, .15)
+        self.assertEqual(len(result), 0)
+    
 class TestRansac(unittest.TestCase):
     def test_01_ransac(self):
         #
