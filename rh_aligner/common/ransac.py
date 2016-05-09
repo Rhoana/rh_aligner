@@ -31,7 +31,7 @@ def choose_forward(n, k, n_draws):
     if n == 0:
         return np.zeros((0, k), int)
     max_combinations = comb(n, k)
-    if max_combinations / 3 > n_draws:
+    if max_combinations / 3 < n_draws:
         return choose_forward_dense(n, k, n_draws)
     else:
         return choose_forward_sparse(n, k, n_draws)
